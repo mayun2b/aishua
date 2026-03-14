@@ -25,6 +25,9 @@ public class Question {
     @TableField("category_id")
     private Long categoryId; // 分类 ID
     
+    @TableField("subject_id")
+    private Long subjectId; // 学科 ID
+    
     @TableField("difficulty")
     private Integer difficulty; // 难度等级：1-简单，2-中等，3-困难
     

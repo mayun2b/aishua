@@ -58,6 +58,18 @@
               </template>
             </van-field>
             
+            <van-field label="学科">
+              <template #input>
+                <van-dropdown-menu>
+                  <van-dropdown-item 
+                    v-model="configForm.subjectId" 
+                    :options="subjectOptions"
+                    placeholder="选择学科"
+                  />
+                </van-dropdown-menu>
+              </template>
+            </van-field>
+            
             <van-field label="题目分类">
               <template #input>
                 <van-dropdown-menu>
@@ -277,7 +289,7 @@
 <script>
 import { ref, reactive, onMounted, computed, watch } from 'vue';
 import { useRouter } from 'vue-router';
-import { getRandomQuestions, getAllCategories, submitAnswer as submitAnswerApi, batchSubmitAnswers as batchSubmitAnswersApi, getUserStats } from '../api/exercise';
+import { getRandomQuestions, getAllCategories, getAllSubjects, submitAnswer as submitAnswerApi, batchSubmitAnswers as batchSubmitAnswersApi, getUserStats } from '../api/exercise';
 import { showToast } from 'vant';
 
 export default {
@@ -303,6 +315,7 @@ export default {
     const configForm = reactive({
       count: 10,
       difficulty: null,
+      subjectId: null,
       categoryId: null
     });
     
@@ -341,6 +354,9 @@ export default {
     
     // 题目分类选项
     const categoryOptions = ref([]);
+    
+    // 学科选项
+    const subjectOptions = ref([]);
     
     // 从后端获取的真实数据
     const questions = ref([]);
@@ -397,6 +413,22 @@ export default {
       } catch (error) {
         console.error('加载题目分类失败:', error);
         showToast('加载题目分类失败');
+      }
+    };
+    
+    // 加载学科
+    const loadSubjects = async () => {
+      try {
+        const response = await getAllSubjects();
+        if (response && response.code === 200) {
+          subjectOptions.value = (response.data || []).map(subject => ({
+            text: subject.name,
+            value: subject.id
+          }));
+        }
+      } catch (error) {
+        console.error('加载学科失败:', error);
+        showToast('加载学科失败');
       }
     };
     
@@ -526,6 +558,9 @@ export default {
 
         if (configForm.difficulty) {
           params.difficulty = configForm.difficulty;
+        }
+        if (configForm.subjectId) {
+          params.subjectId = configForm.subjectId;
         }
         if (configForm.categoryId) {
           params.categoryId = configForm.categoryId;
@@ -713,6 +748,8 @@ export default {
       checkLoginStatus();
       // 加载题目分类
       await loadCategories();
+      // 加载学科
+      await loadSubjects();
       // 测试获取用户统计，验证登录状态
       if (isLoggedIn.value) {
         try {
@@ -733,6 +770,7 @@ export default {
       configForm,
       exerciseModes,
       difficultyOptions,
+      subjectOptions,
       categoryOptions,
       selectMode,
       startExercise,

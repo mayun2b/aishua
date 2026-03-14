@@ -10,6 +10,18 @@
         <!-- 管理员专属导航 -->
         <router-link 
           v-if="isAdmin" 
+          to="/exercise/questions"
+        >
+          题目管理
+        </router-link>
+        <router-link 
+          v-if="isAdmin" 
+          to="/exercise/subjects"
+        >
+          学科管理
+        </router-link>
+        <router-link 
+          v-if="isAdmin" 
           to="/user-management"
         >
           用户管理

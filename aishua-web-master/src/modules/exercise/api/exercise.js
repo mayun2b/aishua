@@ -8,7 +8,7 @@ export const exerciseApi = {
   startExercise(params) {
     console.log('调用startExercise API:', params);
     return request({
-      url: '/exercise/start',
+      url: '/api/exercise/start',
       method: 'get',
       params
     });
@@ -19,7 +19,7 @@ export const exerciseApi = {
   submitAnswer(data) {
     console.log('调用submitAnswer API:', data);
     return request({
-      url: '/exercise/submit',
+      url: '/api/exercise/submit',
       method: 'post',
       data
     });
@@ -30,7 +30,7 @@ export const exerciseApi = {
   batchSubmitAnswers(data) {
     console.log('调用batchSubmitAnswers API:', data);
     return request({
-      url: '/exercise/batch-submit',
+      url: '/api/exercise/batch-submit',
       method: 'post',
       data
     });
@@ -41,7 +41,7 @@ export const exerciseApi = {
   getUserStats() {
     console.log('调用getUserStats API');
     return request({
-      url: '/exercise/stats',
+      url: '/api/exercise/stats',
       method: 'get'
     });
   }
@@ -52,7 +52,7 @@ export const questionApi = {
   // 获取随机题目
   getRandomQuestions(params) {
     return request({
-      url: '/question/random',
+      url: '/api/question/random',
       method: 'get',
       params
     });
@@ -61,7 +61,7 @@ export const questionApi = {
   // 根据ID获取题目详情
   getQuestionById(id) {
     return request({
-      url: `/question/${id}`,
+      url: `/api/question/${id}`,
       method: 'get'
     });
   },
@@ -69,8 +69,85 @@ export const questionApi = {
   // 获取所有题目分类
   getAllCategories() {
     return request({
-      url: '/question/categories',
+      url: '/api/question/categories',
       method: 'get'
+    });
+  },
+
+  // 获取所有学科
+  getAllSubjects() {
+    return request({
+      url: '/api/question/subjects',
+      method: 'get'
+    });
+  },
+
+  // 根据ID获取学科详情
+  getSubjectById(id) {
+    return request({
+      url: `/api/subject/${id}`,
+      method: 'get'
+    });
+  },
+
+  // 创建学科
+  createSubject(data) {
+    return request({
+      url: '/api/subject',
+      method: 'post',
+      data
+    });
+  },
+
+  // 更新学科
+  updateSubject(id, data) {
+    return request({
+      url: `/api/subject/${id}`,
+      method: 'put',
+      data
+    });
+  },
+
+  // 删除学科
+  deleteSubject(id) {
+    return request({
+      url: `/api/subject/${id}`,
+      method: 'delete'
+    });
+  },
+
+  // 获取题目列表（分页）
+  getQuestions(params) {
+    return request({
+      url: '/api/question/page',
+      method: 'get',
+      params
+    });
+  },
+
+  // 创建题目
+  createQuestion(data) {
+    return request({
+      url: '/api/question',
+      method: 'post',
+      data
+    });
+  },
+
+  // 更新题目
+  updateQuestion(id, data) {
+    return request({
+      url: `/api/question/${id}`,
+      method: 'put',
+      data
+    });
+  },
+
+  // 删除题目
+  deleteQuestion(id) {
+    return request({
+      url: `/api/question/${id}`,
+      method: 'delete'
     });
   }
 };
@@ -82,7 +159,7 @@ export const wrongQuestionApi = {
   // 游客模式下返回空列表
   getWrongQuestions(pageNum, pageSize) {
     return request({
-      url: '/wrong/page',
+      url: '/api/wrong/page',
       method: 'get',
       params: {
         pageNum,
@@ -95,7 +172,7 @@ export const wrongQuestionApi = {
   // 游客模式下返回0
   getWrongCount() {
     return request({
-      url: '/wrong/count',
+      url: '/api/wrong/count',
       method: 'get'
     });
   },
@@ -104,7 +181,7 @@ export const wrongQuestionApi = {
   // 游客模式下调用会失败
   markAsMastered(questionId) {
     return request({
-      url: `/wrong/${questionId}/mastered`,
+      url: `/api/wrong/${questionId}/mastered`,
       method: 'put'
     });
   },
@@ -113,7 +190,7 @@ export const wrongQuestionApi = {
   // 游客模式下调用会失败
   removeFromWrong(questionId) {
     return request({
-      url: `/wrong/${questionId}`,
+      url: `/api/wrong/${questionId}`,
       method: 'delete'
     });
   },
@@ -122,7 +199,7 @@ export const wrongQuestionApi = {
   // 游客模式下返回空数组
   getRandomWrongQuestions(count) {
     return request({
-      url: '/wrong/random',
+      url: '/api/wrong/random',
       method: 'get',
       params: {
         count
@@ -136,7 +213,7 @@ export const examRecordApi = {
   // 获取用户考试记录列表
   getExamRecords(userId) {
     return request({
-      url: `/exam/records/user/${userId}`,
+      url: `/api/exam/records/user/${userId}`,
       method: 'get'
     });
   },
@@ -144,7 +221,7 @@ export const examRecordApi = {
   // 根据考试模式获取记录
   getExamRecordsByMode(userId, mode) {
     return request({
-      url: `/exam/records/user/${userId}/mode/${mode}`,
+      url: `/api/exam/records/user/${userId}/mode/${mode}`,
       method: 'get'
     });
   },
@@ -152,7 +229,7 @@ export const examRecordApi = {
   // 根据日期范围获取记录
   getExamRecordsByDateRange(userId, startDate, endDate) {
     return request({
-      url: `/exam/records/user/${userId}/date`,
+      url: `/api/exam/records/user/${userId}/date`,
       method: 'get',
       params: {
         startDate,
@@ -164,7 +241,7 @@ export const examRecordApi = {
   // 获取考试记录详情
   getExamRecordById(id) {
     return request({
-      url: `/exam/records/${id}`,
+      url: `/api/exam/records/${id}`,
       method: 'get'
     });
   },
@@ -172,7 +249,7 @@ export const examRecordApi = {
   // 保存考试记录
   saveExamRecord(data) {
     return request({
-      url: '/exam/records/save',
+      url: '/api/exam/records/save',
       method: 'post',
       data
     });
@@ -181,7 +258,7 @@ export const examRecordApi = {
   // 获取考试记录题目
   getExamRecordQuestions(examRecordId) {
     return request({
-      url: `/exam/records/${examRecordId}/questions`,
+      url: `/api/exam/records/${examRecordId}/questions`,
       method: 'get'
     });
   }
@@ -198,7 +275,16 @@ export const {
 export const {
   getRandomQuestions,
   getQuestionById,
-  getAllCategories
+  getAllCategories,
+  getAllSubjects,
+  getSubjectById,
+  createSubject,
+  updateSubject,
+  deleteSubject,
+  getQuestions,
+  createQuestion,
+  updateQuestion,
+  deleteQuestion
 } = questionApi;
 
 export const {

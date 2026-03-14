@@ -11,8 +11,10 @@ import zysy.iflytek.aishuai.question.dto.QuestionCreateDTO;
 import zysy.iflytek.aishuai.question.dto.QuestionQueryDTO;
 import zysy.iflytek.aishuai.question.entity.Question;
 import zysy.iflytek.aishuai.question.entity.QuestionCategory;
+import zysy.iflytek.aishuai.question.entity.Subject;
 import zysy.iflytek.aishuai.question.mapper.QuestionMapper;
 import zysy.iflytek.aishuai.question.mapper.QuestionCategoryMapper;
+import zysy.iflytek.aishuai.question.mapper.SubjectMapper;
 import zysy.iflytek.aishuai.question.service.QuestionService;
 import zysy.iflytek.aishuai.question.vo.QuestionVO;
 
@@ -32,6 +34,9 @@ public class QuestionServiceImpl implements QuestionService {
     @Autowired
     private QuestionCategoryMapper questionCategoryMapper;
     
+    @Autowired
+    private SubjectMapper subjectMapper;
+    
     @Override
     public Page<QuestionVO> pageQuestions(QuestionQueryDTO queryDTO) {
         Page<Question> page = new Page<>(queryDTO.getPageNum(), queryDTO.getPageSize());
@@ -39,6 +44,9 @@ public class QuestionServiceImpl implements QuestionService {
         LambdaQueryWrapper<Question> wrapper = new LambdaQueryWrapper<>();
         if (queryDTO.getCategoryId() != null) {
             wrapper.eq(Question::getCategoryId, queryDTO.getCategoryId());
+        }
+        if (queryDTO.getSubjectId() != null) {
+            wrapper.eq(Question::getSubjectId, queryDTO.getSubjectId());
         }
         if (queryDTO.getType() != null) {
             wrapper.eq(Question::getType, queryDTO.getType());
@@ -174,6 +182,14 @@ public class QuestionServiceImpl implements QuestionService {
             }
         }
         
+        // 设置学科名称
+        if (question.getSubjectId() != null) {
+            Subject subject = subjectMapper.selectById(question.getSubjectId());
+            if (subject != null) {
+                vo.setSubjectName(subject.getName());
+            }
+        }
+        
         return vo;
     }
     
@@ -182,5 +198,12 @@ public class QuestionServiceImpl implements QuestionService {
         LambdaQueryWrapper<QuestionCategory> wrapper = new LambdaQueryWrapper<>();
         wrapper.orderByAsc(QuestionCategory::getSort);
         return questionCategoryMapper.selectList(wrapper);
+    }
+    
+    @Override
+    public List<Subject> getAllSubjects() {
+        LambdaQueryWrapper<Subject> wrapper = new LambdaQueryWrapper<>();
+        wrapper.orderByAsc(Subject::getSort);
+        return subjectMapper.selectList(wrapper);
     }
 }

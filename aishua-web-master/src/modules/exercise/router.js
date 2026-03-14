@@ -35,5 +35,29 @@ export default [
     name: 'ExamDetail',
     component: () => import('./views/ExamDetailView.vue'),
     meta: { requiresAuth: true, layout: 'default' }
+  },
+  {
+    path: '/exercise/questions',
+    name: 'QuestionManagement',
+    component: () => import('./views/QuestionManagementView.vue'),
+    meta: { requiresAuth: true, layout: 'default' }
+  },
+  {
+    path: '/exercise/questions/:id',
+    name: 'QuestionDetail',
+    component: () => import('./views/QuestionDetailView.vue'),
+    meta: { requiresAuth: true, layout: 'default' }
+  },
+  {
+    path: '/exercise/subjects',
+    name: 'SubjectManagement',
+    component: () => import('./views/SubjectManagementView.vue'),
+    meta: { requiresAuth: true, layout: 'default' }
+  },
+  {
+    path: '/exercise/subjects/:id',
+    name: 'SubjectDetail',
+    component: () => import('./views/SubjectDetailView.vue'),
+    meta: { requiresAuth: true, layout: 'default' }
   }
 ];

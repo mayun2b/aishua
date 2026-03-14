@@ -19,6 +19,8 @@ public class QuestionCreateDTO {
     
     private Long categoryId; // 分类 ID
     
+    private Long subjectId; // 学科 ID
+    
     private Integer difficulty; // 难度等级
     
     private String options; // 选项（JSON）

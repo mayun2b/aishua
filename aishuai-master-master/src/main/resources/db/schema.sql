@@ -16,6 +16,20 @@ CREATE TABLE IF NOT EXISTS `sys_user` (
     INDEX `idx_is_admin` (`is_admin`)
 ) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4 COMMENT='用户表';
 
+-- 学科表
+CREATE TABLE IF NOT EXISTS `subject` (
+    `id` BIGINT NOT NULL AUTO_INCREMENT COMMENT '主键 ID',
+    `name` VARCHAR(100) NOT NULL COMMENT '学科名称',
+    `code` VARCHAR(50) NOT NULL COMMENT '学科代码',
+    `description` TEXT COMMENT '学科描述',
+    `sort` INT DEFAULT 0 COMMENT '排序值（越小越靠前）',
+    `create_time` DATETIME DEFAULT CURRENT_TIMESTAMP COMMENT '创建时间',
+    `update_time` DATETIME DEFAULT CURRENT_TIMESTAMP ON UPDATE CURRENT_TIMESTAMP COMMENT '更新时间',
+    PRIMARY KEY (`id`),
+    UNIQUE KEY `uk_code` (`code`),
+    INDEX `idx_sort` (`sort`)
+) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4 COMMENT='学科表';
+
 -- 题目分类表
 CREATE TABLE IF NOT EXISTS `question_category` (
     `id` BIGINT NOT NULL AUTO_INCREMENT COMMENT '主键 ID',
@@ -35,6 +49,7 @@ CREATE TABLE IF NOT EXISTS `question` (
     `content` TEXT COMMENT '题目内容（支持富文本、公式等）',
     `type` TINYINT NOT NULL COMMENT '题型：1-单选，2-多选，3-判断，4-填空，5-简答',
     `category_id` BIGINT COMMENT '分类 ID',
+    `subject_id` BIGINT COMMENT '学科 ID',
     `difficulty` TINYINT DEFAULT 1 COMMENT '难度等级：1-简单，2-中等，3-困难',
     `options` JSON COMMENT '选择题选项（JSON 格式）',
     `answer` TEXT NOT NULL COMMENT '正确答案',
@@ -46,6 +61,7 @@ CREATE TABLE IF NOT EXISTS `question` (
     `update_time` DATETIME DEFAULT CURRENT_TIMESTAMP ON UPDATE CURRENT_TIMESTAMP COMMENT '更新时间',
     PRIMARY KEY (`id`),
     INDEX `idx_category_id` (`category_id`),
+    INDEX `idx_subject_id` (`subject_id`),
     INDEX `idx_type` (`type`),
     INDEX `idx_difficulty` (`difficulty`)
 ) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4 COMMENT='题目表';
@@ -133,6 +149,14 @@ CREATE TABLE IF NOT EXISTS `exam_record_question` (
     FOREIGN KEY (`exam_record_id`) REFERENCES `exam_record` (`id`) ON DELETE CASCADE,
     FOREIGN KEY (`question_id`) REFERENCES `question` (`id`) ON DELETE CASCADE
 ) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4 COMMENT='考试记录题目表';
+
+-- 初始化数据 - 学科
+INSERT INTO `subject` (`name`, `code`, `description`, `sort`) VALUES
+('数学', 'MATH', '数学学科，包括高等数学、线性代数等', 1),
+('英语', 'ENGLISH', '英语学科，包括词汇、语法等', 2),
+('计算机', 'COMPUTER', '计算机学科，包括数据结构、计算机网络等', 3),
+('物理', 'PHYSICS', '物理学科，包括力学、电磁学等', 4),
+('化学', 'CHEMISTRY', '化学学科，包括无机化学、有机化学等', 5);
 
 -- 初始化数据 - 题目分类
 INSERT INTO `question_category` (`name`, `parent_id`, `sort`) VALUES

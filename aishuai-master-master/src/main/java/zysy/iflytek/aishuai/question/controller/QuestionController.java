@@ -93,4 +93,14 @@ public class QuestionController {
                 questionService.getAllCategories();
         return Result.success(categories);
     }
+    
+    /**
+     * 获取所有学科
+     */
+    @GetMapping("/subjects")
+    public Result<List<zysy.iflytek.aishuai.question.entity.Subject>> getAllSubjects() {
+        List<zysy.iflytek.aishuai.question.entity.Subject> subjects = 
+                questionService.getAllSubjects();
+        return Result.success(subjects);
+    }
 }

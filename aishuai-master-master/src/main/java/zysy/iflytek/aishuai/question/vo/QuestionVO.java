@@ -14,6 +14,8 @@ public class QuestionVO {
     private Integer type;
     private Long categoryId;
     private String categoryName; // 分类名称
+    private Long subjectId; // 学科 ID
+    private String subjectName; // 学科名称
     private Integer difficulty;
     private String options;
     private String answer;

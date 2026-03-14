@@ -5,6 +5,7 @@ import zysy.iflytek.aishuai.question.dto.QuestionCreateDTO;
 import zysy.iflytek.aishuai.question.dto.QuestionQueryDTO;
 import zysy.iflytek.aishuai.question.entity.Question;
 import zysy.iflytek.aishuai.question.entity.QuestionCategory;
+import zysy.iflytek.aishuai.question.entity.Subject;
 import zysy.iflytek.aishuai.question.vo.QuestionVO;
 
 import java.util.List;
@@ -53,4 +54,9 @@ public interface QuestionService {
      * 获取所有题目分类
      */
     List<QuestionCategory> getAllCategories();
+    
+    /**
+     * 获取所有学科
+     */
+    List<Subject> getAllSubjects();
 }
