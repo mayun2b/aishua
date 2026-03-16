@@ -255,8 +255,8 @@
               <div class="stat-label">得分</div>
             </div>
           </div>
-          <div class="exam-grade" :class="getGradeClass(score)">
-            {{ getGradeText(score) }}
+          <div class="exam-grade" :class="getGradeInfo(score).className">
+            {{ getGradeInfo(score).text }}
           </div>
         </div>
       </van-dialog>
@@ -269,6 +269,7 @@ import { ref, reactive, onMounted, computed, watch, onUnmounted } from 'vue';
 import { useRouter } from 'vue-router';
 import { getRandomQuestions, getAllCategories, batchSubmitAnswers as batchSubmitAnswersApi, saveExamRecord } from '../api/exercise';
 import { showToast, Dialog } from 'vant';
+import { parseQuestionOptions, getQuestionTypeText, calculateTimeCost, getCurrentSubmitAnswer, formatDateTime, getGradeInfo, formatTime } from '../utils/questionUtils';
 
 export default {
   name: 'ExamView',
@@ -332,6 +333,7 @@ export default {
     const examTime = ref(1800); // 默认30分钟
     const remainingTime = ref(1800);
     const timer = ref(null);
+    const questionStartTime = ref(null); // 记录当前题目的开始时间
     
     const currentQuestion = computed(() => {
       return questions.value[currentQuestionIndex.value] || null;
@@ -342,16 +344,7 @@ export default {
       return currentQuestionIndex.value >= totalQuestions.value - 1;
     });
     
-    const getQuestionTypeText = (type) => {
-      switch (type) {
-        case 1: return '单选题';
-        case 2: return '多选题';
-        case 3: return '判断题';
-        case 4: return '填空题';
-        case 5: return '简答题';
-        default: return '未知题型';
-      }
-    };
+
 
     // 加载题目分类
     const loadCategories = async () => {
@@ -386,51 +379,7 @@ export default {
 
               // 尝试从不同的可能字段获取选项
               if (q.options) {
-                let rawOptions = q.options;
-
-                // 后端字段通常是 JSON 字符串，这里优先做解析
-                if (typeof rawOptions === 'string') {
-                  try {
-                    rawOptions = JSON.parse(rawOptions);
-                  } catch (e) {
-                    console.error('解析题目选项失败，使用空选项:', e, q);
-                    rawOptions = null;
-                  }
-                }
-
-                if (Array.isArray(rawOptions)) {
-                  // 已经是数组：["xxx","yyy"] 或 [{label,value}] 或 [{key,value}]
-                  options = rawOptions.map((opt, idx) => {
-                    if (opt && typeof opt === 'object') {
-                      if ('label' in opt && 'value' in opt) return opt;
-                      if ('key' in opt && 'value' in opt) {
-                        return { label: opt.key, value: opt.value };
-                      }
-                    }
-                    return {
-                      label: String.fromCharCode(65 + idx),
-                      value: typeof opt === 'string' ? opt : JSON.stringify(opt)
-                    };
-                  });
-                } else if (rawOptions && typeof rawOptions === 'object') {
-                  // 对象结构：可能是 { "A": "xxx" } 或 { "A": { "value": "xxx" } }
-                  const keys = Object.keys(rawOptions).sort();
-                  options = keys.map((key, idx) => {
-                    const item = rawOptions[key];
-                    if (item && typeof item === 'object' && 'value' in item) {
-                      return {
-                        label: key || String.fromCharCode(65 + idx),
-                        value: item.value
-                      };
-                    }
-                    return {
-                      label: key || String.fromCharCode(65 + idx),
-                      value: item
-                    };
-                  });
-                } else {
-                  options = [];
-                }
+                options = parseQuestionOptions(q.options);
               } else if (q.optionA) {
                 // 如果后端使用单独的选项字段
                 const labels = ['A', 'B', 'C', 'D', 'E', 'F'];
@@ -442,9 +391,6 @@ export default {
                     label: labels[idx],
                     value: q[key]
                   }));
-              } else {
-                // 如果没有找到选项，创建一个空数组
-                options = [];
               }
               
               return {
@@ -517,6 +463,9 @@ export default {
           examTime.value = modeConfig.time * 60;
           remainingTime.value = modeConfig.time * 60;
           
+          // 初始化第一个题目的开始时间
+          questionStartTime.value = Date.now();
+          
           // 开始倒计时
           startTimer();
         } else {
@@ -546,11 +495,7 @@ export default {
       }, 1000);
     };
     
-    const formatTime = (seconds) => {
-      const mins = Math.floor(seconds / 60);
-      const secs = seconds % 60;
-      return `${mins.toString().padStart(2, '0')}:${secs.toString().padStart(2, '0')}`;
-    };
+
     
     const selectOption = (value) => {
       selectedAnswer.value = value;
@@ -572,19 +517,16 @@ export default {
       selectedAnswers.value = list;
     };
 
-    const getCurrentSubmitAnswer = () => {
-      const q = currentQuestion.value;
-      if (!q) return '';
-      if (q.type === 2) return [...selectedAnswers.value].sort().join('');
-      if (q.type === 4 || q.type === 5) return textAnswer.value.trim();
-      return selectedAnswer.value;
-    };
+
     
     const saveCurrentAnswer = () => {
       const q = currentQuestion.value;
       if (!q) return;
       
-      const submitAns = getCurrentSubmitAnswer();
+      const submitAns = getCurrentSubmitAnswer(q, selectedAnswer.value, selectedAnswers.value, textAnswer.value);
+      
+      // 计算答题时间（秒）
+      const timeCost = calculateTimeCost(questionStartTime.value);
       
       // 保存用户答案
       const existingIndex = userAnswers.value.findIndex(item => item.questionId === q.id);
@@ -592,13 +534,15 @@ export default {
         userAnswers.value[existingIndex] = {
           questionId: q.id,
           answer: submitAns,
-          isCorrect: submitAns === q.answer
+          isCorrect: submitAns === q.answer,
+          timeCost: timeCost
         };
       } else {
         userAnswers.value.push({
           questionId: q.id,
           answer: submitAns,
-          isCorrect: submitAns === q.answer
+          isCorrect: submitAns === q.answer,
+          timeCost: timeCost
         });
       }
     };
@@ -608,6 +552,8 @@ export default {
         saveCurrentAnswer();
         currentQuestionIndex.value--;
         loadCurrentAnswer();
+        // 记录新题目的开始时间
+        questionStartTime.value = Date.now();
       }
     };
     
@@ -616,6 +562,8 @@ export default {
         saveCurrentAnswer();
         currentQuestionIndex.value++;
         loadCurrentAnswer();
+        // 记录新题目的开始时间
+        questionStartTime.value = Date.now();
       }
     };
     
@@ -661,9 +609,10 @@ export default {
         // 调用后端API提交答案
         if (userAnswers.value.length > 0) {
           const batchData = userAnswers.value.map(item => ({
-            questionId: item.questionId,
-            userAnswer: item.answer
-          }));
+              questionId: item.questionId,
+              userAnswer: item.answer,
+              timeCost: item.timeCost
+            }));
           
           console.log('批量提交答案请求数据:', batchData);
           try {
@@ -681,16 +630,6 @@ export default {
         
         if (userId) {
           console.log('用户ID存在，准备保存考试记录');
-          const formatDateTime = (date) => {
-            const year = date.getFullYear();
-            const month = String(date.getMonth() + 1).padStart(2, '0');
-            const day = String(date.getDate()).padStart(2, '0');
-            const hours = String(date.getHours()).padStart(2, '0');
-            const minutes = String(date.getMinutes()).padStart(2, '0');
-            const seconds = String(date.getSeconds()).padStart(2, '0');
-            return `${year}-${month}-${day} ${hours}:${minutes}:${seconds}`;
-          };
-          
           const actualDurationSeconds = examTime.value - remainingTime.value;
           const actualDurationMinutes = Math.round(actualDurationSeconds / 60);
           
@@ -699,7 +638,7 @@ export default {
             questionId: item.questionId,
             userAnswer: item.answer,
             isCorrect: item.isCorrect ? 1 : 0,
-            answerTime: Math.floor(Math.random() * 60) + 10 // 模拟答题时间，实际项目中可以记录真实时间
+            answerTime: item.timeCost // 使用真实的答题时间
           }));
           
           const examRecordData = {
@@ -787,19 +726,7 @@ export default {
       router.push('/dashboard');
     };
     
-    const getGradeClass = (score) => {
-      if (score >= 90) return 'grade-excellent';
-      if (score >= 80) return 'grade-good';
-      if (score >= 60) return 'grade-pass';
-      return 'grade-fail';
-    };
-    
-    const getGradeText = (score) => {
-      if (score >= 90) return '优秀';
-      if (score >= 80) return '良好';
-      if (score >= 60) return '及格';
-      return '不及格';
-    };
+
 
     watch(currentQuestionIndex, () => {
       loadCurrentAnswer();
@@ -859,8 +786,7 @@ export default {
       viewExamDetails,
       goToHome,
       formatTime,
-      getGradeClass,
-      getGradeText
+      getGradeInfo
     };
   }
 };

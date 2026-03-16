@@ -7,6 +7,29 @@
       <button class="btn-primary" @click="addQuestion">
         <i class="icon-plus"></i> 添加题目
       </button>
+      <div class="batch-actions" v-if="selectedQuestions.length > 0">
+        <select v-model="batchSubjectId">
+          <option value="">选择学科</option>
+          <option v-for="subject in subjects" :key="subject.id" :value="subject.id">
+            {{ subject.name }}
+          </option>
+        </select>
+        <button class="btn-batch" @click="() => handleBatchUpdate('subject')">
+          批量修改学科
+        </button>
+        <select v-model="batchCategoryId">
+          <option value="">选择分类</option>
+          <option v-for="category in categories" :key="category.id" :value="category.id">
+            {{ category.name }}
+          </option>
+        </select>
+        <button class="btn-batch" @click="() => handleBatchUpdate('category')">
+          批量修改分类
+        </button>
+        <button class="btn-batch-delete" @click="handleBatchDelete">
+          批量删除
+        </button>
+      </div>
     </div>
     
     <!-- 筛选和搜索 -->
@@ -69,6 +92,9 @@
       <table>
         <thead>
           <tr>
+            <th>
+              <input type="checkbox" v-model="selectAll" @change="handleSelectAll">
+            </th>
             <th>ID</th>
             <th>题目</th>
             <th>学科</th>
@@ -81,13 +107,16 @@
         </thead>
         <tbody>
           <tr v-for="question in questions" :key="question.id">
+            <td>
+              <input type="checkbox" :value="question.id" v-model="selectedQuestions">
+            </td>
             <td>{{ question.id }}</td>
             <td class="question-title">{{ question.title }}</td>
             <td>{{ question.subjectName || '未设置' }}</td>
             <td>{{ getQuestionType(question.type) }}</td>
             <td>{{ getCategoryName(question.categoryId) }}</td>
             <td>{{ getDifficultyLevel(question.difficulty) }}</td>
-            <td>{{ (question.correctRate * 100).toFixed(1) }}%</td>
+            <td>{{ question.correctRate.toFixed(1) }}%</td>
             <td class="action-buttons">
               <button class="btn-edit" @click="editQuestion(question.id)">
                 编辑
@@ -125,7 +154,7 @@
 </template>
 
 <script>
-import { ref, onMounted, computed } from 'vue';
+import { ref, onMounted, computed, watch } from 'vue';
 import { useRouter } from 'vue-router';
 import { questionApi } from '../api/exercise';
 
@@ -148,6 +177,12 @@ export default {
       type: '',
       difficulty: ''
     });
+    
+    // 批量操作相关
+    const selectedQuestions = ref([]);
+    const selectAll = ref(false);
+    const batchSubjectId = ref('');
+    const batchCategoryId = ref('');
     
     const totalPages = computed(() => {
       return Math.ceil(total.value / pageSize.value);
@@ -176,10 +211,15 @@ export default {
     };
     
     // 加载分类列表
-    const loadCategories = async () => {
+    const loadCategories = async (subjectId = '') => {
       try {
-        const response = await questionApi.getAllCategories();
-        categories.value = response.data;
+        if (subjectId) {
+          const response = await questionApi.getCategoriesBySubjectId(subjectId);
+          categories.value = response.data;
+        } else {
+          const response = await questionApi.getAllCategories();
+          categories.value = response.data;
+        }
       } catch (error) {
         console.error('加载分类失败:', error);
       }
@@ -223,6 +263,107 @@ export default {
       }
     };
     
+    // 全选/取消全选
+    const handleSelectAll = () => {
+      if (selectAll.value) {
+        selectedQuestions.value = questions.value.map(q => q.id);
+      } else {
+        selectedQuestions.value = [];
+      }
+    };
+    
+    // 批量操作处理
+    const handleBatchUpdate = (type) => {
+      const selectedCount = selectedQuestions.value.length;
+      if (selectedCount === 0) {
+        alert('请选择要操作的题目');
+        return;
+      }
+      
+      if (type === 'subject') {
+        if (!batchSubjectId.value) {
+          alert('请选择学科');
+          return;
+        }
+        
+        // 使用window.confirm确保浏览器兼容性
+        const userConfirmed = window.confirm(`确定要将选中的${selectedCount}个题目修改到所选学科吗？`);
+        console.log('用户确认结果:', userConfirmed, typeof userConfirmed);
+        
+        // 只有在用户明确确认后才执行操作
+        if (userConfirmed) {
+          console.log('执行批量修改学科操作');
+          // 执行批量修改学科操作
+          questionApi.batchUpdateSubject({
+            questionIds: selectedQuestions.value.map(id => Number(id)),
+            subjectId: Number(batchSubjectId.value)
+          }).then(() => {
+            alert('批量修改学科成功');
+            loadQuestions();
+            selectedQuestions.value = [];
+            batchSubjectId.value = '';
+          }).catch(error => {
+            console.error('批量修改学科失败:', error);
+            alert('批量修改学科失败，请重试');
+          });
+        } else {
+          console.log('用户取消批量修改学科操作，不执行任何操作');
+          // 用户取消，不执行任何操作
+        }
+      } else if (type === 'category') {
+        if (!batchCategoryId.value) {
+          alert('请选择分类');
+          return;
+        }
+        
+        // 使用window.confirm确保浏览器兼容性
+        const userConfirmed = window.confirm(`确定要将选中的${selectedCount}个题目修改到所选分类吗？`);
+        console.log('用户确认结果:', userConfirmed);
+        
+        // 只有在用户明确确认后才执行操作
+        if (userConfirmed === true) {
+          console.log('执行批量修改分类操作');
+          // 执行批量修改分类操作
+          questionApi.batchUpdateCategory({
+            questionIds: selectedQuestions.value.map(id => Number(id)),
+            categoryId: Number(batchCategoryId.value)
+          }).then(() => {
+            alert('批量修改分类成功');
+            loadQuestions();
+            selectedQuestions.value = [];
+            batchCategoryId.value = '';
+          }).catch(error => {
+            console.error('批量修改分类失败:', error);
+            alert('批量修改分类失败，请重试');
+          });
+        } else {
+          console.log('用户取消批量修改分类操作，不执行任何操作');
+          // 用户取消，不执行任何操作
+        }
+      }
+    };
+    
+    // 批量删除处理
+    const handleBatchDelete = () => {
+      const selectedCount = selectedQuestions.value.length;
+      if (selectedCount === 0) {
+        alert('请选择要删除的题目');
+        return;
+      }
+      
+      const confirmed = window.confirm(`确定要删除选中的${selectedCount}个题目吗？`);
+      if (confirmed) {
+        questionApi.batchDeleteQuestions(selectedQuestions.value.map(id => Number(id))).then(() => {
+          alert('批量删除成功');
+          loadQuestions();
+          selectedQuestions.value = [];
+        }).catch(error => {
+          console.error('批量删除失败:', error);
+          alert('批量删除失败，请重试');
+        });
+      }
+    };
+    
     // 获取题目类型
     const getQuestionType = (type) => {
       const types = {
@@ -258,6 +399,12 @@ export default {
       loadQuestions();
     });
     
+    // 监听学科变化，加载对应分类
+    watch(() => searchParams.value.subjectId, (newSubjectId) => {
+      searchParams.value.categoryId = ''; // 重置分类选择
+      loadCategories(newSubjectId);
+    });
+    
     return {
       questions,
       categories,
@@ -265,11 +412,18 @@ export default {
       currentPage,
       totalPages,
       searchParams,
+      selectedQuestions,
+      selectAll,
+      batchSubjectId,
+      batchCategoryId,
       loadQuestions,
       changePage,
       addQuestion,
       editQuestion,
       deleteQuestion,
+      handleSelectAll,
+      handleBatchUpdate,
+      handleBatchDelete,
       getQuestionType,
       getDifficultyLevel,
       getCategoryName
@@ -292,6 +446,24 @@ h1 {
 
 .action-bar {
   margin-bottom: 20px;
+  display: flex;
+  align-items: center;
+  gap: 15px;
+  flex-wrap: wrap;
+}
+
+.batch-actions {
+  display: flex;
+  align-items: center;
+  gap: 10px;
+  flex-wrap: wrap;
+}
+
+.batch-actions select {
+  padding: 8px 12px;
+  border: 1px solid #dcdfe6;
+  border-radius: 4px;
+  font-size: 14px;
 }
 
 .btn-primary {
@@ -306,6 +478,34 @@ h1 {
 
 .btn-primary:hover {
   background-color: #66b1ff;
+}
+
+.btn-batch {
+  background-color: #67c23a;
+  color: white;
+  border: none;
+  padding: 8px 16px;
+  border-radius: 4px;
+  cursor: pointer;
+  font-size: 14px;
+}
+
+.btn-batch:hover {
+  background-color: #85ce61;
+}
+
+.btn-batch-delete {
+  background-color: #f56c6c;
+  color: white;
+  border: none;
+  padding: 8px 16px;
+  border-radius: 4px;
+  cursor: pointer;
+  font-size: 14px;
+}
+
+.btn-batch-delete:hover {
+  background-color: #f78989;
 }
 
 .filter-bar {
@@ -378,6 +578,12 @@ th {
   background-color: #f5f7fa;
   font-weight: 600;
   color: #303133;
+}
+
+th input[type="checkbox"],
+td input[type="checkbox"] {
+  margin: 0;
+  cursor: pointer;
 }
 
 .question-title {

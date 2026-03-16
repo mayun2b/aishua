@@ -2,27 +2,27 @@ import request from '@/utils/request';
 
 // 登录接口
 export const login = (loginData) => {
-  return request.post('/user/login', loginData);
+  return request.post('/api/user/login', loginData);
 };
 
 // 注册接口
 export const register = (registerData) => {
-  return request.post('/user/register', registerData);
+  return request.post('/api/user/register', registerData);
 };
 
 // 管理员查询用户列表接口
 export const listUsers = (queryData) => {
-  return request.post('/user/list', queryData);
+  return request.post('/api/user/list', queryData);
 };
 
 // 管理员禁用用户接口（将status设为0）
 export const disableUser = (userId) => {
-  return request.post('/user/disable', { userId });
+  return request.post('/api/user/disable', { userId });
 };
 
 // 获取用户信息
 export const getUserInfo = () => {
-  return request.get('/user/info');
+  return request.get('/api/user/info');
 };
 
 // 退出登录

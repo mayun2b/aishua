@@ -201,9 +201,49 @@ public class QuestionServiceImpl implements QuestionService {
     }
     
     @Override
+    public List<QuestionCategory> getCategoriesBySubjectId(Long subjectId) {
+        LambdaQueryWrapper<QuestionCategory> wrapper = new LambdaQueryWrapper<>();
+        wrapper.eq(QuestionCategory::getSubjectId, subjectId);
+        wrapper.orderByAsc(QuestionCategory::getSort);
+        return questionCategoryMapper.selectList(wrapper);
+    }
+    
+    @Override
     public List<Subject> getAllSubjects() {
         LambdaQueryWrapper<Subject> wrapper = new LambdaQueryWrapper<>();
         wrapper.orderByAsc(Subject::getSort);
         return subjectMapper.selectList(wrapper);
+    }
+    
+    @Override
+    @Transactional(rollbackFor = Exception.class)
+    public void batchUpdateSubject(List<Long> questionIds, Long subjectId) {
+        for (Long questionId : questionIds) {
+            Question question = questionMapper.selectById(questionId);
+            if (question != null) {
+                question.setSubjectId(subjectId);
+                questionMapper.updateById(question);
+            }
+        }
+    }
+    
+    @Override
+    @Transactional(rollbackFor = Exception.class)
+    public void batchUpdateCategory(List<Long> questionIds, Long categoryId) {
+        for (Long questionId : questionIds) {
+            Question question = questionMapper.selectById(questionId);
+            if (question != null) {
+                question.setCategoryId(categoryId);
+                questionMapper.updateById(question);
+            }
+        }
+    }
+    
+    @Override
+    @Transactional(rollbackFor = Exception.class)
+    public void batchDeleteQuestions(List<Long> questionIds) {
+        for (Long questionId : questionIds) {
+            questionMapper.deleteById(questionId);
+        }
     }
 }

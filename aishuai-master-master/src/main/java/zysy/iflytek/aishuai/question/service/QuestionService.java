@@ -56,7 +56,27 @@ public interface QuestionService {
     List<QuestionCategory> getAllCategories();
     
     /**
+     * 根据学科 ID 获取题目分类
+     */
+    List<QuestionCategory> getCategoriesBySubjectId(Long subjectId);
+    
+    /**
      * 获取所有学科
      */
     List<Subject> getAllSubjects();
+    
+    /**
+     * 批量修改题目学科
+     */
+    void batchUpdateSubject(List<Long> questionIds, Long subjectId);
+    
+    /**
+     * 批量修改题目分类
+     */
+    void batchUpdateCategory(List<Long> questionIds, Long categoryId);
+    
+    /**
+     * 批量删除题目
+     */
+    void batchDeleteQuestions(List<Long> questionIds);
 }

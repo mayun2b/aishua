@@ -19,6 +19,9 @@ public class QuestionCategory {
     @TableField("parent_id")
     private Long parentId; // 父分类 ID
     
+    @TableField("subject_id")
+    private Long subjectId; // 学科 ID
+    
     @TableField("sort")
     private Integer sort; // 排序值
     

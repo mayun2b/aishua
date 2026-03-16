@@ -103,4 +103,80 @@ public class QuestionController {
                 questionService.getAllSubjects();
         return Result.success(subjects);
     }
+    
+    /**
+     * 根据学科 ID 获取题目分类
+     */
+    @GetMapping("/categories/{subjectId}")
+    public Result<List<zysy.iflytek.aishuai.question.entity.QuestionCategory>> getCategoriesBySubjectId(@PathVariable Long subjectId) {
+        List<zysy.iflytek.aishuai.question.entity.QuestionCategory> categories = 
+                questionService.getCategoriesBySubjectId(subjectId);
+        return Result.success(categories);
+    }
+    
+    /**
+     * 批量修改题目学科
+     */
+    @PostMapping("/batch/update-subject")
+    public Result<Void> batchUpdateSubject(@RequestBody BatchUpdateRequest request) {
+        questionService.batchUpdateSubject(request.getQuestionIds(), request.getSubjectId());
+        return Result.success(null);
+    }
+    
+    /**
+     * 批量修改题目分类
+     */
+    @PostMapping("/batch/update-category")
+    public Result<Void> batchUpdateCategory(@RequestBody BatchUpdateRequest request) {
+        questionService.batchUpdateCategory(request.getQuestionIds(), request.getCategoryId());
+        return Result.success(null);
+    }
+    
+    /**
+     * 批量删除题目
+     */
+    @PostMapping("/batch/delete")
+    public Result<Void> batchDeleteQuestions(@RequestBody BatchDeleteRequest request) {
+        questionService.batchDeleteQuestions(request.getQuestionIds());
+        return Result.success(null);
+    }
+    
+    // 批量操作请求体
+    static class BatchUpdateRequest {
+        private List<Long> questionIds;
+        private Long subjectId;
+        private Long categoryId;
+        
+        // getters and setters
+        public List<Long> getQuestionIds() {
+            return questionIds;
+        }
+        public void setQuestionIds(List<Long> questionIds) {
+            this.questionIds = questionIds;
+        }
+        public Long getSubjectId() {
+            return subjectId;
+        }
+        public void setSubjectId(Long subjectId) {
+            this.subjectId = subjectId;
+        }
+        public Long getCategoryId() {
+            return categoryId;
+        }
+        public void setCategoryId(Long categoryId) {
+            this.categoryId = categoryId;
+        }
+    }
+    
+    static class BatchDeleteRequest {
+        private List<Long> questionIds;
+        
+        // getters and setters
+        public List<Long> getQuestionIds() {
+            return questionIds;
+        }
+        public void setQuestionIds(List<Long> questionIds) {
+            this.questionIds = questionIds;
+        }
+    }
 }

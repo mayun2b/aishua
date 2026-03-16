@@ -12,6 +12,7 @@ import zysy.iflytek.aishuai.stats.service.StatsService;
 import zysy.iflytek.aishuai.wrong.service.WrongQuestionService;
 
 import java.time.LocalDate;
+import java.util.List;
 
 /**
  * 统计服务实现
@@ -80,6 +81,14 @@ public class StatsServiceImpl implements StatsService {
         }
         
         vo.setContinuousDays(stats.getContinuousDays());
+        
+        // 查询分类统计数据
+        List<ExerciseStatsVO.CategoryStatsVO> categoryStats = userStatsMapper.getCategoryStats(userId);
+        vo.setCategoryStats(categoryStats);
+        
+        // 查询涉及分类数
+        Integer categoryCount = userStatsMapper.getCategoryCount(userId);
+        vo.setCategoryCount(categoryCount != null ? categoryCount : 0);
         
         return vo;
     }

@@ -8,7 +8,11 @@ const routes = [
   ...exerciseRoutes,
   {
     path: '/',
-    redirect: '/login'
+    name: 'Home',
+    component: () => import('../views/Home.vue'),
+    meta: {
+      layout: 'empty'
+    }
   },
   {
     path: '/:pathMatch(.*)*',

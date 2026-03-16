@@ -8,6 +8,7 @@ import org.springframework.web.bind.annotation.*;
 import zysy.iflytek.aishuai.common.result.Result;
 import zysy.iflytek.aishuai.question.entity.Question;
 import zysy.iflytek.aishuai.wrong.service.WrongQuestionService;
+import zysy.iflytek.aishuai.wrong.vo.WrongQuestionVO;
 
 import java.util.List;
 
@@ -26,7 +27,7 @@ public class WrongQuestionController {
      * 分页查询错题列表
      */
     @GetMapping("/page")
-    public Result<Page<Question>> pageWrongQuestions(
+    public Result<Page<WrongQuestionVO>> pageWrongQuestions(
             HttpServletRequest request,
             @RequestParam(defaultValue = "1") Integer pageNum,
             @RequestParam(defaultValue = "10") Integer pageSize) {
@@ -34,7 +35,7 @@ public class WrongQuestionController {
         if (userId == null) {
             return Result.unauth("用户未登录");
         }
-        Page<Question> page = wrongQuestionService.pageWrongQuestions(userId, pageNum, pageSize);
+        Page<WrongQuestionVO> page = wrongQuestionService.pageWrongQuestions(userId, pageNum, pageSize);
         return Result.success(page);
     }
     

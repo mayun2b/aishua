@@ -11,6 +11,7 @@ import zysy.iflytek.aishuai.question.mapper.QuestionMapper;
 import zysy.iflytek.aishuai.wrong.entity.WrongQuestion;
 import zysy.iflytek.aishuai.wrong.mapper.WrongQuestionMapper;
 import zysy.iflytek.aishuai.wrong.service.WrongQuestionService;
+import zysy.iflytek.aishuai.wrong.vo.WrongQuestionVO;
 
 import java.time.LocalDateTime;
 import java.util.ArrayList;
@@ -31,7 +32,7 @@ public class WrongQuestionServiceImpl implements WrongQuestionService {
     private QuestionMapper questionMapper;
     
     @Override
-    public Page<Question> pageWrongQuestions(Long userId, Integer pageNum, Integer pageSize) {
+    public Page<WrongQuestionVO> pageWrongQuestions(Long userId, Integer pageNum, Integer pageSize) {
         // 1. 查询用户的错题
         LambdaQueryWrapper<WrongQuestion> wrapper = new LambdaQueryWrapper<>();
         wrapper.eq(WrongQuestion::getUserId, userId)
@@ -40,22 +41,27 @@ public class WrongQuestionServiceImpl implements WrongQuestionService {
         Page<WrongQuestion> wrongPage = wrongQuestionMapper.selectPage(
                 new Page<>(pageNum, pageSize), wrapper);
         
-        // 2. 获取题目详情
-        List<Long> questionIds = wrongPage.getRecords().stream()
-                .map(WrongQuestion::getQuestionId)
-                .collect(Collectors.toList());
-        
-        List<Question> questions = new ArrayList<>();
-        if (!questionIds.isEmpty()) {
-            questions = questionMapper.selectBatchIds(questionIds);
+        // 2. 构建错题 VO 列表
+        List<WrongQuestionVO> voList = new ArrayList<>();
+        for (WrongQuestion wrongQuestion : wrongPage.getRecords()) {
+            Question question = questionMapper.selectById(wrongQuestion.getQuestionId());
+            if (question != null) {
+                WrongQuestionVO vo = WrongQuestionVO.fromQuestionAndWrongQuestion(
+                        question, 
+                        wrongQuestion.getWrongCount(), 
+                        wrongQuestion.getLastWrongTime(), 
+                        wrongQuestion.getMasterStatus()
+                );
+                voList.add(vo);
+            }
         }
         
         // 3. 构建分页结果
-        Page<Question> resultPage = new Page<>();
+        Page<WrongQuestionVO> resultPage = new Page<>();
         resultPage.setCurrent(wrongPage.getCurrent());
         resultPage.setSize(wrongPage.getSize());
         resultPage.setTotal(wrongPage.getTotal());
-        resultPage.setRecords(questions);
+        resultPage.setRecords(voList);
         
         return resultPage;
     }

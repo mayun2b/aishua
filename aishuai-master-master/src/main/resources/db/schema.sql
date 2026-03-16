@@ -35,11 +35,13 @@ CREATE TABLE IF NOT EXISTS `question_category` (
     `id` BIGINT NOT NULL AUTO_INCREMENT COMMENT '主键 ID',
     `name` VARCHAR(100) NOT NULL COMMENT '分类名称',
     `parent_id` BIGINT DEFAULT 0 COMMENT '父分类 ID（0 表示一级分类）',
+    `subject_id` BIGINT COMMENT '学科 ID',
     `sort` INT DEFAULT 0 COMMENT '排序值（越小越靠前）',
     `create_time` DATETIME DEFAULT CURRENT_TIMESTAMP COMMENT '创建时间',
     `update_time` DATETIME DEFAULT CURRENT_TIMESTAMP ON UPDATE CURRENT_TIMESTAMP COMMENT '更新时间',
     PRIMARY KEY (`id`),
-    INDEX `idx_parent_id` (`parent_id`)
+    INDEX `idx_parent_id` (`parent_id`),
+    INDEX `idx_subject_id` (`subject_id`)
 ) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4 COMMENT='题目分类表';
 
 -- 题目表
@@ -159,13 +161,13 @@ INSERT INTO `subject` (`name`, `code`, `description`, `sort`) VALUES
 ('化学', 'CHEMISTRY', '化学学科，包括无机化学、有机化学等', 5);
 
 -- 初始化数据 - 题目分类
-INSERT INTO `question_category` (`name`, `parent_id`, `sort`) VALUES
-('数学', 0, 1),
-('英语', 0, 2),
-('计算机基础', 0, 3),
-('高等数学', 1, 1),
-('线性代数', 1, 2),
-('词汇', 2, 1),
-('语法', 2, 2),
-('数据结构', 3, 1),
-('计算机网络', 3, 2);
+INSERT INTO `question_category` (`name`, `parent_id`, `subject_id`, `sort`) VALUES
+('数学', 0, 1, 1),
+('英语', 0, 2, 2),
+('计算机基础', 0, 3, 3),
+('高等数学', 1, 1, 1),
+('线性代数', 1, 1, 2),
+('词汇', 2, 2, 1),
+('语法', 2, 2, 2),
+('数据结构', 3, 3, 1),
+('计算机网络', 3, 3, 2);

@@ -26,8 +26,8 @@
       <el-table :data="chartData" style="width: 100%">
         <el-table-column prop="categoryName" label="分类名称" width="180"></el-table-column>
         <el-table-column prop="correctRate" label="正确率">
-          <template #default="{ row }">
-            {{ (row.correctRate * 1).toFixed(1) }}%
+          <template #default="scope">
+            {{ scope && scope.row ? (scope.row.correctRate * 1).toFixed(1) + '%' : '0.0%' }}
           </template>
         </el-table-column>
         <el-table-column prop="totalCount" label="练习题数" width="120"></el-table-column>
@@ -60,8 +60,8 @@ export default {
         const response = await exerciseApi.getUserStats();
         if (response.code === 200) {
           this.stats = response.data;
-          // 模拟分类数据（实际应该从后端获取）
-          this.chartData = response.data.categoryStats || [];
+          // 确保chartData只包含有效的对象
+          this.chartData = (response.data.categoryStats || []).filter(item => item !== undefined && item !== null);
         }
       } catch (error) {
         this.$message.error('加载统计数据失败');

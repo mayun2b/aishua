@@ -74,6 +74,14 @@ export const questionApi = {
     });
   },
 
+  // 根据学科 ID 获取题目分类
+  getCategoriesBySubjectId(subjectId) {
+    return request({
+      url: `/api/question/categories/${subjectId}`,
+      method: 'get'
+    });
+  },
+
   // 获取所有学科
   getAllSubjects() {
     return request({
@@ -148,6 +156,33 @@ export const questionApi = {
     return request({
       url: `/api/question/${id}`,
       method: 'delete'
+    });
+  },
+
+  // 批量修改学科
+  batchUpdateSubject(data) {
+    return request({
+      url: '/api/question/batch/update-subject',
+      method: 'post',
+      data
+    });
+  },
+
+  // 批量修改分类
+  batchUpdateCategory(data) {
+    return request({
+      url: '/api/question/batch/update-category',
+      method: 'post',
+      data
+    });
+  },
+
+  // 批量删除题目
+  batchDeleteQuestions(questionIds) {
+    return request({
+      url: '/api/question/batch/delete',
+      method: 'post',
+      data: { questionIds }
     });
   }
 };
@@ -276,6 +311,7 @@ export const {
   getRandomQuestions,
   getQuestionById,
   getAllCategories,
+  getCategoriesBySubjectId,
   getAllSubjects,
   getSubjectById,
   createSubject,
@@ -284,7 +320,10 @@ export const {
   getQuestions,
   createQuestion,
   updateQuestion,
-  deleteQuestion
+  deleteQuestion,
+  batchUpdateSubject,
+  batchUpdateCategory,
+  batchDeleteQuestions
 } = questionApi;
 
 export const {

@@ -22,7 +22,13 @@
         class="question-item"
       >
         <div class="question-header">
-          <span class="question-number">第{{ question.id }}题</span>
+          <div>
+            <span class="question-number">第{{ question.id }}题</span>
+            <span class="wrong-info">
+              做错次数: {{ question.wrongCount || 1 }}
+              <span v-if="question.lastWrongTime"> | 最近做错: {{ formatDate(question.lastWrongTime) }}</span>
+            </span>
+          </div>
           <div class="question-actions">
             <button @click="markAsMastered(question.id)" class="btn mastered">
               标记为已掌握
@@ -185,11 +191,33 @@ export default {
     parseOptions(optionsStr) {
       if (!optionsStr) return {};
       try {
-        return JSON.parse(optionsStr);
+        const options = JSON.parse(optionsStr);
+        // 检查是否是数组格式的选项
+        if (Array.isArray(options)) {
+          const result = {};
+          options.forEach((option) => {
+            if (option && typeof option === 'object') {
+              if (option.key && option.value) {
+                result[option.key] = option.value;
+              } else if (option.label && option.value) {
+                result[option.label] = option.value;
+              }
+            }
+          });
+          return result;
+        }
+        // 保持原有的对象格式处理
+        return options;
       } catch (error) {
         console.error('解析选项失败:', error);
         return {};
       }
+    },
+    
+    formatDate(dateString) {
+      if (!dateString) return '';
+      const date = new Date(dateString);
+      return date.toLocaleString();
     }
   }
 };
@@ -245,6 +273,13 @@ export default {
 .question-number {
   font-weight: bold;
   color: #e74c3c;
+  margin-right: 15px;
+}
+
+.wrong-info {
+  font-size: 12px;
+  color: #666;
+  margin-left: 10px;
 }
 
 .question-actions {

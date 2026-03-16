@@ -2,6 +2,7 @@ package zysy.iflytek.aishuai.wrong.service;
 
 import com.baomidou.mybatisplus.extension.plugins.pagination.Page;
 import zysy.iflytek.aishuai.question.entity.Question;
+import zysy.iflytek.aishuai.wrong.vo.WrongQuestionVO;
 
 import java.util.List;
 
@@ -13,7 +14,7 @@ public interface WrongQuestionService {
     /**
      * 分页查询错题列表
      */
-    Page<Question> pageWrongQuestions(Long userId, Integer pageNum, Integer pageSize);
+    Page<WrongQuestionVO> pageWrongQuestions(Long userId, Integer pageNum, Integer pageSize);
     
     /**
      * 添加错题

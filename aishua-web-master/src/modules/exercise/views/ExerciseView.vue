@@ -291,6 +291,7 @@ import { ref, reactive, onMounted, computed, watch } from 'vue';
 import { useRouter } from 'vue-router';
 import { getRandomQuestions, getAllCategories, getAllSubjects, submitAnswer as submitAnswerApi, batchSubmitAnswers as batchSubmitAnswersApi, getUserStats } from '../api/exercise';
 import { showToast } from 'vant';
+import { parseQuestionOptions, getQuestionTypeText, calculateTimeCost, getCurrentSubmitAnswer } from '../utils/questionUtils';
 
 export default {
   name: 'ExerciseView',
@@ -368,6 +369,7 @@ export default {
     const isSubmitting = ref(false);
     const showResult = ref(false);
     const correctCount = ref(0);
+    const questionStartTime = ref(null); // 记录当前题目的开始时间
     
     const currentQuestion = computed(() => {
       return questions.value[currentQuestionIndex.value] || null;
@@ -381,16 +383,7 @@ export default {
       return currentQuestionIndex.value >= totalQuestions.value - 1;
     });
     
-    const getQuestionTypeText = (type) => {
-      switch (type) {
-        case 1: return '单选题';
-        case 2: return '多选题';
-        case 3: return '判断题';
-        case 4: return '填空题';
-        case 5: return '简答题';
-        default: return '未知题型';
-      }
-    };
+
 
     const canSubmitCurrent = computed(() => {
       if (!currentQuestion.value) return false;
@@ -449,51 +442,7 @@ export default {
 
               // 尝试从不同的可能字段获取选项
               if (q.options) {
-                let rawOptions = q.options;
-
-                // 后端字段通常是 JSON 字符串，这里优先做解析
-                if (typeof rawOptions === 'string') {
-                  try {
-                    rawOptions = JSON.parse(rawOptions);
-                  } catch (e) {
-                    console.error('解析题目选项失败，使用空选项:', e, q);
-                    rawOptions = null;
-                  }
-                }
-
-                if (Array.isArray(rawOptions)) {
-                  // 已经是数组：["xxx","yyy"] 或 [{label,value}] 或 [{key,value}]
-                  options = rawOptions.map((opt, idx) => {
-                    if (opt && typeof opt === 'object') {
-                      if ('label' in opt && 'value' in opt) return opt;
-                      if ('key' in opt && 'value' in opt) {
-                        return { label: opt.key, value: opt.value };
-                      }
-                    }
-                    return {
-                      label: String.fromCharCode(65 + idx),
-                      value: typeof opt === 'string' ? opt : JSON.stringify(opt)
-                    };
-                  });
-                } else if (rawOptions && typeof rawOptions === 'object') {
-                  // 对象结构：可能是 { "A": "xxx" } 或 { "A": { "value": "xxx" } }
-                  const keys = Object.keys(rawOptions).sort();
-                  options = keys.map((key, idx) => {
-                    const item = rawOptions[key];
-                    if (item && typeof item === 'object' && 'value' in item) {
-                      return {
-                        label: key || String.fromCharCode(65 + idx),
-                        value: item.value
-                      };
-                    }
-                    return {
-                      label: key || String.fromCharCode(65 + idx),
-                      value: item
-                    };
-                  });
-                } else {
-                  options = [];
-                }
+                options = parseQuestionOptions(q.options);
               } else if (q.optionA) {
                 // 如果后端使用单独的选项字段
                 const labels = ['A', 'B', 'C', 'D', 'E', 'F'];
@@ -505,9 +454,6 @@ export default {
                     label: labels[idx],
                     value: q[key]
                   }));
-              } else {
-                // 如果没有找到选项，创建一个空数组
-                options = [];
               }
               
               return {
@@ -579,6 +525,8 @@ export default {
           textAnswer.value = '';
           userAnswers.value = [];
           correctCount.value = 0;
+          // 初始化第一个题目的开始时间
+          questionStartTime.value = Date.now();
         } else {
           showToast('获取题目失败，请重试');
         }
@@ -610,13 +558,7 @@ export default {
       selectedAnswers.value = list;
     };
 
-    const getCurrentSubmitAnswer = () => {
-      const q = currentQuestion.value;
-      if (!q) return '';
-      if (q.type === 2) return [...selectedAnswers.value].sort().join('');
-      if (q.type === 4 || q.type === 5) return textAnswer.value.trim();
-      return selectedAnswer.value;
-    };
+
     
     const submitAnswer = async () => {
       if (!currentQuestion.value) return;
@@ -625,13 +567,17 @@ export default {
       isSubmitting.value = true;
       
       try {
-        const submitAns = getCurrentSubmitAnswer();
+        const submitAns = getCurrentSubmitAnswer(currentQuestion.value, selectedAnswer.value, selectedAnswers.value, textAnswer.value);
 
+        // 计算答题时间（秒）
+        const timeCost = calculateTimeCost(questionStartTime.value);
+        
         // 保存用户答案
         userAnswers.value.push({
           questionId: currentQuestion.value.id,
           answer: submitAns,
-          isCorrect: submitAns === currentQuestion.value.answer
+          isCorrect: submitAns === currentQuestion.value.answer,
+          timeCost: timeCost
         });
         
         if (submitAns === currentQuestion.value.answer) {
@@ -644,7 +590,8 @@ export default {
         // 调用后端API提交答案
         const requestData = {
           questionId: currentQuestion.value.id,
-          userAnswer: submitAns
+          userAnswer: submitAns,
+          timeCost: timeCost
         };
         
         console.log('提交答案请求数据:', requestData);
@@ -659,7 +606,8 @@ export default {
           if (userAnswers.value.length > 0) {
             const batchData = userAnswers.value.map(item => ({
               questionId: item.questionId,
-              userAnswer: item.answer
+              userAnswer: item.answer,
+              timeCost: item.timeCost
             }));
             
             console.log('批量提交答案请求数据:', batchData);
@@ -741,6 +689,8 @@ export default {
       selectedAnswer.value = '';
       selectedAnswers.value = [];
       textAnswer.value = '';
+      // 记录新题目的开始时间
+      questionStartTime.value = Date.now();
     });
     
     onMounted(async () => {

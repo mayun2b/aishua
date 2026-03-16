@@ -239,10 +239,15 @@ export default {
     const selectedAnswer = ref('');
     
     // 加载分类列表
-    const loadCategories = async () => {
+    const loadCategories = async (subjectId = '') => {
       try {
-        const response = await questionApi.getAllCategories();
-        categories.value = response.data;
+        if (subjectId) {
+          const response = await questionApi.getCategoriesBySubjectId(subjectId);
+          categories.value = response.data;
+        } else {
+          const response = await questionApi.getAllCategories();
+          categories.value = response.data;
+        }
       } catch (error) {
         console.error('加载分类失败:', error);
       }
@@ -306,6 +311,11 @@ export default {
         
         // 最后设置type字段，触发onTypeChange
         formData.value.type = String(question.type);
+        
+        // 触发分类列表加载
+        if (question.subjectId) {
+          loadCategories(question.subjectId);
+        }
       } catch (error) {
         console.error('加载题目失败:', error);
       }
@@ -432,6 +442,12 @@ export default {
     });
     
     watch(() => formData.value.type, onTypeChange);
+    
+    // 监听学科变化，加载对应分类
+    watch(() => formData.value.subjectId, (newSubjectId) => {
+      formData.value.categoryId = ''; // 重置分类选择
+      loadCategories(newSubjectId);
+    });
     
     return {
       isEditMode,
