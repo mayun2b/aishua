@@ -7,6 +7,7 @@ import org.springframework.beans.BeanUtils;
 import org.springframework.beans.factory.annotation.Autowired;
 import org.springframework.stereotype.Service;
 import org.springframework.transaction.annotation.Transactional;
+import org.apache.ibatis.annotations.Param;
 import zysy.iflytek.aishuai.question.dto.QuestionCreateDTO;
 import zysy.iflytek.aishuai.question.dto.QuestionQueryDTO;
 import zysy.iflytek.aishuai.question.entity.Question;
@@ -16,6 +17,7 @@ import zysy.iflytek.aishuai.question.mapper.QuestionMapper;
 import zysy.iflytek.aishuai.question.mapper.QuestionCategoryMapper;
 import zysy.iflytek.aishuai.question.mapper.SubjectMapper;
 import zysy.iflytek.aishuai.question.service.QuestionService;
+import zysy.iflytek.aishuai.question.vo.KnowledgePointProgress;
 import zysy.iflytek.aishuai.question.vo.QuestionVO;
 
 import java.util.List;
@@ -107,8 +109,15 @@ public class QuestionServiceImpl implements QuestionService {
     }
     
     @Override
-    public List<Question> getRandomQuestions(Integer count, Long categoryId, Integer difficulty) {
+    public List<Question> getRandomQuestions(Integer count, Long categoryId, Integer difficulty, Long subjectId) {
         LambdaQueryWrapper<Question> wrapper = new LambdaQueryWrapper<>();
+        
+        // 按学科筛选
+        if (subjectId != null) {
+            wrapper.eq(Question::getSubjectId, subjectId);
+        }
+        
+        // 按分类筛选
         if (categoryId != null) {
             // 检查是否为父分类，如果是，获取所有子分类的题目
             List<QuestionCategory> categories = questionCategoryMapper.selectList(
@@ -127,9 +136,12 @@ public class QuestionServiceImpl implements QuestionService {
                 wrapper.eq(Question::getCategoryId, categoryId);
             }
         }
+        
+        // 按难度筛选
         if (difficulty != null) {
             wrapper.eq(Question::getDifficulty, difficulty);
         }
+        
         wrapper.orderByDesc(Question::getId);
         
         List<Question> questions = questionMapper.selectList(wrapper);
@@ -213,6 +225,39 @@ public class QuestionServiceImpl implements QuestionService {
         LambdaQueryWrapper<Subject> wrapper = new LambdaQueryWrapper<>();
         wrapper.orderByAsc(Subject::getSort);
         return subjectMapper.selectList(wrapper);
+    }
+
+    @Override
+    public List<KnowledgePointProgress> getKnowledgePointProgress(Long userId, Long subjectId) {
+        // 获取该学科下的所有知识点
+        List<QuestionCategory> categories = getCategoriesBySubjectId(subjectId);
+        
+        return categories.stream().map(category -> {
+            KnowledgePointProgress progress = new KnowledgePointProgress();
+            progress.setId(category.getId());
+            progress.setName(category.getName());
+            
+            // 获取该知识点下的总题目数
+            long totalQuestions = questionMapper.selectCount(new LambdaQueryWrapper<Question>()
+                    .eq(Question::getCategoryId, category.getId()));
+            
+            progress.setTotalQuestions((int) totalQuestions);
+            
+            // 获取用户在该知识点下完成的题目数
+            long completedQuestions = 0;
+            if (userId != null) {
+                // 查询用户在该知识点下完成的题目数
+                completedQuestions = questionMapper.getCompletedQuestionCount(userId, category.getId());
+            }
+            
+            progress.setCompletedQuestions((int) completedQuestions);
+            
+            // 计算进度百分比
+            int progressPercent = totalQuestions > 0 ? (int) (completedQuestions * 100 / totalQuestions) : 0;
+            progress.setProgress(progressPercent);
+            
+            return progress;
+        }).collect(Collectors.toList());
     }
     
     @Override

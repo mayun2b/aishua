@@ -38,11 +38,12 @@ export const exerciseApi = {
 
   // 获取用户统计
   // 注意：游客模式下返回空数据或默认值
-  getUserStats() {
-    console.log('调用getUserStats API');
+  getUserStats(params) {
+    console.log('调用getUserStats API:', params);
     return request({
       url: '/api/exercise/stats',
-      method: 'get'
+      method: 'get',
+      params
     });
   }
 };
@@ -79,6 +80,15 @@ export const questionApi = {
     return request({
       url: `/api/question/categories/${subjectId}`,
       method: 'get'
+    });
+  },
+
+  // 获取知识点进度
+  getKnowledgePointProgress(params) {
+    return request({
+      url: '/api/question/knowledge-points/progress',
+      method: 'get',
+      params
     });
   },
 
@@ -192,23 +202,21 @@ export const questionApi = {
 export const wrongQuestionApi = {
   // 分页查询错题列表
   // 游客模式下返回空列表
-  getWrongQuestions(pageNum, pageSize) {
+  getWrongQuestions(params) {
     return request({
       url: '/api/wrong/page',
       method: 'get',
-      params: {
-        pageNum,
-        pageSize
-      }
+      params
     });
   },
 
   // 获取错题数量
   // 游客模式下返回0
-  getWrongCount() {
+  getWrongCount(params) {
     return request({
       url: '/api/wrong/count',
-      method: 'get'
+      method: 'get',
+      params
     });
   },
 
@@ -232,13 +240,11 @@ export const wrongQuestionApi = {
 
   // 随机获取错题（用于错题重练）
   // 游客模式下返回空数组
-  getRandomWrongQuestions(count) {
+  getRandomWrongQuestions(params) {
     return request({
       url: '/api/wrong/random',
       method: 'get',
-      params: {
-        count
-      }
+      params
     });
   }
 };
@@ -299,6 +305,62 @@ export const examRecordApi = {
   }
 };
 
+// AI题目生成API
+export const aiApi = {
+  // 生成AI题目
+  generateQuestions(data) {
+    return request({
+      url: '/api/ai/generate-questions',
+      method: 'post',
+      data
+    });
+  },
+  // 分析用户错题
+  analyzeWrongQuestions() {
+    return request({
+      url: '/api/ai/analyze-wrong-questions',
+      method: 'get'
+    });
+  },
+  // 分析用户练习记录
+  analyzeExerciseRecords() {
+    return request({
+      url: '/api/ai/analyze-exercise-records',
+      method: 'get'
+    });
+  },
+  // AI生成题目
+  generateAiQuestion(data) {
+    return request({
+      url: '/api/ai/question/generate',
+      method: 'post',
+      data
+    });
+  },
+  // 获取用户的AI生成题目列表
+  getAiGeneratedQuestions(userId) {
+    return request({
+      url: `/api/ai/question/user/${userId}`,
+      method: 'get'
+    });
+  },
+  // 根据学科获取AI生成题目列表
+  getAiGeneratedQuestionsBySubject(userId, subjectId) {
+    return request({
+      url: `/api/ai/question/user/${userId}/subject/${subjectId}`,
+      method: 'get'
+    });
+  },
+  // 更新题目练习状态
+  updateAiQuestionPracticeStatus(id, isPracticed) {
+    return request({
+      url: `/api/ai/question/${id}/practice`,
+      method: 'put',
+      params: { isPracticed }
+    });
+  }
+};
+
 // 导出便捷方法
 export const {
   startExercise,
@@ -312,6 +374,7 @@ export const {
   getQuestionById,
   getAllCategories,
   getCategoriesBySubjectId,
+  getKnowledgePointProgress,
   getAllSubjects,
   getSubjectById,
   createSubject,
@@ -342,3 +405,13 @@ export const {
   saveExamRecord,
   getExamRecordQuestions
 } = examRecordApi;
+
+export const {
+  generateQuestions,
+  analyzeWrongQuestions,
+  analyzeExerciseRecords,
+  generateAiQuestion,
+  getAiGeneratedQuestions,
+  getAiGeneratedQuestionsBySubject,
+  updateAiQuestionPracticeStatus
+} = aiApi;

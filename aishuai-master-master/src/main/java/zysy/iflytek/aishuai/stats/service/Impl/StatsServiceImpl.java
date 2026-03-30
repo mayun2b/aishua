@@ -12,6 +12,7 @@ import zysy.iflytek.aishuai.stats.service.StatsService;
 import zysy.iflytek.aishuai.wrong.service.WrongQuestionService;
 
 import java.time.LocalDate;
+import java.util.ArrayList;
 import java.util.List;
 
 /**
@@ -65,30 +66,83 @@ public class StatsServiceImpl implements StatsService {
     }
     
     @Override
-    public ExerciseStatsVO getUserStatsVO(Long userId) {
+    public ExerciseStatsVO getUserStatsVO(Long userId, Long subjectId) {
         UserStats stats = getUserStatsOrCreate(userId);
         
         ExerciseStatsVO vo = new ExerciseStatsVO();
-        vo.setTotalCount(stats.getTotalCount());
-        vo.setCorrectCount(stats.getCorrectCount());
-        vo.setWrongCount(stats.getWrongCount());
         
-        // 计算正确率
-        if (stats.getTotalCount() > 0) {
-            vo.setCorrectRate(stats.getCorrectCount() * 100.0 / stats.getTotalCount());
+        // 如果指定了学科，查询该学科的统计数据
+        if (subjectId != null) {
+            // 查询该学科的总题数和正确数
+            Long totalCount = userStatsMapper.getSubjectTotalCount(userId, subjectId);
+            Long correctCount = userStatsMapper.getSubjectCorrectCount(userId, subjectId);
+            
+            vo.setTotalCount(totalCount != null ? totalCount.intValue() : 0);
+            vo.setCorrectCount(correctCount != null ? correctCount.intValue() : 0);
+            vo.setWrongCount(vo.getTotalCount() - vo.getCorrectCount());
+            
+            // 计算正确率
+            if (vo.getTotalCount() > 0) {
+                vo.setCorrectRate(vo.getCorrectCount() * 100.0 / vo.getTotalCount());
+            } else {
+                vo.setCorrectRate(0.0);
+            }
+            
+            // 查询该学科的分类统计数据
+            List<ExerciseStatsVO.CategoryStatsVO> categoryStats = userStatsMapper.getCategoryStatsBySubject(userId, subjectId);
+            vo.setCategoryStats(categoryStats != null ? categoryStats : new ArrayList<>());
+            
+            // 查询该学科涉及分类数
+            Integer categoryCount = userStatsMapper.getCategoryCountBySubject(userId, subjectId);
+            vo.setCategoryCount(categoryCount != null ? categoryCount : 0);
+            
+            // 查询该学科的科目统计数据
+            List<ExerciseStatsVO.SubjectStatsVO> subjectStats = userStatsMapper.getSubjectStats(userId).stream()
+                    .filter(subject -> subject.getSubjectId().equals(subjectId))
+                    .collect(java.util.stream.Collectors.toList());
+            vo.setSubjectStats(subjectStats);
+            
+            // 查询涉及科目数（只有当前学科）
+            vo.setSubjectCount(subjectStats.size());
+            
+            // 查询该学科的薄弱知识点
+            List<ExerciseStatsVO.WeakPointStatsVO> weakPointStats = userStatsMapper.getWeakPointStatsBySubject(userId, subjectId);
+            vo.setWeakPointStats(weakPointStats != null ? weakPointStats : new ArrayList<>());
         } else {
-            vo.setCorrectRate(0.0);
+            // 没有指定学科，返回所有数据
+            vo.setTotalCount(stats.getTotalCount());
+            vo.setCorrectCount(stats.getCorrectCount());
+            vo.setWrongCount(stats.getWrongCount());
+            
+            // 计算正确率
+            if (stats.getTotalCount() > 0) {
+                vo.setCorrectRate(stats.getCorrectCount() * 100.0 / stats.getTotalCount());
+            } else {
+                vo.setCorrectRate(0.0);
+            }
+            
+            vo.setContinuousDays(stats.getContinuousDays());
+            
+            // 查询分类统计数据
+            List<ExerciseStatsVO.CategoryStatsVO> categoryStats = userStatsMapper.getCategoryStats(userId);
+            vo.setCategoryStats(categoryStats != null ? categoryStats : new ArrayList<>());
+            
+            // 查询涉及分类数
+            Integer categoryCount = userStatsMapper.getCategoryCount(userId);
+            vo.setCategoryCount(categoryCount != null ? categoryCount : 0);
+            
+            // 查询科目统计数据
+            List<ExerciseStatsVO.SubjectStatsVO> subjectStats = userStatsMapper.getSubjectStats(userId);
+            vo.setSubjectStats(subjectStats != null ? subjectStats : new ArrayList<>());
+            
+            // 查询涉及科目数
+            Integer subjectCount = userStatsMapper.getSubjectCount(userId);
+            vo.setSubjectCount(subjectCount != null ? subjectCount : 0);
+            
+            // 查询薄弱知识点
+            List<ExerciseStatsVO.WeakPointStatsVO> weakPointStats = userStatsMapper.getWeakPointStats(userId);
+            vo.setWeakPointStats(weakPointStats != null ? weakPointStats : new ArrayList<>());
         }
-        
-        vo.setContinuousDays(stats.getContinuousDays());
-        
-        // 查询分类统计数据
-        List<ExerciseStatsVO.CategoryStatsVO> categoryStats = userStatsMapper.getCategoryStats(userId);
-        vo.setCategoryStats(categoryStats);
-        
-        // 查询涉及分类数
-        Integer categoryCount = userStatsMapper.getCategoryCount(userId);
-        vo.setCategoryCount(categoryCount != null ? categoryCount : 0);
         
         return vo;
     }

@@ -78,9 +78,10 @@ public class QuestionController {
     public Result<java.util.List<zysy.iflytek.aishuai.question.entity.Question>> getRandomQuestions(
             @RequestParam Integer count,
             @RequestParam(required = false) Long categoryId,
-            @RequestParam(required = false) Integer difficulty) {
+            @RequestParam(required = false) Integer difficulty,
+            @RequestParam(required = false) Long subjectId) {
         java.util.List<zysy.iflytek.aishuai.question.entity.Question> questions = 
-                questionService.getRandomQuestions(count, categoryId, difficulty);
+                questionService.getRandomQuestions(count, categoryId, difficulty, subjectId);
         return Result.success(questions);
     }
     
@@ -112,6 +113,18 @@ public class QuestionController {
         List<zysy.iflytek.aishuai.question.entity.QuestionCategory> categories = 
                 questionService.getCategoriesBySubjectId(subjectId);
         return Result.success(categories);
+    }
+    
+    /**
+     * 获取知识点进度
+     */
+    @GetMapping("/knowledge-points/progress")
+    public Result<List<zysy.iflytek.aishuai.question.vo.KnowledgePointProgress>> getKnowledgePointProgress(
+            @RequestParam Long subjectId,
+            @RequestParam(required = false) Long userId) {
+        List<zysy.iflytek.aishuai.question.vo.KnowledgePointProgress> progressList = 
+                questionService.getKnowledgePointProgress(userId, subjectId);
+        return Result.success(progressList);
     }
     
     /**

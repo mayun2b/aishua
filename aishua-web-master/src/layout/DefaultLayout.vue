@@ -1,6 +1,7 @@
 <template>
   <div class="default-layout">
-    <header class="app-header">
+    <!-- 只有在非首页时显示导航栏 -->
+    <header v-if="!isHomePage" class="app-header">
       <div class="logo">
         <svg width="32" height="32" viewBox="0 0 24 24" fill="none" xmlns="http://www.w3.org/2000/svg">
           <path d="M12 2L2 7L12 12L22 7L12 2Z" stroke="white" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"/>
@@ -9,6 +10,7 @@
         </svg>
         <span>爱刷题系统</span>
       </div>
+      
       <nav class="nav-menu">
         <router-link to="/dashboard" class="nav-link">
           <svg width="16" height="16" viewBox="0 0 24 24" fill="none" xmlns="http://www.w3.org/2000/svg">
@@ -42,6 +44,22 @@
             <path d="M6 20V14" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"/>
           </svg>
           <span>练习统计</span>
+        </router-link>
+        <router-link to="/exercise/ai-practice" class="nav-link">
+          <svg width="16" height="16" viewBox="0 0 24 24" fill="none" xmlns="http://www.w3.org/2000/svg">
+            <path d="M9 12l2 2 4-4" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"/>
+            <path d="M21 12c-1 0-3-1-3-3s2-3 3-3 3 1 3 3-2 3-3 3z" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"/>
+            <path d="M3 12c1 0 3-1 3-3s-2-3-3-3-3 1-3 3 2 3 3 3z" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"/>
+          </svg>
+          <span>AI题目练习</span>
+        </router-link>
+        <router-link to="/exercise/ai-questions" class="nav-link">
+          <svg width="16" height="16" viewBox="0 0 24 24" fill="none" xmlns="http://www.w3.org/2000/svg">
+            <path d="M9.09 9a3 3 0 0 1 5.83 1c0 2-3 3-3 3" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"/>
+            <path d="M12 17h.01" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"/>
+            <path d="M19 21v-2a4 4 0 0 0-4-4H9a4 4 0 0 0-4 4v2" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"/>
+          </svg>
+          <span>AI题目生成</span>
         </router-link>
         <!-- 管理员专属导航 -->
         <router-link 
@@ -105,14 +123,14 @@
         </button>
       </div>
     </header>
-    <main class="main-content">
+    <main :class="['main-content', { 'home-content': isHomePage }]">
       <router-view />
     </main>
   </div>
 </template>
 
 <script>
-import { ref, onMounted } from 'vue';
+import { ref, onMounted, computed } from 'vue';
 import { useRouter } from 'vue-router';
 import { logout } from '../modules/auth/api/auth';
 
@@ -128,6 +146,11 @@ export default {
       isAdmin.value = localStorage.getItem('isAdmin') === 'true';
     });
 
+    // 判断当前是否在首页
+    const isHomePage = computed(() => {
+      return router.currentRoute.value.path === '/dashboard';
+    });
+
     const handleLogout = () => {
       logout();
       router.push('/login');
@@ -136,6 +159,7 @@ export default {
     return {
       username,
       isAdmin,
+      isHomePage,
       handleLogout
     };
   }
@@ -177,6 +201,8 @@ export default {
 .logo:hover {
   transform: translateY(-2px);
 }
+
+
 
 .nav-menu {
   display: flex;
@@ -284,6 +310,18 @@ export default {
   max-width: 1400px;
   margin: 0 auto;
   width: 100%;
+}
+
+/* 首页内容样式 */
+.home-content {
+  padding: 0;
+  max-width: none;
+  margin: 0;
+  width: 100%;
+  height: 100vh;
+  display: flex;
+  align-items: center;
+  justify-content: center;
 }
 
 /* 响应式设计 */

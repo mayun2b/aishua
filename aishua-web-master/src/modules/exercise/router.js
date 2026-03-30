@@ -1,37 +1,37 @@
 // 练习模块路由
 export default [
   {
-    path: '/exercise',
+    path: '/exercise/:subjectId?',
     name: 'Exercise',
     component: () => import('./views/ExerciseView.vue'),
     meta: { requiresAuth: true, layout: 'default' }
   },
   {
-    path: '/exercise/exam',
+    path: '/exercise/exam/:subjectId?',
     name: 'Exam',
     component: () => import('./views/ExamView.vue'),
     meta: { requiresAuth: true, layout: 'default' }
   },
   {
-    path: '/exercise/records',
+    path: '/exercise/records/:subjectId?',
     name: 'ExamRecords',
     component: () => import('./views/ExamRecordView.vue'),
     meta: { requiresAuth: true, layout: 'default' }
   },
   {
-    path: '/exercise/stats',
+    path: '/exercise/stats/:subjectId?',
     name: 'ExerciseStats',
     component: () => import('./views/ExerciseStatsView.vue'),
     meta: { requiresAuth: true, layout: 'default' }
   },
   {
-    path: '/exercise/wrong',
+    path: '/exercise/wrong/:subjectId?',
     name: 'WrongQuestions',
     component: () => import('./views/WrongQuestionView.vue'),
     meta: { requiresAuth: true, layout: 'default' }
   },
   {
-    path: '/exercise/records/:id',
+    path: '/exercise/records/detail/:id',
     name: 'ExamDetail',
     component: () => import('./views/ExamDetailView.vue'),
     meta: { requiresAuth: true, layout: 'default' }
@@ -58,6 +58,18 @@ export default [
     path: '/exercise/subjects/:id',
     name: 'SubjectDetail',
     component: () => import('./views/SubjectDetailView.vue'),
+    meta: { requiresAuth: true, layout: 'default' }
+  },
+  {
+    path: '/exercise/ai-questions/:subjectId?',
+    name: 'AiGeneratedQuestions',
+    component: () => import('./views/AiGeneratedQuestionsView.vue'),
+    meta: { requiresAuth: true, layout: 'default' }
+  },
+  {
+    path: '/exercise/ai-practice/:subjectId?',
+    name: 'AiQuestionPractice',
+    component: () => import('./views/AiQuestionPracticeView.vue'),
     meta: { requiresAuth: true, layout: 'default' }
   }
 ];

@@ -35,8 +35,9 @@ public class ExerciseController {
             @RequestParam Integer count,
             @RequestParam(required = false) Long categoryId,
             @RequestParam(required = false) Integer difficulty,
-            @RequestParam(defaultValue = "1") Integer exerciseMode) {
-        List<Question> questions = exerciseService.startExercise(count, categoryId, difficulty, exerciseMode);
+            @RequestParam(defaultValue = "1") Integer exerciseMode,
+            @RequestParam(required = false) Long subjectId) {
+        List<Question> questions = exerciseService.startExercise(count, categoryId, difficulty, exerciseMode, subjectId);
         return Result.success(questions);
     }
     

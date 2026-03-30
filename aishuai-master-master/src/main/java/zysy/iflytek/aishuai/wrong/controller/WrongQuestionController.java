@@ -30,12 +30,13 @@ public class WrongQuestionController {
     public Result<Page<WrongQuestionVO>> pageWrongQuestions(
             HttpServletRequest request,
             @RequestParam(defaultValue = "1") Integer pageNum,
-            @RequestParam(defaultValue = "10") Integer pageSize) {
+            @RequestParam(defaultValue = "10") Integer pageSize,
+            @RequestParam(value = "subjectId", required = false) Long subjectId) {
         Long userId = (Long) request.getAttribute("userId");
         if (userId == null) {
             return Result.unauth("用户未登录");
         }
-        Page<WrongQuestionVO> page = wrongQuestionService.pageWrongQuestions(userId, pageNum, pageSize);
+        Page<WrongQuestionVO> page = wrongQuestionService.pageWrongQuestions(userId, pageNum, pageSize, subjectId);
         return Result.success(page);
     }
     
@@ -69,12 +70,14 @@ public class WrongQuestionController {
      * 获取错题数量
      */
     @GetMapping("/count")
-    public Result<Long> getWrongQuestionCount(HttpServletRequest request) {
+    public Result<Long> getWrongQuestionCount(
+            HttpServletRequest request,
+            @RequestParam(value = "subjectId", required = false) Long subjectId) {
         Long userId = (Long) request.getAttribute("userId");
         if (userId == null) {
             return Result.unauth("用户未登录");
         }
-        Long count = wrongQuestionService.getWrongQuestionCount(userId);
+        Long count = wrongQuestionService.getWrongQuestionCount(userId, subjectId);
         return Result.success(count);
     }
     
@@ -84,12 +87,13 @@ public class WrongQuestionController {
     @GetMapping("/random")
     public Result<List<Question>> getRandomWrongQuestions(
             HttpServletRequest request,
-            @RequestParam Integer count) {
+            @RequestParam Integer count,
+            @RequestParam(value = "subjectId", required = false) Long subjectId) {
         Long userId = (Long) request.getAttribute("userId");
         if (userId == null) {
             return Result.unauth("用户未登录");
         }
-        List<Question> questions = wrongQuestionService.getRandomWrongQuestions(userId, count);
+        List<Question> questions = wrongQuestionService.getRandomWrongQuestions(userId, count, subjectId);
         return Result.success(questions);
     }
 }

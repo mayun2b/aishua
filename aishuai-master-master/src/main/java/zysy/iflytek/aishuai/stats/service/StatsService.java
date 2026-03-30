@@ -15,5 +15,5 @@ public interface StatsService {
     /**
      * 获取用户统计 VO
      */
-    ExerciseStatsVO getUserStatsVO(Long userId);
+    ExerciseStatsVO getUserStatsVO(Long userId, Long subjectId);
 }

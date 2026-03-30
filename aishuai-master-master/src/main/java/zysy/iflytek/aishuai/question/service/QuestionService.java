@@ -6,6 +6,7 @@ import zysy.iflytek.aishuai.question.dto.QuestionQueryDTO;
 import zysy.iflytek.aishuai.question.entity.Question;
 import zysy.iflytek.aishuai.question.entity.QuestionCategory;
 import zysy.iflytek.aishuai.question.entity.Subject;
+import zysy.iflytek.aishuai.question.vo.KnowledgePointProgress;
 import zysy.iflytek.aishuai.question.vo.QuestionVO;
 
 import java.util.List;
@@ -41,9 +42,9 @@ public interface QuestionService {
     void deleteQuestion(Long id);
     
     /**
-     * 随机获取指定数量的题目
+     * 获取随机题目
      */
-    List<Question> getRandomQuestions(Integer count, Long categoryId, Integer difficulty);
+    List<Question> getRandomQuestions(Integer count, Long categoryId, Integer difficulty, Long subjectId);
     
     /**
      * 更新题目统计信息
@@ -64,6 +65,11 @@ public interface QuestionService {
      * 获取所有学科
      */
     List<Subject> getAllSubjects();
+    
+    /**
+     * 获取知识点进度
+     */
+    List<KnowledgePointProgress> getKnowledgePointProgress(Long userId, Long subjectId);
     
     /**
      * 批量修改题目学科

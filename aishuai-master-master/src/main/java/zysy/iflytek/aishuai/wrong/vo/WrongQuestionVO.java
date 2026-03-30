@@ -22,9 +22,11 @@ public class WrongQuestionVO {
     private Integer wrongCount; // 做错次数
     private LocalDateTime lastWrongTime; // 最近做错时间
     private Integer masterStatus; // 掌握状态
+    private String categoryName; // 分类名称
+    private String tags; // 知识点标签
 
     // 从 Question 和 WrongQuestion 构建
-    public static WrongQuestionVO fromQuestionAndWrongQuestion(Question question, Integer wrongCount, LocalDateTime lastWrongTime, Integer masterStatus) {
+    public static WrongQuestionVO fromQuestionAndWrongQuestion(Question question, Integer wrongCount, LocalDateTime lastWrongTime, Integer masterStatus, String categoryName) {
         WrongQuestionVO vo = new WrongQuestionVO();
         vo.setId(question.getId());
         vo.setTitle(question.getTitle());
@@ -38,6 +40,8 @@ public class WrongQuestionVO {
         vo.setWrongCount(wrongCount);
         vo.setLastWrongTime(lastWrongTime);
         vo.setMasterStatus(masterStatus);
+        vo.setCategoryName(categoryName);
+        vo.setTags(question.getTags());
         return vo;
     }
 }

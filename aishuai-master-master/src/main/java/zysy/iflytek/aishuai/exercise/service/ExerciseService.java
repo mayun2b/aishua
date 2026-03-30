@@ -33,7 +33,8 @@ public interface ExerciseService {
             Integer count, 
             Long categoryId, 
             Integer difficulty, 
-            Integer exerciseMode);
+            Integer exerciseMode,
+            Long subjectId);
 
     /**
      * 仅检查答案（游客模式）

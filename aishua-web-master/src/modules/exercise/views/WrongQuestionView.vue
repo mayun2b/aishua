@@ -2,8 +2,19 @@
   <div class="wrong-question-container">
     <div class="header">
       <h2>我的错题本</h2>
-      <div class="stats">
-        <span>错题总数: {{ wrongCount }}</span>
+      <div class="header-actions">
+        <div class="subject-filter">
+          <label>选择学科：</label>
+          <select v-model="selectedSubjectId" @change="handleSubjectChange" class="subject-select">
+            <option value="">全部学科</option>
+            <option v-for="subject in subjects" :key="subject.id" :value="subject.id">
+              {{ subject.name }}
+            </option>
+          </select>
+        </div>
+        <div class="stats">
+          <span>错题总数: {{ wrongCount }}</span>
+        </div>
       </div>
     </div>
     
@@ -91,8 +102,12 @@
 </template>
 
 <script>
-import { getWrongQuestions, getWrongCount, markAsMastered, removeFromWrong } from '../api/exercise';
-import { showToast } from 'vant';
+import { getWrongQuestions, getWrongCount, markAsMastered, removeFromWrong, getAllSubjects } from '../api/exercise';
+
+// 简单的提示函数
+const showToast = (message) => {
+  alert(message);
+};
 
 export default {
   name: 'WrongQuestionView',
@@ -103,21 +118,48 @@ export default {
       loading: false,
       currentPage: 1,
       pageSize: 10,
-      totalPages: 1
+      totalPages: 1,
+      selectedSubjectId: '',
+      subjects: []
     };
   },
   async mounted() {
     console.log('WrongQuestionView mounted');
     const token = localStorage.getItem('token');
     console.log('Token from localStorage:', token);
+    
+    // 加载学科列表
+    await this.loadSubjects();
+    
+    // 检查本地存储中是否有选中学科
+    const savedSubjectId = localStorage.getItem('selectedSubjectId');
+    if (savedSubjectId) {
+      this.selectedSubjectId = savedSubjectId;
+    }
+    
     await this.loadWrongCount();
     await this.loadWrongQuestions();
   },
   methods: {
+    async loadSubjects() {
+      try {
+        const response = await getAllSubjects();
+        if (response.code === 200) {
+          this.subjects = response.data || [];
+        }
+      } catch (error) {
+        console.error('加载学科列表失败:', error);
+      }
+    },
+    
     async loadWrongCount() {
       try {
         console.log('Loading wrong count...');
-        const response = await getWrongCount();
+        const params = {};
+        if (this.selectedSubjectId) {
+          params.subjectId = this.selectedSubjectId;
+        }
+        const response = await getWrongCount(params);
         console.log('Wrong count response:', response);
         this.wrongCount = response.data;
         this.totalPages = Math.ceil(this.wrongCount / this.pageSize);
@@ -131,7 +173,14 @@ export default {
       this.loading = true;
       try {
         console.log('Loading wrong questions...');
-        const response = await getWrongQuestions(this.currentPage, this.pageSize);
+        const params = {
+          page: this.currentPage,
+          size: this.pageSize
+        };
+        if (this.selectedSubjectId) {
+          params.subjectId = this.selectedSubjectId;
+        }
+        const response = await getWrongQuestions(params);
         console.log('Wrong questions response:', response);
         this.questions = response.data.records || [];
         this.totalPages = Math.ceil(response.data.total / this.pageSize);
@@ -141,6 +190,18 @@ export default {
       } finally {
         this.loading = false;
       }
+    },
+    
+    async handleSubjectChange() {
+      // 保存选择的学科到本地存储
+      if (this.selectedSubjectId) {
+        localStorage.setItem('selectedSubjectId', this.selectedSubjectId);
+      } else {
+        localStorage.removeItem('selectedSubjectId');
+      }
+      this.currentPage = 1;
+      await this.loadWrongCount();
+      await this.loadWrongQuestions();
     },
     
     async markAsMastered(questionId) {
@@ -242,11 +303,51 @@ export default {
 .header h2 {
   margin: 0;
   color: #333;
+  font-size: 1.5rem;
+  font-weight: 600;
+}
+
+.header-actions {
+  display: flex;
+  align-items: center;
+  gap: 20px;
+}
+
+.subject-filter {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+}
+
+.subject-filter label {
+  font-weight: 500;
+  color: #374151;
+  font-size: 0.9rem;
+}
+
+.subject-select {
+  padding: 0.5rem 1rem;
+  border: 2px solid #e5e7eb;
+  border-radius: 8px;
+  font-size: 1rem;
+  background: white;
+  cursor: pointer;
+  transition: all 0.3s;
+  min-width: 200px;
+}
+
+.subject-select:focus {
+  outline: none;
+  border-color: #409eff;
+  box-shadow: 0 0 0 3px rgba(64, 158, 255, 0.1);
 }
 
 .stats {
   color: #666;
   font-size: 14px;
+  background: #f3f4f6;
+  padding: 0.5rem 1rem;
+  border-radius: 8px;
 }
 
 .loading, .empty {

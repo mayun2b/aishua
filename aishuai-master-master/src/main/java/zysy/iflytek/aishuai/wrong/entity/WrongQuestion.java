@@ -28,9 +28,9 @@ public class WrongQuestion {
     @TableField("master_status")
     private Integer masterStatus; // 掌握状态：0-未掌握，1-已掌握
     
-    @TableField(value = "create_time", fill = FieldFill.INSERT)
+    @TableField("create_time")
     private LocalDateTime createTime; // 创建时间
     
-    @TableField(value = "update_time", fill = FieldFill.INSERT_UPDATE)
+    @TableField("update_time")
     private LocalDateTime updateTime; // 更新时间
 }

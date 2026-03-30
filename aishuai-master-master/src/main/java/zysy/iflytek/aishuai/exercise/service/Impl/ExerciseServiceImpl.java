@@ -139,11 +139,11 @@ public class ExerciseServiceImpl implements ExerciseService {
     
     @Override
     public ExerciseStatsVO getUserStats(Long userId) {
-        return statsService.getUserStatsVO(userId);
+        return statsService.getUserStatsVO(userId, null);
     }
     
     @Override
-    public List<zysy.iflytek.aishuai.question.entity.Question> startExercise(Integer count, Long categoryId, Integer difficulty, Integer exerciseMode) {
+    public List<zysy.iflytek.aishuai.question.entity.Question> startExercise(Integer count, Long categoryId, Integer difficulty, Integer exerciseMode, Long subjectId) {
         // 根据不同模式获取题目
         if (exerciseMode == 3) {
             // 错题模式 - 需要从错题本获取题目（游客无法使用此功能）
@@ -151,7 +151,7 @@ public class ExerciseServiceImpl implements ExerciseService {
         }
 
         // 其他模式：随机获取题目
-        return questionService.getRandomQuestions(count, categoryId, difficulty);
+        return questionService.getRandomQuestions(count, categoryId, difficulty, subjectId);
     }
 
     @Override

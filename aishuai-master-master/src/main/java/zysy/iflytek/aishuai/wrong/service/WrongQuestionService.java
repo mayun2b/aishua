@@ -14,7 +14,7 @@ public interface WrongQuestionService {
     /**
      * 分页查询错题列表
      */
-    Page<WrongQuestionVO> pageWrongQuestions(Long userId, Integer pageNum, Integer pageSize);
+    Page<WrongQuestionVO> pageWrongQuestions(Long userId, Integer pageNum, Integer pageSize, Long subjectId);
     
     /**
      * 添加错题
@@ -34,10 +34,15 @@ public interface WrongQuestionService {
     /**
      * 获取错题数量
      */
-    Long getWrongQuestionCount(Long userId);
+    Long getWrongQuestionCount(Long userId, Long subjectId);
     
     /**
      * 随机获取错题
      */
-    List<Question> getRandomWrongQuestions(Long userId, Integer count);
+    List<Question> getRandomWrongQuestions(Long userId, Integer count, Long subjectId);
+    
+    /**
+     * 获取所有错题
+     */
+    List<WrongQuestionVO> getAllWrongQuestions(Long userId, Long subjectId);
 }
