@@ -126,6 +126,17 @@ export const getCurrentSubmitAnswer = (question, selectedAnswer, selectedAnswers
   if (!question) return '';
   if (question.type === 2) return [...selectedAnswers].sort().join('');
   if (question.type === 4 || question.type === 5) return textAnswer.trim();
+  // 判断题特殊处理：根据后端存储格式返回对应答案
+  if (question.type === 3) {
+    // 检查后端答案格式
+    if (question.answer === '正确' || question.answer === '错误') {
+      // 后端存储的是文本格式
+      return selectedAnswer === 'A' ? '正确' : '错误';
+    } else {
+      // 后端存储的是数字格式
+      return selectedAnswer === 'A' ? '1' : '0';
+    }
+  }
   return selectedAnswer;
 };
 

@@ -120,9 +120,9 @@
                 <div class="button-glow"></div>
               </button>
               <button class="btn-secondary animated-button" @click="goToDashboard">
-                <span>了解技术架构</span>
-                <div class="button-glow-secondary"></div>
-              </button>
+              <span>开始练习</span>
+              <div class="button-glow-secondary"></div>
+            </button>
             </div>
             
             <div class="hero-particles-left">
@@ -470,10 +470,20 @@ const goToRegister = () => {
   router.push('/register')
 }
 const goToExercise = () => {
-  router.push('/exercise')
+  const token = localStorage.getItem('token')
+  if (token) {
+    router.push('/exercise')
+  } else {
+    router.push('/login')
+  }
 }
 const goToDashboard = () => {
-  router.push('/dashboard')
+  const token = localStorage.getItem('token')
+  if (token) {
+    router.push('/exercise')
+  } else {
+    router.push('/login')
+  }
 }
 const goToHome = () => {
   router.push('/')

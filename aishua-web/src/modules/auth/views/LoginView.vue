@@ -28,7 +28,7 @@ export default {
       console.log('保存后token:', localStorage.getItem('token'));
       console.log('保存后userId:', localStorage.getItem('userId'));
       
-      // 跳转到首页
+      // 跳转到学习中心（仪表盘）页面
       router.push('/dashboard');
     };
 

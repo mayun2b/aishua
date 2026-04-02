@@ -12,94 +12,41 @@
       </div>
       
       <nav class="nav-menu">
-        <router-link to="/dashboard" class="nav-link">
-          <svg width="16" height="16" viewBox="0 0 24 24" fill="none" xmlns="http://www.w3.org/2000/svg">
-            <path d="M3 9L12 2L21 9V20C21 20.5304 20.7893 21.0391 20.4142 21.4142C20.0391 21.7893 19.5304 22 19 22H5C4.46957 22 3.96086 21.7893 3.58579 21.4142C3.21071 21.0391 3 20.5304 3 20V9Z" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"/>
-            <path d="M9 22V12H15V22" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"/>
-          </svg>
-          <span>首页</span>
-        </router-link>
-        <router-link to="/exercise" class="nav-link">
-          <svg width="16" height="16" viewBox="0 0 24 24" fill="none" xmlns="http://www.w3.org/2000/svg">
-            <path d="M14 2H6C4.89543 2 4 2.89543 4 4V20C4 21.1046 4.89543 22 6 22H18C19.1046 22 20 21.1046 20 20V8L14 2Z" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"/>
-            <path d="M14 2V8H20" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"/>
-            <path d="M16 13H8" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"/>
-            <path d="M16 17H8" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"/>
-            <path d="M10 9H8" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"/>
-          </svg>
-          <span>刷题练习</span>
-        </router-link>
-        <router-link to="/exercise/wrong" class="nav-link">
-          <svg width="16" height="16" viewBox="0 0 24 24" fill="none" xmlns="http://www.w3.org/2000/svg">
-            <path d="M10.29 3.86L1.82 18a2 2 0 0 0 1.71 3h16.94a2 2 0 0 0 1.71-3L13.71 3.86a2 2 0 0 0-3.42 0z" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"/>
-            <line x1="12" y1="9" x2="12" y2="13" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"/>
-            <line x1="12" y1="17" x2="12.01" y2="17" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"/>
-          </svg>
-          <span>错题本</span>
-        </router-link>
-        <router-link to="/exercise/stats" class="nav-link">
-          <svg width="16" height="16" viewBox="0 0 24 24" fill="none" xmlns="http://www.w3.org/2000/svg">
-            <path d="M18 20V10" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"/>
-            <path d="M12 20V4" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"/>
-            <path d="M6 20V14" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"/>
-          </svg>
-          <span>练习统计</span>
-        </router-link>
-        <router-link to="/exercise/ai-practice" class="nav-link">
-          <svg width="16" height="16" viewBox="0 0 24 24" fill="none" xmlns="http://www.w3.org/2000/svg">
-            <path d="M9 12l2 2 4-4" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"/>
-            <path d="M21 12c-1 0-3-1-3-3s2-3 3-3 3 1 3 3-2 3-3 3z" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"/>
-            <path d="M3 12c1 0 3-1 3-3s-2-3-3-3-3 1-3 3 2 3 3 3z" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"/>
-          </svg>
-          <span>AI题目练习</span>
-        </router-link>
-        <router-link to="/exercise/ai-questions" class="nav-link">
-          <svg width="16" height="16" viewBox="0 0 24 24" fill="none" xmlns="http://www.w3.org/2000/svg">
-            <path d="M9.09 9a3 3 0 0 1 5.83 1c0 2-3 3-3 3" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"/>
-            <path d="M12 17h.01" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"/>
-            <path d="M19 21v-2a4 4 0 0 0-4-4H9a4 4 0 0 0-4 4v2" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"/>
-          </svg>
-          <span>AI题目生成</span>
-        </router-link>
-        <!-- 管理员专属导航 -->
-        <router-link 
-          v-if="isAdmin" 
-          to="/exercise/questions"
-          class="nav-link"
-        >
-          <svg width="16" height="16" viewBox="0 0 24 24" fill="none" xmlns="http://www.w3.org/2000/svg">
-            <path d="M9 12l2 2 4-4" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"/>
-            <path d="M21 12c-1 0-3-1-3-3s2-3 3-3 3 1 3 3-2 3-3 3z" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"/>
-            <path d="M3 12c1 0 3-1 3-3s-2-3-3-3-3 1-3 3 2 3 3 3z" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"/>
-            <path d="M3 12c1 0 3 1 3 3s-2 3-3 3-3-1-3-3 2-3 3-3z" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"/>
-            <path d="M21 12c-1 0-3 1-3 3s2 3 3 3 3-1 3-3-2-3-3-3z" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"/>
-          </svg>
-          <span>题目管理</span>
-        </router-link>
-        <router-link 
-          v-if="isAdmin" 
-          to="/exercise/subjects"
-          class="nav-link"
-        >
-          <svg width="16" height="16" viewBox="0 0 24 24" fill="none" xmlns="http://www.w3.org/2000/svg">
-            <path d="M22 10v6M2 10l10-5 10 5-10 5z" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"/>
-            <path d="M6 12v5c3 3 9 3 12 0v-5" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"/>
-          </svg>
-          <span>学科管理</span>
-        </router-link>
-        <router-link 
-          v-if="isAdmin" 
-          to="/user-management"
-          class="nav-link"
-        >
-          <svg width="16" height="16" viewBox="0 0 24 24" fill="none" xmlns="http://www.w3.org/2000/svg">
-            <path d="M17 21v-2a4 4 0 0 0-4-4H5a4 4 0 0 0-4 4v2" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"/>
-            <circle cx="9" cy="7" r="4" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"/>
-            <path d="M23 21v-2a4 4 0 0 0-3-3.87" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"/>
-            <path d="M16 3.13a4 4 0 0 1 0 7.75" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"/>
-          </svg>
-          <span>用户管理</span>
-        </router-link>
+        <!-- 用户功能区 -->
+        <div class="nav-section">
+          <template v-for="item in navConfig.userMenu" :key="item.name">
+            <router-link 
+              v-if="item.path" 
+              :to="item.path" 
+              class="nav-link"
+            >
+              <div v-html="iconMap[item.icon]"></div>
+              <span>{{ item.name }}</span>
+            </router-link>
+            
+            <button 
+              v-else-if="item.action" 
+              @click="item.action === 'goToExercise' && goToExercise()" 
+              class="nav-button"
+            >
+              <div v-html="iconMap[item.icon]"></div>
+              <span>{{ item.name }}</span>
+            </button>
+          </template>
+        </div>
+        
+        <!-- 管理员功能区 -->
+        <div v-if="isAdmin" class="nav-section admin-section">
+          <template v-for="item in navConfig.adminMenu" :key="item.name">
+            <router-link 
+              :to="item.path" 
+              class="nav-link"
+            >
+              <div v-html="iconMap[item.icon]"></div>
+              <span>{{ item.name }}</span>
+            </router-link>
+          </template>
+        </div>
         <!-- 可以在这里添加更多导航项 -->
       </nav>
       <div class="user-info">
@@ -133,6 +80,7 @@
 import { ref, onMounted, computed } from 'vue';
 import { useRouter } from 'vue-router';
 import { logout } from '../modules/auth/api/auth';
+import { navConfig, iconMap } from '../config/navConfig';
 
 export default {
   name: 'DefaultLayout',
@@ -148,7 +96,7 @@ export default {
 
     // 判断当前是否在首页
     const isHomePage = computed(() => {
-      return router.currentRoute.value.path === '/dashboard';
+      return router.currentRoute.value.path === '/';
     });
 
     const handleLogout = () => {
@@ -156,11 +104,20 @@ export default {
       router.push('/login');
     };
 
+    const goToExercise = () => {
+      // 清除本地存储中的学科选择，强制用户重新选择学科
+      localStorage.removeItem('selectedSubjectId');
+      router.push('/exercise');
+    };
+
     return {
       username,
       isAdmin,
       isHomePage,
-      handleLogout
+      handleLogout,
+      goToExercise,
+      navConfig,
+      iconMap
     };
   }
 };
@@ -206,11 +163,23 @@ export default {
 
 .nav-menu {
   display: flex;
+  align-items: center;
+  gap: 2rem;
+}
+
+.nav-section {
+  display: flex;
   gap: 1rem;
   align-items: center;
 }
 
-.nav-link {
+.admin-section {
+  border-left: 1px solid rgba(255, 255, 255, 0.2);
+  padding-left: 2rem;
+}
+
+.nav-link,
+.nav-button {
   display: flex;
   align-items: center;
   gap: 8px;
@@ -222,9 +191,14 @@ export default {
   font-weight: 500;
   position: relative;
   overflow: hidden;
+  background: transparent;
+  border: none;
+  cursor: pointer;
+  font-size: 1rem;
 }
 
-.nav-link::before {
+.nav-link::before,
+.nav-button::before {
   content: '';
   position: absolute;
   top: 0;
@@ -236,12 +210,14 @@ export default {
 }
 
 .nav-link:hover::before,
-.nav-link.router-link-active::before {
+.nav-link.router-link-active::before,
+.nav-button:hover::before {
   left: 0;
 }
 
 .nav-link:hover,
-.nav-link.router-link-active {
+.nav-link.router-link-active,
+.nav-button:hover {
   background: rgba(255, 255, 255, 0.2);
   transform: translateY(-2px);
   box-shadow: 0 4px 12px rgba(0, 0, 0, 0.15);
@@ -331,14 +307,25 @@ export default {
   }
   
   .nav-menu {
+    gap: 1rem;
+  }
+  
+  .nav-section {
     gap: 0.75rem;
   }
   
-  .nav-link {
+  .admin-section {
+    border-left: none;
+    padding-left: 0;
+  }
+  
+  .nav-link,
+  .nav-button {
     padding: 0.5rem 1rem;
   }
   
-  .nav-link span {
+  .nav-link span,
+  .nav-button span {
     display: none;
   }
   

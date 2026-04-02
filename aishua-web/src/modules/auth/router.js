@@ -13,15 +13,9 @@ export default [
     meta: { layout: 'empty' }
   },
   {
-    path: '/dashboard',
-    name: 'Dashboard',
-    component: () => import('./views/DashboardView.vue'),
-    meta: { requiresAuth: true, layout: 'default' }
-  },
-  {
     path: '/user-management',
     name: 'UserManagement',
     component: () => import('./views/UserManagementView.vue'),
-    meta: { requiresAuth: true, layout: 'default' }
+    meta: { requiresAuth: true, requiresAdmin: true, layout: 'default' }
   }
 ];

@@ -1,6 +1,6 @@
 <template>
   <div class="exercise-page">
-    <van-nav-bar 
+    <NavBar 
       :title="isGuestMode ? '游客模式 - 刷题练习' : '刷题练习'" 
       left-text="返回选择" 
       left-arrow 
@@ -9,12 +9,12 @@
       <template #right>
         <span>当前进度: {{ currentQuestionIndex + 1 }} / {{ questions.length }}</span>
       </template>
-    </van-nav-bar>
+    </NavBar>
 
     <transition name="slide-fade">
       <div v-if="currentQuestion" key="question" class="exercise-content">
-        <van-cell-group>
-          <van-cell :title="'第 ' + (currentQuestionIndex + 1) + ' 题'" :label="currentQuestion.title" />
+        <CellGroup>
+          <Cell :title="'第 ' + (currentQuestionIndex + 1) + ' 题'" :label="currentQuestion.title" />
           
           <div v-if="currentQuestion.type <= 3" class="question-options">
             <div 
@@ -22,7 +22,7 @@
               :key="key"
               class="option-item"
             >
-              <van-radio 
+              <Radio 
                 v-if="currentQuestion.type === 1 || currentQuestion.type === 3" 
                 :name="key"
                 :disabled="isGuestMode && showAnalysis[currentQuestionIndex]"
@@ -30,9 +30,9 @@
                 <div class="option-content">
                   <strong>{{ key }}.</strong> {{ option }}
                 </div>
-              </van-radio>
+              </Radio>
               
-              <van-checkbox 
+              <Checkbox 
                 v-else-if="currentQuestion.type === 2"
                 :name="key"
                 :disabled="isGuestMode && showAnalysis[currentQuestionIndex]"
@@ -40,12 +40,12 @@
                 <div class="option-content">
                   <strong>{{ key }}.</strong> {{ option }}
                 </div>
-              </van-checkbox>
+              </Checkbox>
             </div>
           </div>
           
           <div v-else-if="currentQuestion.type === 4" class="fill-blank">
-            <van-field 
+            <Field 
               v-model="userAnswers[currentQuestionIndex]" 
               rows="1" 
               autosize 
@@ -56,7 +56,7 @@
           </div>
           
           <div v-else-if="currentQuestion.type === 5" class="short-answer">
-            <van-field 
+            <Field 
               v-model="userAnswers[currentQuestionIndex]" 
               rows="3" 
               autosize 
@@ -65,10 +65,10 @@
               :readonly="isGuestMode && showAnalysis[currentQuestionIndex]"
             />
           </div>
-        </van-cell-group>
+        </CellGroup>
 
         <div class="question-analysis" v-if="showAnalysis[currentQuestionIndex]">
-          <van-divider>答案解析</van-divider>
+          <Divider>答案解析</Divider>
           <div class="analysis-content">
             <p><strong>正确答案：</strong>{{ currentQuestion.answer }}</p>
             <p><strong>解析：</strong>{{ currentQuestion.analysis || '暂无解析' }}</p>
@@ -76,25 +76,25 @@
         </div>
 
         <div class="navigation-buttons">
-          <van-button 
+          <Button 
             v-if="currentQuestionIndex > 0" 
             type="default" 
             @click="prevQuestion"
             :disabled="isGuestMode && showAnalysis[currentQuestionIndex]"
           >
             上一题
-          </van-button>
+          </Button>
           
-          <van-button 
+          <Button 
             v-if="currentQuestionIndex < questions.length - 1" 
             type="primary" 
             @click="nextQuestion"
             :disabled="isGuestMode && showAnalysis[currentQuestionIndex]"
           >
             下一题
-          </van-button>
+          </Button>
           
-          <van-button 
+          <Button 
             v-else 
             type="success" 
             @click="submitAll"
@@ -102,13 +102,13 @@
             :disabled="isGuestMode && showAnalysis[currentQuestionIndex]"
           >
             提交练习
-          </van-button>
+          </Button>
         </div>
       </div>
     </transition>
     
     <!-- 提交结果弹窗 -->
-    <van-popup 
+    <Popup 
       v-if="submitResult" 
       v-model="showResultDialog" 
       position="center" 
@@ -124,11 +124,11 @@
           <p>正确率: {{ (submitResult.correctRate * 100).toFixed(1) }}%</p>
         </div>
         <div class="result-actions">
-          <van-button @click="restartExercise" type="default" style="margin-right: 10px;">重新练习</van-button>
-          <van-button type="primary" @click="goToDashboard">返回首页</van-button>
+          <Button @click="restartExercise" type="default" style="margin-right: 10px;">重新练习</Button>
+          <Button type="primary" @click="goToDashboard">返回首页</Button>
         </div>
       </div>
-    </van-popup>
+    </Popup>
   </div>
 </template>
 
@@ -137,31 +137,20 @@ import { ref, computed } from 'vue';
 import { useRouter } from 'vue-router';
 import { exerciseApi } from '@/modules/exercise/api/exercise';
 // 重新添加Toast导入以解决ESLint报错和运行时引用问题
-import { Toast } from 'vant';
-import { 
-  NavBar as vanNavBar, 
-  CellGroup as vanCellGroup, 
-  Cell as vanCell, 
-  Radio as vanRadio, 
-  Checkbox, 
-  Button as vanButton, 
-  Field as vanField, 
-  Divider as vanDivider,
-  Popup as vanPopup
-} from 'vant';
+import { Toast, NavBar, CellGroup, Cell, Radio, Checkbox, Button, Field, Divider, Popup } from 'vant';
 
 export default {
   name: 'ExercisePage',
   components: {
-    [vanNavBar.name]: vanNavBar,
-    [vanCellGroup.name]: vanCellGroup,
-    [vanCell.name]: vanCell,
-    [vanRadio.name]: vanRadio,
-    [Checkbox.name]: Checkbox,
-    [vanButton.name]: vanButton,
-    [vanField.name]: vanField,
-    [vanDivider.name]: vanDivider,
-    [vanPopup.name]: vanPopup
+    NavBar,
+    CellGroup,
+    Cell,
+    Radio,
+    Checkbox,
+    Button,
+    Field,
+    Divider,
+    Popup
   },
   props: {
     exerciseData: {
@@ -209,6 +198,39 @@ export default {
       }
     };
 
+    const handleSubmitError = (error) => {
+      console.error('提交失败:', error);
+      
+      let errorMessage = '提交失败，请重试';
+      if (error.response) {
+        switch(error.response.status) {
+          case 400:
+            errorMessage = '请求数据格式错误，请检查后重试';
+            break;
+          case 401:
+            errorMessage = '登录已过期，请重新登录';
+            break;
+          case 403:
+            errorMessage = '没有权限提交答案';
+            break;
+          case 404:
+            errorMessage = '服务器接口未找到';
+            break;
+          case 500:
+            errorMessage = '服务器内部错误，请稍后再试';
+            break;
+          default:
+            errorMessage = error.response.data?.message || errorMessage;
+        }
+      } else if (error.request) {
+        errorMessage = '网络连接失败，请检查网络状态';
+      } else if (error.message) {
+        errorMessage = error.message;
+      }
+      
+      Toast.fail(errorMessage);
+    };
+
     const submitAll = async () => {
       if (!validateAnswers()) {
         Toast.fail('请完成所有题目后再提交');
@@ -247,36 +269,7 @@ export default {
           throw new Error(response?.message || 'Invalid response format');
         }
       } catch (error) {
-        console.error('提交失败:', error);
-        
-        let errorMessage = '提交失败，请重试';
-        if (error.response) {
-          switch(error.response.status) {
-            case 400:
-              errorMessage = '请求数据格式错误，请检查后重试';
-              break;
-            case 401:
-              errorMessage = '登录已过期，请重新登录';
-              break;
-            case 403:
-              errorMessage = '没有权限提交答案';
-              break;
-            case 404:
-              errorMessage = '服务器接口未找到';
-              break;
-            case 500:
-              errorMessage = '服务器内部错误，请稍后再试';
-              break;
-            default:
-              errorMessage = error.response.data?.message || errorMessage;
-          }
-        } else if (error.request) {
-          errorMessage = '网络连接失败，请检查网络状态';
-        } else if (error.message) {
-          errorMessage = error.message;
-        }
-        
-        Toast.fail(errorMessage);
+        handleSubmitError(error);
       } finally {
         submitting.value = false;
       }
@@ -330,7 +323,7 @@ export default {
     };
 
     const goToDashboard = () => {
-      router.push('/dashboard');
+      router.push('/exercise');
     };
 
     return {
@@ -349,6 +342,7 @@ export default {
       prevQuestion,
       nextQuestion,
       submitAll,
+      handleSubmitError,
       goBack,
       restartExercise,
       goToDashboard

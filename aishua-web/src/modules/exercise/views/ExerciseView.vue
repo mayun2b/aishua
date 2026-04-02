@@ -1,7 +1,25 @@
 <template>
   <div class="exercise-container">
-    <!-- 练习模式选择页面 -->
-    <div v-if="!exerciseStarted" class="mode-select-page">
+    <!-- 流程进度指示器 -->
+    <div class="progress-indicator" v-if="exerciseState !== 'practicing' && exerciseState !== 'result'">
+      <div class="progress-step" :class="{ active: exerciseState === 'subject-selection', completed: exerciseState !== 'subject-selection' }">
+        <div class="step-number">{{ exerciseState !== 'subject-selection' ? '✓' : '1' }}</div>
+        <div class="step-label">选择学科</div>
+      </div>
+      <div class="progress-line"></div>
+      <div class="progress-step" :class="{ active: exerciseState === 'mode-selection', completed: exerciseState === 'config' || exerciseState === 'practicing' || exerciseState === 'result' }">
+        <div class="step-number">{{ exerciseState === 'mode-selection' ? '2' : exerciseState === 'subject-selection' ? '2' : '✓' }}</div>
+        <div class="step-label">选择模式</div>
+      </div>
+      <div class="progress-line"></div>
+      <div class="progress-step" :class="{ active: exerciseState === 'config', completed: exerciseState === 'practicing' || exerciseState === 'result' }">
+        <div class="step-number">{{ exerciseState === 'config' ? '3' : exerciseState === 'subject-selection' || exerciseState === 'mode-selection' ? '3' : '✓' }}</div>
+        <div class="step-label">配置练习</div>
+      </div>
+    </div>
+
+    <!-- 第一步：选择学科 -->
+    <div v-if="exerciseState === 'subject-selection'" class="page-container">
       <div class="page-header">
         <button class="back-button" @click="goBack">
           <svg width="20" height="20" viewBox="0 0 24 24" fill="none" xmlns="http://www.w3.org/2000/svg">
@@ -10,11 +28,62 @@
           </svg>
           返回
         </button>
-        <h1>选择练习模式</h1>
+        <h1>选择练习学科</h1>
         <div class="header-right"></div>
       </div>
       
-      <div class="mode-select-content">
+      <div class="page-content">
+        <div class="section-header">
+          <h2>请选择学科</h2>
+          <p>选择学科后才能进行练习</p>
+        </div>
+        
+        <div class="subject-options">
+          <div 
+            v-for="subject in subjectOptions" 
+            :key="subject.value"
+            :class="{ selected: configForm.subjectId === subject.value }"
+            @click="selectSubject(subject.value)"
+            class="subject-card"
+          >
+            <div class="subject-icon">
+              <svg width="48" height="48" viewBox="0 0 24 24" fill="none" xmlns="http://www.w3.org/2000/svg">
+                <path d="M12 2L2 7L12 12L22 7L12 2Z" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"/>
+                <path d="M2 17L12 22L22 17" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"/>
+                <path d="M2 12L12 17L22 12" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"/>
+              </svg>
+            </div>
+            <div class="subject-info">
+              <h3>{{ subject.text }}</h3>
+              <p>点击选择此学科</p>
+            </div>
+            <div class="subject-action">
+              <svg width="24" height="24" viewBox="0 0 24 24" fill="none" xmlns="http://www.w3.org/2000/svg">
+                <path d="M9 18L15 12L9 6" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"/>
+              </svg>
+            </div>
+          </div>
+        </div>
+      </div>
+    </div>
+    
+    <!-- 第二步：选择练习模式 -->
+    <div v-else-if="exerciseState === 'mode-selection'" class="page-container">
+      <div class="page-header">
+        <button class="back-button" @click="goBackToSubject">
+          <svg width="20" height="20" viewBox="0 0 24 24" fill="none" xmlns="http://www.w3.org/2000/svg">
+            <path d="M19 12H5" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"/>
+            <path d="M12 19L5 12L12 5" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"/>
+          </svg>
+          返回
+        </button>
+        <h1>选择练习模式</h1>
+        <div class="header-right">
+          <span class="selected-subject-info">当前学科：{{ subjectOptions.find(s => s.value === configForm.subjectId)?.text }}</span>
+        </div>
+      </div>
+      
+      <div class="page-content">
         <div v-if="!isLoggedIn" class="guest-notice">
           <p>您当前是游客模式，可以免费练习，但练习记录不会保存。</p>
           <button class="login-button" @click="goToLogin">立即登录</button>
@@ -28,40 +97,67 @@
             @click="selectMode(mode.value)"
             class="mode-card"
           >
+            <div class="mode-icon">
+              <svg v-if="mode.value === 1" width="48" height="48" viewBox="0 0 24 24" fill="none" xmlns="http://www.w3.org/2000/svg">
+                <path d="M3 9l9-7 9 7v11a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2z" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"/>
+                <polyline points="9 22 9 12 15 12 15 22" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"/>
+              </svg>
+              <svg v-else-if="mode.value === 2" width="48" height="48" viewBox="0 0 24 24" fill="none" xmlns="http://www.w3.org/2000/svg">
+                <circle cx="12" cy="12" r="10" stroke="currentColor" stroke-width="2"/>
+                <path d="M12 6v6l4 2" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"/>
+              </svg>
+              <svg v-else-if="mode.value === 3" width="48" height="48" viewBox="0 0 24 24" fill="none" xmlns="http://www.w3.org/2000/svg">
+                <path d="M17 3a2.85 2.83 0 1 1 4 4L7.5 20.5 2 22l1.5-5.5Z" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"/>
+                <path d="m15 3 4 4" stroke="currentColor" stroke-width="2" stroke-linecap="round"/>
+              </svg>
+            </div>
             <h3>{{ mode.label }}</h3>
             <p>{{ mode.description }}</p>
             <span v-if="mode.requireLogin" class="login-required">需登录</span>
           </div>
         </div>
+      </div>
+    </div>
+    
+    <!-- 第三步：配置练习 -->
+    <div v-else-if="exerciseState === 'config'" class="page-container">
+      <div class="page-header">
+        <button class="back-button" @click="goBackToMode">
+          <svg width="20" height="20" viewBox="0 0 24 24" fill="none" xmlns="http://www.w3.org/2000/svg">
+            <path d="M19 12H5" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"/>
+            <path d="M12 19L5 12L12 5" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"/>
+          </svg>
+          返回
+        </button>
+        <h1>配置练习</h1>
+        <div class="header-right">
+          <span class="selected-subject-info">当前学科：{{ subjectOptions.find(s => s.value === configForm.subjectId)?.text }}</span>
+        </div>
+      </div>
+      
+      <div class="page-content">
+        <div class="mode-info">
+          <h3>{{ exerciseModes.find(m => m.value === selectedMode)?.label }}</h3>
+          <p>{{ exerciseModes.find(m => m.value === selectedMode)?.description }}</p>
+        </div>
         
-        <!-- 知识点列表页面 -->
-        <div v-if="selectedMode === 1 && showKnowledgePoints" class="knowledge-points-section">
-          <div class="knowledge-header">
-            <h2>{{ subjectOptions.find(s => s.value === configForm.subjectId)?.text || '当前学科' }} 的知识点</h2>
-            <button class="back-button-small" @click="showKnowledgePoints = false">
-              <svg width="16" height="16" viewBox="0 0 24 24" fill="none" xmlns="http://www.w3.org/2000/svg">
-                <path d="M19 12H5" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"/>
-                <path d="M12 19L5 12L12 5" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"/>
-              </svg>
-              返回
-            </button>
-          </div>
-          
+        <!-- 按知识点练习的特殊配置 -->
+        <div v-if="selectedMode === 1" class="knowledge-point-config">
+          <h4>选择知识点</h4>
           <div v-if="loading" class="loading-container">
             <div class="loading-spinner"></div>
             <p>加载知识点中...</p>
           </div>
-          
           <div v-else-if="knowledgePoints.length === 0" class="empty-state">
             <p>暂无知识点数据</p>
           </div>
-          
           <div v-else class="knowledge-points-list">
             <div 
               v-for="point in knowledgePoints" 
               :key="point.id"
-              class="knowledge-point-item"
+              :class="{ selected: configForm.categoryId === point.id }"
               @click="selectKnowledgePoint(point)"
+              class="knowledge-point-item"
             >
               <div class="knowledge-point-info">
                 <h3>{{ point.name }}</h3>
@@ -84,73 +180,52 @@
           </div>
         </div>
         
-        <!-- 其他模式的配置页面 -->
-        <div v-else-if="selectedMode" class="config-section">
-          <div class="config-grid">
-            <div class="config-item">
-              <label>题目数量</label>
-              <div class="slider-container">
-                <input 
-                  type="range" 
-                  v-model="configForm.count" 
-                  min="5" 
-                  max="50" 
-                  step="5"
-                  class="config-slider"
-                />
-                <span class="slider-value">{{ configForm.count }}题</span>
-              </div>
-            </div>
-            
-            <div class="config-item">
-              <label>难度等级</label>
-              <select v-model="configForm.difficulty" class="config-select">
-                <option value="">选择难度</option>
-                <option v-for="option in difficultyOptions" :key="option.value" :value="option.value">
-                  {{ option.text }}
-                </option>
-              </select>
-            </div>
-            
-            <!-- 如果没有选中学科，显示学科选择 -->
-            <div v-if="!hasSelectedSubject" class="config-item">
-              <label>学科</label>
-              <select v-model="configForm.subjectId" class="config-select" @change="handleSubjectChange">
-                <option value="">选择学科</option>
-                <option v-for="option in subjectOptions" :key="option.value" :value="option.value">
-                  {{ option.text }}
-                </option>
-              </select>
-            </div>
-            
-            <!-- 如果有选中学科，显示已选择的学科信息 -->
-            <div v-else class="config-item">
-              <label>已选择学科</label>
-              <div class="selected-subject-info">
-                {{ subjectOptions.find(s => s.value === configForm.subjectId)?.text || '未知学科' }}
-              </div>
-            </div>
-            
-            <div class="config-item">
-              <label>知识点分类</label>
-              <select v-model="configForm.categoryId" class="config-select">
-                <option value="">选择知识点</option>
-                <option v-for="option in categoryOptions" :key="option.value" :value="option.value">
-                  {{ option.text }}
-                </option>
-              </select>
+        <!-- 通用配置项 -->
+        <div class="config-grid">
+          <div class="config-item">
+            <label>题目数量</label>
+            <div class="slider-container">
+              <input 
+                type="range" 
+                v-model="configForm.count" 
+                min="5" 
+                max="50" 
+                step="5"
+                class="config-slider"
+              />
+              <span class="slider-value">{{ configForm.count }}题</span>
             </div>
           </div>
           
-          <button class="start-button" @click="startExercise" :disabled="loading">
-            {{ loading ? '加载中...' : '开始练习' }}
-          </button>
+          <div class="config-item">
+            <label>难度等级</label>
+            <select v-model="configForm.difficulty" class="config-select">
+              <option value="">选择难度</option>
+              <option v-for="option in difficultyOptions" :key="option.value" :value="option.value">
+                {{ option.text }}
+              </option>
+            </select>
+          </div>
+          
+          <div v-if="selectedMode !== 1" class="config-item">
+            <label>知识点分类</label>
+            <select v-model="configForm.categoryId" class="config-select">
+              <option value="">选择知识点</option>
+              <option v-for="option in categoryOptions" :key="option.value" :value="option.value">
+                {{ option.text }}
+              </option>
+            </select>
+          </div>
         </div>
+        
+        <button class="start-button" @click="startExercise" :disabled="loading || (selectedMode === 1 && !configForm.categoryId)">
+          {{ loading ? '加载中...' : '开始练习' }}
+        </button>
       </div>
     </div>
     
     <!-- 练习页面 -->
-    <div v-else class="exercise-page">
+    <div v-else-if="exerciseState === 'practicing'" class="exercise-page">
       <div class="page-header">
         <button class="back-button" @click="goBack">
           <svg width="20" height="20" viewBox="0 0 24 24" fill="none" xmlns="http://www.w3.org/2000/svg">
@@ -173,19 +248,65 @@
       
       <div class="question-container" v-if="currentQuestion">
         <div class="question-header">
-          <h3 class="question-title">{{ currentQuestion.title }}</h3>
-          <div class="question-type" v-if="currentQuestion.type">
+          <h3 class="question-title">{{ currentQuestion?.title || '' }}</h3>
+          <div class="question-type" v-if="currentQuestion && currentQuestion.type">
             {{ getQuestionTypeText(currentQuestion.type) }}
           </div>
         </div>
         
-        <div class="options-container">
+        <!-- 错题模式的实时判断结果 -->
+        <div v-if="selectedMode === 3 && userAnswers.length > 0 && currentQuestion && userAnswers[userAnswers.length - 1].questionId === currentQuestion.id" class="real-time-result">
+          <div :class="['result-card', userAnswers[userAnswers.length - 1].isCorrect ? 'correct' : 'wrong']">
+            <div class="result-icon">
+              <svg v-if="userAnswers[userAnswers.length - 1].isCorrect" width="64" height="64" viewBox="0 0 24 24" fill="none" xmlns="http://www.w3.org/2000/svg">
+                <circle cx="12" cy="12" r="10" stroke="currentColor" stroke-width="2"/>
+                <path d="M9 12l2 2 4-4" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"/>
+              </svg>
+              <svg v-else width="64" height="64" viewBox="0 0 24 24" fill="none" xmlns="http://www.w3.org/2000/svg">
+                <circle cx="12" cy="12" r="10" stroke="currentColor" stroke-width="2"/>
+                <line x1="15" y1="9" x2="9" y2="15" stroke="currentColor" stroke-width="2" stroke-linecap="round"/>
+                <line x1="9" y1="9" x2="15" y2="15" stroke="currentColor" stroke-width="2" stroke-linecap="round"/>
+              </svg>
+            </div>
+            <div class="result-content">
+              <h4 class="result-title">{{ userAnswers[userAnswers.length - 1].isCorrect ? '回答正确！' : '回答错误' }}</h4>
+              <div class="answer-info">
+                <div class="answer-item">
+                  <span class="answer-label">你的答案：</span>
+                  <span :class="['answer-value', userAnswers[userAnswers.length - 1].isCorrect ? 'correct' : 'wrong']">
+                    {{ userAnswers[userAnswers.length - 1].userAnswer || '未作答' }}
+                  </span>
+                </div>
+                <div class="answer-item" v-if="!userAnswers[userAnswers.length - 1].isCorrect">
+                  <span class="answer-label">正确答案：</span>
+                  <span class="answer-value correct">{{ userAnswers[userAnswers.length - 1].correctAnswer || '未知' }}</span>
+                </div>
+              </div>
+              <!-- 答案解析 -->
+              <div v-if="userAnswers[userAnswers.length - 1].analysis" class="analysis-section">
+                <h5>解析：</h5>
+                <div class="analysis-content">{{ userAnswers[userAnswers.length - 1].analysis }}</div>
+              </div>
+              <!-- 继续按钮 -->
+              <div class="result-actions">
+                <button 
+                  class="action-button primary continue-button"
+                  @click="continueToNextQuestion"
+                >
+                  {{ isLastQuestion ? '完成练习' : '下一题' }}
+                </button>
+              </div>
+            </div>
+          </div>
+        </div>
+        
+        <div class="options-container" v-if="currentQuestion && !(selectedMode === 3 && userAnswers.length > 0 && userAnswers[userAnswers.length - 1].questionId === currentQuestion.id)">
           <!-- 单选题 -->
-          <div v-if="currentQuestion.type === 1" class="option-group">
+          <div v-if="currentQuestion && currentQuestion.type === 1" class="option-group">
             <div
               v-for="(option, index) in currentQuestion.options"
               :key="index"
-              :class="{ selected: selectedAnswer === option.label }"
+              :class="{ selected: selectedAnswer === option.label, correct: selectedMode === 3 && userAnswers.length > 0 && userAnswers[userAnswers.length - 1].questionId === currentQuestion.id && option.label === userAnswers[userAnswers.length - 1].correctAnswer, wrong: selectedMode === 3 && userAnswers.length > 0 && userAnswers[userAnswers.length - 1].questionId === currentQuestion.id && option.label === userAnswers[userAnswers.length - 1].userAnswer && !userAnswers[userAnswers.length - 1].isCorrect }"
               @click="selectOption(option.label)"
               class="option-item"
             >
@@ -200,11 +321,11 @@
           </div>
 
           <!-- 多选题 -->
-          <div v-else-if="currentQuestion.type === 2" class="option-group">
+          <div v-else-if="currentQuestion && currentQuestion.type === 2" class="option-group">
             <div
               v-for="(option, index) in currentQuestion.options"
               :key="index"
-              :class="{ selected: selectedAnswers.includes(option.label) }"
+              :class="{ selected: selectedAnswers.includes(option.label), correct: selectedMode === 3 && userAnswers.length > 0 && userAnswers[userAnswers.length - 1].questionId === currentQuestion.id && option.label === userAnswers[userAnswers.length - 1].correctAnswer, wrong: selectedMode === 3 && userAnswers.length > 0 && userAnswers[userAnswers.length - 1].questionId === currentQuestion.id && selectedAnswers.includes(option.label) && option.label !== userAnswers[userAnswers.length - 1].correctAnswer }"
               @click="toggleMultiOption(option.label)"
               class="option-item"
             >
@@ -223,9 +344,9 @@
           </div>
 
           <!-- 判断题：约定 A=正确，B=错误 -->
-          <div v-else-if="currentQuestion.type === 3" class="option-group">
+          <div v-else-if="currentQuestion && currentQuestion.type === 3" class="option-group">
             <div
-              :class="{ selected: selectedAnswer === 'A' }"
+              :class="{ selected: selectedAnswer === 'A', correct: selectedMode === 3 && userAnswers.length > 0 && userAnswers[userAnswers.length - 1].questionId === currentQuestion.id && 'A' === userAnswers[userAnswers.length - 1].correctAnswer, wrong: selectedMode === 3 && userAnswers.length > 0 && userAnswers[userAnswers.length - 1].questionId === currentQuestion.id && selectedAnswer === 'A' && 'A' !== userAnswers[userAnswers.length - 1].correctAnswer }"
               @click="selectOption('A')"
               class="option-item"
             >
@@ -238,7 +359,7 @@
               </div>
             </div>
             <div
-              :class="{ selected: selectedAnswer === 'B' }"
+              :class="{ selected: selectedAnswer === 'B', correct: selectedMode === 3 && userAnswers.length > 0 && userAnswers[userAnswers.length - 1].questionId === currentQuestion.id && 'B' === userAnswers[userAnswers.length - 1].correctAnswer, wrong: selectedMode === 3 && userAnswers.length > 0 && userAnswers[userAnswers.length - 1].questionId === currentQuestion.id && selectedAnswer === 'B' && 'B' !== userAnswers[userAnswers.length - 1].correctAnswer }"
               @click="selectOption('B')"
               class="option-item"
             >
@@ -253,7 +374,7 @@
           </div>
 
           <!-- 填空题 -->
-          <div v-else-if="currentQuestion.type === 4" class="text-answer">
+          <div v-else-if="currentQuestion && currentQuestion.type === 4" class="text-answer">
             <input
               v-model="textAnswer"
               type="text"
@@ -263,7 +384,7 @@
           </div>
 
           <!-- 简答题 -->
-          <div v-else-if="currentQuestion.type === 5" class="text-answer">
+          <div v-else-if="currentQuestion && currentQuestion.type === 5" class="text-answer">
             <textarea
               v-model="textAnswer"
               rows="5"
@@ -284,6 +405,15 @@
       </div>
       
       <div class="action-buttons">
+        <!-- 错题模式显示移除错题按钮 -->
+        <button 
+          v-if="selectedMode === 3 && isLoggedIn"
+          class="action-button danger"
+          @click="removeFromWrongList"
+          :disabled="!currentQuestion"
+        >
+          移除错题
+        </button>
         <button 
           class="action-button secondary"
           @click="skipQuestion"
@@ -418,7 +548,7 @@
           </div>
           <div class="modal-footer">
             <button class="modal-button secondary" @click="startNewExercise">继续练习</button>
-            <button class="modal-button primary" @click="goToHome">返回首页</button>
+            <button class="modal-button primary" @click="goToStats">查看统计</button>
           </div>
         </div>
       </div>
@@ -429,7 +559,7 @@
 <script>
 import { ref, reactive, onMounted, computed, watch } from 'vue';
 import { useRouter } from 'vue-router';
-import { getRandomQuestions, getAllCategories, getCategoriesBySubjectId, getKnowledgePointProgress, getAllSubjects, submitAnswer as submitAnswerApi, batchSubmitAnswers as batchSubmitAnswersApi, getUserStats, getRandomWrongQuestions } from '../api/exercise';
+import { getRandomQuestions, getAllCategories, getCategoriesBySubjectId, getKnowledgePointProgress, getAllSubjects, batchSubmitAnswers as batchSubmitAnswersApi, getUserStats, getWrongQuestions, removeFromWrong } from '../api/exercise';
 import { parseQuestionOptions, getQuestionTypeText, calculateTimeCost, getCurrentSubmitAnswer } from '../utils/questionUtils';
 
 // 简单的提示函数
@@ -442,12 +572,11 @@ export default {
   setup() {
     const router = useRouter();
     
-    // 练习模式选择相关
-    const exerciseStarted = ref(false);
+    // 练习流程状态管理
+    const exerciseState = ref('subject-selection'); // subject-selection, mode-selection, config, practicing, result
     const selectedMode = ref(null);
     const loading = ref(false);
     const isLoggedIn = ref(!!localStorage.getItem('token'));
-    const showKnowledgePoints = ref(false);
     const knowledgePoints = ref([]);
     
     // 检查登录状态
@@ -553,7 +682,7 @@ export default {
         }
         
         if (response && response.code === 200) {
-          categoryOptions.value = (response.data || []).map(category => ({
+          categoryOptions.value = (response.data || []).filter(category => category != null).map(category => ({
             text: category.name,
             value: category.id
           }));
@@ -569,7 +698,7 @@ export default {
       try {
         const response = await getAllSubjects();
         if (response && response.code === 200) {
-          subjectOptions.value = (response.data || []).map(subject => ({
+          subjectOptions.value = (response.data || []).filter(subject => subject != null).map(subject => ({
             text: subject.name,
             value: subject.id
           }));
@@ -689,7 +818,18 @@ export default {
       }
     };
 
-    const selectMode = (mode) => {
+    // 选择学科
+    const selectSubject = async (subjectId) => {
+      configForm.subjectId = subjectId;
+      // 保存到本地存储
+      localStorage.setItem('selectedSubjectId', subjectId);
+      // 加载该学科的分类
+      await loadCategories(subjectId);
+      // 切换到模式选择页面
+      exerciseState.value = 'mode-selection';
+    };
+
+    const selectMode = async (mode) => {
       const modeConfig = exerciseModes.find(m => m.value === mode);
       if (modeConfig && modeConfig.requireLogin && !isLoggedIn.value) {
         showToast('此功能需要登录才能使用');
@@ -697,19 +837,22 @@ export default {
       }
       selectedMode.value = mode;
       
-      // 如果选择按知识点练习，直接显示知识点列表
+      // 如果选择按知识点练习，加载知识点并进入配置页面
       if (mode === 1) {
-        loadKnowledgePoints();
-        showKnowledgePoints.value = true;
+        await loadKnowledgePoints();
+        exerciseState.value = 'config';
       } else {
-        showKnowledgePoints.value = false;
+        // 随机练习和错题练习直接开始，不需要配置
+        await startExercise();
       }
     };
 
     const selectKnowledgePoint = async (point) => {
       // 设置选择的知识点
       configForm.categoryId = point.id;
-      // 开始练习
+      console.log('选择知识点:', point.name, 'ID:', point.id);
+      console.log('configForm.categoryId:', configForm.categoryId);
+      // 选择知识点后自动开始练习
       await startExercise();
     };
     
@@ -728,15 +871,29 @@ export default {
     };
     
     const startExercise = async () => {
-      if (!selectedMode.value) {
-        showToast('请选择练习模式');
+      console.log('开始练习 - selectedMode:', selectedMode.value);
+      console.log('开始练习 - configForm.categoryId:', configForm.categoryId);
+      
+      // 按知识点练习时必须选择知识点
+      if (selectedMode.value === 1 && !configForm.categoryId) {
+        showToast('按知识点练习请选择知识点');
         return;
       }
 
       loading.value = true;
       try {
-        if (selectedMode.value === 3) {
-          // 错题重练模式
+        if (selectedMode.value === 2) {
+          // 随机练习模式：直接获取50道题，不分知识点，必须是用户选择的学科
+          const params = {
+            count: 50,
+            exerciseMode: selectedMode.value,
+            subjectId: configForm.subjectId
+          };
+          
+          // 调用后端API获取题目
+          await loadQuestions(params);
+        } else if (selectedMode.value === 3) {
+          // 错题练习模式：获取该学科的所有错题
           if (!isLoggedIn.value) {
             showToast('错题重练需要登录');
             loading.value = false;
@@ -744,25 +901,34 @@ export default {
           }
           
           const params = {
-            count: configForm.count
+            subjectId: configForm.subjectId
           };
           
-          // 如果选择了学科，只获取该学科的错题
-          if (configForm.subjectId) {
-            params.subjectId = configForm.subjectId;
+          // 调用错题重练API，获取所有错题
+          const response = await getWrongQuestions(params);
+          console.log('错题练习API响应:', response);
+          console.log('response.data:', response.data);
+          console.log('response.data.list:', response.data?.list);
+          console.log('response.data.records:', response.data?.records);
+          console.log('response.data.content:', response.data?.content);
+          
+          // 检查响应数据结构（支持分页格式）
+          let dataArray = [];
+          if (response.data) {
+            if (Array.isArray(response.data)) {
+              dataArray = response.data;
+            } else if (Array.isArray(response.data.list)) {
+              dataArray = response.data.list;
+            } else if (Array.isArray(response.data.records)) {
+              dataArray = response.data.records;
+            } else if (Array.isArray(response.data.content)) {
+              dataArray = response.data.content;
+            }
           }
+          console.log('实际使用的数据:', dataArray);
           
-          // 如果选择了知识点，只获取该知识点的错题
-          if (configForm.categoryId) {
-            params.categoryId = configForm.categoryId;
-          }
-          
-          // 调用错题重练API
-          const response = await getRandomWrongQuestions(configForm.count);
-          console.log('错题重练API响应:', response);
-          
-          if (response.code === 200 && Array.isArray(response.data)) {
-            questions.value = response.data.map(q => {
+          if (response.code === 200 && Array.isArray(dataArray) && dataArray.length > 0) {
+            questions.value = dataArray.map(q => {
               let options = [];
               if (q.options) {
                 options = parseQuestionOptions(q.options);
@@ -787,28 +953,16 @@ export default {
             questions.value = [];
           }
         } else {
-          // 按知识点练习或随机练习模式
+          // 按知识点练习模式
           const params = {
             count: configForm.count,
-            exerciseMode: selectedMode.value
+            exerciseMode: selectedMode.value,
+            subjectId: configForm.subjectId,
+            categoryId: configForm.categoryId
           };
 
           if (configForm.difficulty) {
             params.difficulty = configForm.difficulty;
-          }
-          if (configForm.subjectId) {
-            params.subjectId = configForm.subjectId;
-          }
-          
-          // 按知识点练习时必须选择知识点
-          if (selectedMode.value === 1 && !configForm.categoryId) {
-            showToast('按知识点练习请选择知识点');
-            loading.value = false;
-            return;
-          }
-          
-          if (configForm.categoryId) {
-            params.categoryId = configForm.categoryId;
           }
 
           // 调用后端API获取题目
@@ -816,8 +970,9 @@ export default {
         }
         
         if (questions.value.length > 0) {
+          console.log('成功获取题目，数量:', questions.value.length);
           // 开始练习
-          exerciseStarted.value = true;
+          exerciseState.value = 'practicing';
           // 重置练习状态
           currentQuestionIndex.value = 0;
           selectedAnswer.value = '';
@@ -830,7 +985,8 @@ export default {
           // 初始化第一个题目的开始时间
           questionStartTime.value = Date.now();
         } else {
-          showToast('获取题目失败，请重试');
+          console.log('获取题目失败，questions.value.length:', questions.value.length);
+          showToast(selectedMode.value === 3 ? '暂无错题记录' : '获取题目失败，请重试');
         }
       } catch (error) {
         console.error('开始练习失败:', error);
@@ -873,6 +1029,21 @@ export default {
 
 
     
+    // 继续到下一题（错题模式专用）
+    const continueToNextQuestion = () => {
+      if (isLastQuestion.value) {
+        // 练习完成
+        showToast('已完成所有错题练习');
+        exerciseState.value = 'mode-selection';
+      } else {
+        // 下一题
+        currentQuestionIndex.value++;
+        selectedAnswer.value = '';
+        selectedAnswers.value = [];
+        textAnswer.value = '';
+      }
+    };
+
     const submitAnswer = async () => {
       if (!currentQuestion.value) return;
       if (!canSubmitCurrent.value) return;
@@ -904,22 +1075,39 @@ export default {
         // 检查登录状态
         checkLoginStatus();
         
-        // 调用后端API提交答案
-        const requestData = {
-          questionId: currentQuestion.value.id,
-          userAnswer: submitAns,
-          timeCost: timeCost
-        };
-        
-        console.log('提交答案请求数据:', requestData);
-        console.log('登录状态:', isLoggedIn.value);
-        console.log('Token:', localStorage.getItem('token'));
-        
-        const response = await submitAnswerApi(requestData);
-        console.log('提交答案响应:', response);
-        
-        if (isLastQuestion.value) {
-          // 练习完成，批量提交所有答案
+        // 错题模式：实时判断，显示结果后等待用户点击继续
+        if (selectedMode.value === 3) {
+          // 立即提交当前答案
+          try {
+            const submitData = {
+              questionId: currentQuestion.value.id,
+              userAnswer: submitAns,
+              timeCost: timeCost
+            };
+            await batchSubmitAnswersApi([submitData]);
+            
+            // 如果答对了，可以选择从错题本中移除
+            if (submitAns === currentQuestion.value.answer) {
+              if (confirm('回答正确！是否将这道题从错题本中移除？')) {
+                await removeFromWrong({
+                  questionId: currentQuestion.value.id
+                });
+                showToast('已从错题本中移除');
+                // 从当前题目列表中移除这道题
+                questions.value.splice(currentQuestionIndex.value, 1);
+                // 如果还有题目，更新当前索引
+                if (questions.value.length > 0) {
+                  currentQuestionIndex.value--; // 调整索引以保持正确位置
+                }
+              }
+            }
+          } catch (error) {
+            console.error('提交答案失败:', error);
+          }
+          
+          // 不自动进入下一题，等待用户点击继续按钮
+        } else if (isLastQuestion.value) {
+          // 其他模式：练习完成，批量提交所有答案
           if (userAnswers.value.length > 0) {
             const batchData = userAnswers.value.map(item => ({
               questionId: item.questionId,
@@ -928,18 +1116,22 @@ export default {
             }));
             
             console.log('批量提交答案请求数据:', batchData);
+            console.log('登录状态:', isLoggedIn.value);
+            console.log('Token:', localStorage.getItem('token'));
+            
             try {
               const batchResponse = await batchSubmitAnswersApi(batchData);
               console.log('批量提交答案响应:', batchResponse);
             } catch (error) {
               console.error('批量提交答案失败:', error);
+              showToast('提交答案失败，请重试');
             }
           }
           
           // 显示结果
           showResult.value = true;
         } else {
-          // 下一题
+          // 其他模式：下一题（中间题目不提交，只在最后一题批量提交）
           currentQuestionIndex.value++;
           selectedAnswer.value = '';
           selectedAnswers.value = [];
@@ -960,14 +1152,64 @@ export default {
       selectedAnswers.value = [];
       textAnswer.value = '';
     };
-    
-    const goBack = () => {
-      if (exerciseStarted.value) {
-        // 如果已经开始练习，询问是否确认返回
-        if (confirm('确定要退出练习吗？当前进度将会丢失。')) {
-          router.go(-1);
+
+    // 移除错题
+    const removeFromWrongList = async () => {
+      if (!currentQuestion.value) return;
+      
+      if (confirm('确定要将这道题从错题本中移除吗？')) {
+        try {
+          const response = await removeFromWrong({
+            questionId: currentQuestion.value.id
+          });
+          
+          if (response && response.code === 200) {
+            showToast('已从错题本中移除');
+            
+            // 从当前题目列表中移除这道题
+            questions.value.splice(currentQuestionIndex.value, 1);
+            
+            // 如果还有题目，继续练习
+            if (questions.value.length > 0) {
+              selectedAnswer.value = '';
+              selectedAnswers.value = [];
+              textAnswer.value = '';
+            } else {
+              // 如果没有题目了，结束练习
+              showToast('已完成所有错题练习');
+              exerciseState.value = 'mode-selection';
+            }
+          } else {
+            showToast('移除失败，请重试');
+          }
+        } catch (error) {
+          console.error('移除错题失败:', error);
+          showToast('移除失败，请重试');
         }
+      }
+    };
+    
+    // 返回上一步
+    const goBackToSubject = () => {
+      exerciseState.value = 'subject-selection';
+    };
+
+    const goBackToMode = () => {
+      exerciseState.value = 'mode-selection';
+    };
+
+    const goBack = () => {
+      if (exerciseState.value === 'practicing') {
+        // 如果已经开始练习，询问是否确认返回学习中心
+        if (confirm('确定要退出练习吗？当前进度将会丢失。')) {
+          router.push('/dashboard');
+        }
+      } else if (exerciseState.value === 'config') {
+        exerciseState.value = 'mode-selection';
+      } else if (exerciseState.value === 'mode-selection') {
+        exerciseState.value = 'subject-selection';
       } else {
+        // 如果在学科选择页面，返回到上一页（dashboard）
         router.go(-1);
       }
     };
@@ -983,16 +1225,22 @@ export default {
     
     const startNewExercise = () => {
       showResult.value = false;
-      exerciseStarted.value = false;
+      exerciseState.value = 'config';
       selectedMode.value = null;
       configForm.count = 10;
       configForm.difficulty = null;
       configForm.categoryId = null;
+      // 保留学科选择，让用户继续练习同一学科
     };
     
     const goToHome = () => {
       showResult.value = false;
-      router.push('/dashboard');
+      router.push('/exercise');
+    };
+    
+    const goToStats = () => {
+      showResult.value = false;
+      router.push('/exercise/stats');
     };
 
     watch(currentQuestionIndex, () => {
@@ -1007,6 +1255,9 @@ export default {
       // 检查登录状态
       checkLoginStatus();
       
+      // 加载学科
+      await loadSubjects();
+      
       // 检查本地存储中是否有选中学科
       const selectedSubjectId = localStorage.getItem('selectedSubjectId');
       if (selectedSubjectId) {
@@ -1015,13 +1266,16 @@ export default {
         
         // 加载该学科的分类
         await loadCategories(configForm.subjectId);
+        
+        // 如果有选中学科，直接进入模式选择页面
+        exerciseState.value = 'mode-selection';
       } else {
         // 如果没有选中学科，加载所有分类
         await loadCategories();
+        
+        // 默认显示学科选择页面
+        exerciseState.value = 'subject-selection';
       }
-      
-      // 加载学科
-      await loadSubjects();
       
       // 测试获取用户统计，验证登录状态
       if (isLoggedIn.value) {
@@ -1035,8 +1289,8 @@ export default {
     });
     
     return {
-      // 练习模式选择相关
-      exerciseStarted,
+      // 练习流程状态管理
+      exerciseState,
       selectedMode,
       loading,
       isLoggedIn,
@@ -1046,13 +1300,13 @@ export default {
       subjectOptions,
       categoryOptions,
       hasSelectedSubject,
+      selectSubject,
       selectMode,
       handleSubjectChange,
       startExercise,
       goToLogin,
       checkLoginStatus,
       // 知识点练习相关
-      showKnowledgePoints,
       knowledgePoints,
       selectKnowledgePoint,
       
@@ -1081,10 +1335,15 @@ export default {
       showAnswerDetails,
       submitAnswer,
       skipQuestion,
+      removeFromWrongList,
+      continueToNextQuestion,
       goBack,
+      goBackToSubject,
+      goBackToMode,
       viewStats,
       startNewExercise,
-      goToHome
+      goToHome,
+      goToStats
     };
   }
 };
@@ -1094,6 +1353,78 @@ export default {
 .exercise-container {
   min-height: 100vh;
   background: linear-gradient(135deg, #f5f7fa 0%, #c3cfe2 100%);
+}
+
+/* 流程进度指示器 */
+.progress-indicator {
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  padding: 2rem;
+  gap: 2rem;
+  background: white;
+  box-shadow: 0 2px 10px rgba(0, 0, 0, 0.1);
+}
+
+.progress-step {
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  gap: 0.5rem;
+}
+
+.step-number {
+  width: 40px;
+  height: 40px;
+  border-radius: 50%;
+  background: #e5e7eb;
+  color: #6b7280;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  font-weight: 600;
+  font-size: 1rem;
+  transition: all 0.3s;
+}
+
+.step-label {
+  font-size: 0.875rem;
+  color: #6b7280;
+  font-weight: 500;
+}
+
+.progress-step.active .step-number {
+  background: linear-gradient(135deg, #409eff 0%, #2a7fff 100%);
+  color: white;
+  box-shadow: 0 4px 12px rgba(64, 158, 255, 0.3);
+}
+
+.progress-step.active .step-label {
+  color: #409eff;
+  font-weight: 600;
+}
+
+.progress-step.completed .step-number {
+  background: #10b981;
+  color: white;
+}
+
+.progress-step.completed .step-label {
+  color: #10b981;
+}
+
+.progress-line {
+  flex: 1;
+  height: 2px;
+  background: #e5e7eb;
+  max-width: 100px;
+}
+
+/* 页面容器 */
+.page-container {
+  min-height: 100vh;
+  display: flex;
+  flex-direction: column;
 }
 
 /* 页面头部 */
@@ -1145,11 +1476,272 @@ export default {
   font-weight: 500;
 }
 
-/* 练习模式选择页面 */
-.mode-select-content {
+/* 页面内容区域 */
+.page-content {
+  flex: 1;
   max-width: 1200px;
   margin: 0 auto;
   padding: 2rem;
+  width: 100%;
+}
+
+/* 模式信息 */
+.mode-info {
+  background: #f0f9ff;
+  border: 1px solid #c6e2ff;
+  border-radius: 12px;
+  padding: 1.5rem;
+  margin-bottom: 2rem;
+}
+
+.mode-info h3 {
+  margin: 0 0 0.5rem 0;
+  font-size: 1.25rem;
+  font-weight: 600;
+  color: #1f2937;
+}
+
+.mode-info p {
+  margin: 0;
+  color: #6b7280;
+  line-height: 1.5;
+}
+
+/* 知识点配置区域 */
+.knowledge-point-config {
+  background: white;
+  border-radius: 12px;
+  padding: 2rem;
+  margin-bottom: 2rem;
+  box-shadow: 0 4px 20px rgba(0, 0, 0, 0.1);
+}
+
+.knowledge-point-config h4 {
+  margin: 0 0 1.5rem 0;
+  font-size: 1.1rem;
+  font-weight: 600;
+  color: #1f2937;
+}
+
+/* 学科卡片样式 */
+.subject-card {
+  display: flex;
+  align-items: center;
+  gap: 1.5rem;
+  padding: 1.5rem;
+  border: 2px solid #e5e7eb;
+  border-radius: 12px;
+  cursor: pointer;
+  transition: all 0.3s;
+  background: white;
+}
+
+.subject-card:hover {
+  border-color: #409eff;
+  background: #f9fafb;
+  transform: translateY(-2px);
+  box-shadow: 0 4px 12px rgba(64, 158, 255, 0.1);
+}
+
+.subject-card.selected {
+  border-color: #409eff;
+  background: linear-gradient(135deg, #f0f9ff 0%, #e0f2fe 100%);
+}
+
+.subject-icon {
+  width: 48px;
+  height: 48px;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  background: linear-gradient(135deg, #409eff 0%, #2a7fff 100%);
+  border-radius: 12px;
+  color: white;
+}
+
+.subject-info {
+  flex: 1;
+}
+
+.subject-info h3 {
+  margin: 0 0 0.5rem 0;
+  font-size: 1.25rem;
+  font-weight: 600;
+  color: #1f2937;
+}
+
+.subject-info p {
+  margin: 0;
+  color: #6b7280;
+  font-size: 0.875rem;
+}
+
+.subject-action {
+  color: #6b7280;
+  transition: color 0.3s;
+}
+
+.subject-card:hover .subject-action {
+  color: #409eff;
+}
+
+/* 模式卡片样式 */
+.mode-card {
+  background: white;
+  border-radius: 12px;
+  padding: 2rem;
+  cursor: pointer;
+  transition: all 0.3s;
+  border: 2px solid transparent;
+  box-shadow: 0 4px 20px rgba(0, 0, 0, 0.1);
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  text-align: center;
+  gap: 1rem;
+}
+
+.mode-card:hover {
+  transform: translateY(-5px);
+  box-shadow: 0 8px 30px rgba(0, 0, 0, 0.15);
+}
+
+.mode-card.active {
+  border-color: #409eff;
+  background: linear-gradient(135deg, #f0f9ff 0%, #e0f2fe 100%);
+}
+
+.mode-card.require-login {
+  opacity: 0.7;
+}
+
+.mode-icon {
+  width: 48px;
+  height: 48px;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  background: linear-gradient(135deg, #409eff 0%, #2a7fff 100%);
+  border-radius: 12px;
+  color: white;
+}
+
+.mode-card h3 {
+  margin: 0 0 0.5rem 0;
+  font-size: 1.25rem;
+  font-weight: 600;
+  color: #1f2937;
+}
+
+.mode-card p {
+  margin: 0 0 1rem 0;
+  color: #6b7280;
+  line-height: 1.5;
+}
+
+.login-required {
+  background: #fefce8;
+  color: #d97706;
+  padding: 0.25rem 0.75rem;
+  border-radius: 12px;
+  font-size: 0.75rem;
+  font-weight: 500;
+}
+
+/* 章节标题样式 */
+.section-header {
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  margin-bottom: 2rem;
+  position: relative;
+}
+
+.section-header h2 {
+  margin: 0 0 0.5rem 0;
+  font-size: 1.5rem;
+  font-weight: 600;
+  color: #1f2937;
+}
+
+.section-header p {
+  margin: 0;
+  color: #6b7280;
+  font-size: 0.9rem;
+}
+
+.section-header .back-button-small {
+  position: absolute;
+  left: 0;
+  top: 0;
+}
+
+/* 学科选择部分 */
+.subject-selection-section {
+  background: white;
+  border-radius: 12px;
+  padding: 2rem;
+  box-shadow: 0 4px 20px rgba(0, 0, 0, 0.1);
+}
+
+.subject-options {
+  display: grid;
+  grid-template-columns: repeat(auto-fit, minmax(300px, 1fr));
+  gap: 1.5rem;
+}
+
+.subject-card {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  padding: 1.5rem;
+  border: 2px solid #e5e7eb;
+  border-radius: 12px;
+  cursor: pointer;
+  transition: all 0.3s;
+  background: white;
+}
+
+.subject-card:hover {
+  border-color: #409eff;
+  background: #f9fafb;
+  transform: translateY(-2px);
+  box-shadow: 0 4px 12px rgba(64, 158, 255, 0.1);
+}
+
+.subject-card.selected {
+  border-color: #409eff;
+  background: linear-gradient(135deg, #f0f9ff 0%, #e0f2fe 100%);
+}
+
+.subject-info h3 {
+  margin: 0 0 0.5rem 0;
+  font-size: 1.25rem;
+  font-weight: 600;
+  color: #1f2937;
+}
+
+.subject-info p {
+  margin: 0;
+  color: #6b7280;
+  font-size: 0.875rem;
+}
+
+.subject-action {
+  color: #6b7280;
+  transition: color 0.3s;
+}
+
+.subject-card:hover .subject-action {
+  color: #409eff;
+}
+
+/* 模式选择部分 */
+.mode-selection-section {
+  background: white;
+  border-radius: 12px;
+  padding: 2rem;
+  box-shadow: 0 4px 20px rgba(0, 0, 0, 0.1);
 }
 
 .guest-notice {
@@ -1705,8 +2297,13 @@ export default {
 }
 
 .action-button.secondary {
-  background: #f3f4f6;
-  color: #374151;
+  background: #6c757d;
+  color: white;
+}
+
+.action-button.danger {
+  background: linear-gradient(135deg, #ff4d4f 0%, #ff7875 100%);
+  color: white;
 }
 
 .action-button:hover:not(:disabled) {

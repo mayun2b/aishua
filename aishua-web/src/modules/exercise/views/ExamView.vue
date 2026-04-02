@@ -723,7 +723,7 @@ export default {
     
     const goToHome = () => {
       showResult.value = false;
-      router.push('/dashboard');
+      router.push('/exercise');
     };
     
 
