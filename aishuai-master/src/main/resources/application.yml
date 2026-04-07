@@ -1,0 +1,62 @@
+server:
+  port: 8081 # 后端端口
+
+spring:
+  # 多数据源配置
+  datasource:
+    # MySQL主数据源（存储业务数据）
+    primary:
+      jdbc-url: jdbc:mysql://localhost:3306/aishuai?useSSL=false&allowPublicKeyRetrieval=true
+      username: root
+      password: root
+      driver-class-name: com.mysql.cj.jdbc.Driver
+    # PostgreSQL向量数据源（用于向量化分析）
+    vector:
+      jdbc-url: jdbc:postgresql://172.30.110.131:5432/brush_db
+      username: postgres
+      password: root
+      driver-class-name: org.postgresql.Driver
+  # Redis配置
+  redis:
+    host: localhost
+    port: 6379
+    timeout: 2000ms
+    lettuce:
+      pool:
+        max-active: 8
+        max-idle: 8
+        min-idle: 0
+        max-wait: -1ms
+  # 日期格式化
+  jackson:
+    date-format: yyyy-MM-dd HH:mm:ss
+    time-zone: GMT+8
+
+# AI 服务配置
+ai:
+  # 智谱AI（用于向量生成）
+  zhipu:
+    embedding-api: https://open.bigmodel.cn/api/paas/v4/embeddings
+    api-key: 29dca5d253234978a022637f1743e5c9.1mT1SGEBqXvqJD8O
+    model: embedding-2
+
+  # 阿里云qwen3.5-flash（用于答疑讲解）
+  qwen:
+    api-url: https://dashscope.aliyuncs.com/api/v1/services/aigc/text-generation/generation
+    api-key: sk-e61dc444fb6f4503965af827b50a4ab0
+    model: qwen3.5-flash
+
+# MyBatis Plus 配置
+mybatis-plus:
+  configuration:
+    map-underscore-to-camel-case: true # 下划线转驼峰
+    log-impl: org.apache.ibatis.logging.stdout.StdOutImpl # 打印 SQL 日志
+  global-config:
+    db-config:
+      logic-delete-field: deleted
+      logic-delete-value: 1
+      logic-not-delete-value: 0
+      # 自动建表
+      id-type: auto
+  # 自动建表配置
+  mapper-locations: classpath*:mapper/**/*.xml
