@@ -34,7 +34,7 @@
               <div class="stat-label">总做题数</div>
             </div>
             <div class="stat-item">
-              <div class="stat-number">{{ stats?.correctRate || 0 }}%</div>
+              <div class="stat-number">{{ (stats?.correctRate || 0).toFixed(1) }}%</div>
               <div class="stat-label">正确率</div>
             </div>
             <div class="stat-item">

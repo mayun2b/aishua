@@ -1,16 +1,89 @@
 <template>
   <div class="exam-container">
-    <!-- 考试模式选择页面 -->
-    <div v-if="!examStarted" class="mode-select-page">
-      <van-nav-bar
-        title="选择考试模式"
-        left-arrow
-        @click-left="goBack"
-      />
+    <!-- 流程进度指示器 -->
+    <div class="progress-indicator" v-if="examState !== 'exam'">
+      <div class="progress-step" :class="{ active: examState === 'subject-selection', completed: examState !== 'subject-selection' }">
+        <div class="step-number">{{ examState !== 'subject-selection' ? '✓' : '1' }}</div>
+        <div class="step-label">选择学科</div>
+      </div>
+      <div class="progress-line"></div>
+      <div class="progress-step" :class="{ active: examState === 'mode-selection', completed: examState === 'config' || examState === 'exam' }">
+        <div class="step-number">{{ examState === 'mode-selection' ? '2' : examState === 'subject-selection' ? '2' : '✓' }}</div>
+        <div class="step-label">选择模式</div>
+      </div>
+      <div class="progress-line"></div>
+      <div class="progress-step" :class="{ active: examState === 'config', completed: examState === 'exam' }">
+        <div class="step-number">{{ examState === 'config' ? '3' : examState === 'subject-selection' || examState === 'mode-selection' ? '3' : '✓' }}</div>
+        <div class="step-label">配置考试</div>
+      </div>
+    </div>
+
+    <!-- 第一步：选择学科 -->
+    <div v-if="examState === 'subject-selection'" class="page-container">
+      <div class="page-header">
+        <button class="back-button" @click="goBack">
+          <svg width="20" height="20" viewBox="0 0 24 24" fill="none" xmlns="http://www.w3.org/2000/svg">
+            <path d="M19 12H5" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"/>
+            <path d="M12 19L5 12L12 5" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"/>
+          </svg>
+          返回
+        </button>
+        <h1>选择考试学科</h1>
+        <div class="header-right"></div>
+      </div>
       
-      <div class="mode-select-content">
-        <h2>选择考试模式</h2>
+      <div class="page-content">
+        <div class="section-header">
+          <h2>请选择学科</h2>
+          <p>选择学科后才能进行考试</p>
+        </div>
         
+        <div class="subject-options">
+          <div 
+            v-for="subject in subjectOptions" 
+            :key="subject.value"
+            :class="{ selected: configForm.subjectId === subject.value }"
+            @click="selectSubject(subject.value)"
+            class="subject-card"
+          >
+            <div class="subject-icon">
+              <svg width="48" height="48" viewBox="0 0 24 24" fill="none" xmlns="http://www.w3.org/2000/svg">
+                <path d="M12 2L2 7L12 12L22 7L12 2Z" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"/>
+                <path d="M2 17L12 22L22 17" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"/>
+                <path d="M2 12L12 17L22 12" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"/>
+              </svg>
+            </div>
+            <div class="subject-info">
+              <h3>{{ subject.text }}</h3>
+              <p>点击选择此学科</p>
+            </div>
+            <div class="subject-action">
+              <svg width="24" height="24" viewBox="0 0 24 24" fill="none" xmlns="http://www.w3.org/2000/svg">
+                <path d="M9 18L15 12L9 6" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"/>
+              </svg>
+            </div>
+          </div>
+        </div>
+      </div>
+    </div>
+    
+    <!-- 第二步：选择考试模式 -->
+    <div v-else-if="examState === 'mode-selection'" class="page-container">
+      <div class="page-header">
+        <button class="back-button" @click="goBackToSubject">
+          <svg width="20" height="20" viewBox="0 0 24 24" fill="none" xmlns="http://www.w3.org/2000/svg">
+            <path d="M19 12H5" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"/>
+            <path d="M12 19L5 12L12 5" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"/>
+          </svg>
+          返回
+        </button>
+        <h1>选择考试模式</h1>
+        <div class="header-right">
+          <span class="selected-subject-info">当前学科：{{ subjectOptions.find(s => s.value === configForm.subjectId)?.text }}</span>
+        </div>
+      </div>
+      
+      <div class="page-content">
         <div v-if="!isLoggedIn" class="guest-notice">
           <p>您当前是游客模式，无法参加考试，请先登录。</p>
           <van-button type="primary" size="small" @click="goToLogin">立即登录</van-button>
@@ -32,26 +105,46 @@
             </template>
           </van-card>
         </div>
-        
-        <div class="config-section" v-if="selectedMode">
-          <van-form>
-            <van-field label="题目分类">
-              <template #input>
-                <van-dropdown-menu>
-                  <van-dropdown-item 
-                    v-model="configForm.categoryId" 
-                    :options="categoryOptions"
-                    placeholder="选择分类"
-                  />
-                </van-dropdown-menu>
-              </template>
-            </van-field>
-          </van-form>
-          
-          <van-button type="primary" block @click="startExam" :loading="loading" :disabled="!isLoggedIn">
-            开始考试
-          </van-button>
+      </div>
+    </div>
+    
+    <!-- 第三步：配置考试 -->
+    <div v-else-if="examState === 'config'" class="page-container">
+      <div class="page-header">
+        <button class="back-button" @click="goBackToMode">
+          <svg width="20" height="20" viewBox="0 0 24 24" fill="none" xmlns="http://www.w3.org/2000/svg">
+            <path d="M19 12H5" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"/>
+            <path d="M12 19L5 12L12 5" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"/>
+          </svg>
+          返回
+        </button>
+        <h1>配置考试</h1>
+        <div class="header-right">
+          <span class="selected-subject-info">当前学科：{{ subjectOptions.find(s => s.value === configForm.subjectId)?.text }}</span>
         </div>
+      </div>
+      
+      <div class="page-content">
+        <div class="mode-info">
+          <h3>{{ examModes.find(m => m.value === selectedMode)?.label }}</h3>
+          <p>{{ examModes.find(m => m.value === selectedMode)?.description }}</p>
+        </div>
+        
+        <div class="config-grid">
+          <div class="config-item">
+            <label>知识点分类</label>
+            <select v-model="configForm.categoryId" class="config-select">
+              <option value="">选择知识点</option>
+              <option v-for="option in categoryOptions" :key="option.value" :value="option.value">
+                {{ option.text }}
+              </option>
+            </select>
+          </div>
+        </div>
+        
+        <van-button type="primary" block @click="startExam" :loading="loading" :disabled="!isLoggedIn">
+          开始考试
+        </van-button>
       </div>
     </div>
     
@@ -267,7 +360,7 @@
 <script>
 import { ref, reactive, onMounted, computed, watch, onUnmounted } from 'vue';
 import { useRouter } from 'vue-router';
-import { getRandomQuestions, getAllCategories, batchSubmitAnswers as batchSubmitAnswersApi, saveExamRecord } from '../api/exercise';
+import { getRandomQuestions, getAllCategories, getCategoriesBySubjectId, getAllSubjects, batchSubmitAnswers as batchSubmitAnswersApi, saveExamRecord } from '../api/exercise';
 import { showToast, Dialog } from 'vant';
 import { parseQuestionOptions, getQuestionTypeText, calculateTimeCost, getCurrentSubmitAnswer, formatDateTime, getGradeInfo, formatTime } from '../utils/questionUtils';
 
@@ -276,8 +369,8 @@ export default {
   setup() {
     const router = useRouter();
     
-    // 考试模式选择相关
-    const examStarted = ref(false);
+    // 考试流程状态管理
+    const examState = ref('subject-selection'); // subject-selection, mode-selection, config, exam
     const selectedMode = ref(null);
     const loading = ref(false);
     const isLoggedIn = ref(!!localStorage.getItem('token'));
@@ -288,6 +381,7 @@ export default {
       isLoggedIn.value = !!token;
     };
     const configForm = reactive({
+      subjectId: null,
       categoryId: null
     });
     
@@ -319,6 +413,9 @@ export default {
     // 题目分类选项
     const categoryOptions = ref([]);
     
+    // 学科选项
+    const subjectOptions = ref([]);
+    
     // 从后端获取的真实数据
     const questions = ref([]);
     const currentQuestionIndex = ref(0);
@@ -347,11 +444,19 @@ export default {
 
 
     // 加载题目分类
-    const loadCategories = async () => {
+    const loadCategories = async (subjectId = null) => {
       try {
-        const response = await getAllCategories();
+        let response;
+        if (subjectId) {
+          // 如果指定了学科ID，只加载该学科的分类
+          response = await getCategoriesBySubjectId(subjectId);
+        } else {
+          // 否则加载所有分类
+          response = await getAllCategories();
+        }
+        
         if (response && response.code === 200) {
-          categoryOptions.value = (response.data || []).map(category => ({
+          categoryOptions.value = (response.data || []).filter(category => category != null).map(category => ({
             text: category.name,
             value: category.id
           }));
@@ -359,6 +464,22 @@ export default {
       } catch (error) {
         console.error('加载题目分类失败:', error);
         showToast('加载题目分类失败');
+      }
+    };
+    
+    // 加载学科
+    const loadSubjects = async () => {
+      try {
+        const response = await getAllSubjects();
+        if (response && response.code === 200) {
+          subjectOptions.value = (response.data || []).filter(subject => subject != null).map(subject => ({
+            text: subject.name,
+            value: subject.id
+          }));
+        }
+      } catch (error) {
+        console.error('加载学科失败:', error);
+        showToast('加载学科失败');
       }
     };
     
@@ -419,11 +540,38 @@ export default {
     
     const selectMode = (mode) => {
       selectedMode.value = mode;
+      // 切换到配置页面
+      examState.value = 'config';
+    };
+    
+    // 选择学科
+    const selectSubject = async (subjectId) => {
+      configForm.subjectId = subjectId;
+      // 保存到本地存储
+      localStorage.setItem('selectedSubjectId', subjectId);
+      // 加载该学科的分类
+      await loadCategories(subjectId);
+      // 切换到模式选择页面
+      examState.value = 'mode-selection';
+    };
+    
+    // 返回上一步
+    const goBackToSubject = () => {
+      examState.value = 'subject-selection';
+    };
+
+    const goBackToMode = () => {
+      examState.value = 'mode-selection';
     };
     
     const startExam = async () => {
       if (!selectedMode.value) {
         showToast('请选择考试模式');
+        return;
+      }
+
+      if (!configForm.subjectId) {
+        showToast('请选择学科');
         return;
       }
 
@@ -437,7 +585,8 @@ export default {
         const modeConfig = examModes.find(m => m.value === selectedMode.value);
         const params = {
           count: modeConfig.questionCount,
-          exerciseMode: 2 // 随机模式
+          exerciseMode: 2, // 随机模式
+          subjectId: configForm.subjectId
         };
 
         if (configForm.categoryId) {
@@ -449,7 +598,7 @@ export default {
         
         if (questions.value.length > 0) {
           // 开始考试
-          examStarted.value = true;
+          examState.value = 'exam';
           // 重置考试状态
           currentQuestionIndex.value = 0;
           selectedAnswer.value = '';
@@ -735,8 +884,8 @@ export default {
     onMounted(async () => {
       // 检查登录状态
       checkLoginStatus();
-      // 加载题目分类
-      await loadCategories();
+      // 加载学科
+      await loadSubjects();
     });
     
     onUnmounted(() => {
@@ -747,18 +896,22 @@ export default {
     });
     
     return {
-      // 考试模式选择相关
-      examStarted,
+      // 考试流程相关
+      examState,
       selectedMode,
       loading,
       isLoggedIn,
       configForm,
       examModes,
       categoryOptions,
+      subjectOptions,
       selectMode,
+      selectSubject,
       startExam,
       goToLogin,
       checkLoginStatus,
+      goBackToSubject,
+      goBackToMode,
       
       // 考试相关
       currentQuestion,
@@ -797,6 +950,244 @@ export default {
   min-height: 100vh;
   background: linear-gradient(135deg, #f8f9fa 0%, #e9ecef 100%);
   padding-bottom: 100px;
+}
+
+/* 进度指示器样式 */
+.progress-indicator {
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  padding: 20px;
+  background: white;
+  box-shadow: 0 2px 8px rgba(0, 0, 0, 0.1);
+}
+
+.progress-step {
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  position: relative;
+}
+
+.step-number {
+  width: 40px;
+  height: 40px;
+  border-radius: 50%;
+  background: #e0e0e0;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  font-weight: 600;
+  color: #666;
+  margin-bottom: 8px;
+  transition: all 0.3s;
+}
+
+.step-label {
+  font-size: 12px;
+  color: #666;
+}
+
+.progress-step.active .step-number {
+  background: #1989fa;
+  color: white;
+}
+
+.progress-step.completed .step-number {
+  background: #52c41a;
+  color: white;
+}
+
+.progress-line {
+  width: 80px;
+  height: 2px;
+  background: #e0e0e0;
+  margin: 0 20px;
+}
+
+/* 页面容器样式 */
+.page-container {
+  min-height: 100vh;
+}
+
+.page-header {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  padding: 16px;
+  background: white;
+  box-shadow: 0 2px 8px rgba(0, 0, 0, 0.1);
+}
+
+.back-button {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  padding: 8px 12px;
+  border: none;
+  background: none;
+  color: #666;
+  cursor: pointer;
+  font-size: 14px;
+}
+
+.back-button:hover {
+  color: #1989fa;
+}
+
+.page-header h1 {
+  font-size: 18px;
+  font-weight: 600;
+  margin: 0;
+}
+
+.header-right {
+  font-size: 12px;
+  color: #666;
+}
+
+.selected-subject-info {
+  background: #f0f9ff;
+  color: #1989fa;
+  padding: 4px 8px;
+  border-radius: 4px;
+}
+
+.page-content {
+  padding: 20px;
+}
+
+.section-header {
+  text-align: center;
+  margin-bottom: 30px;
+}
+
+.section-header h2 {
+  font-size: 24px;
+  font-weight: 700;
+  color: #333;
+  margin-bottom: 8px;
+}
+
+.section-header p {
+  color: #666;
+  font-size: 14px;
+}
+
+/* 学科选项样式 */
+.subject-options {
+  display: grid;
+  grid-template-columns: repeat(auto-fill, minmax(280px, 1fr));
+  gap: 20px;
+}
+
+.subject-card {
+  background: white;
+  padding: 20px;
+  border-radius: 8px;
+  box-shadow: 0 2px 8px rgba(0, 0, 0, 0.1);
+  display: flex;
+  align-items: center;
+  gap: 16px;
+  cursor: pointer;
+  transition: all 0.3s;
+}
+
+.subject-card:hover {
+  transform: translateY(-5px);
+  box-shadow: 0 8px 16px rgba(0, 0, 0, 0.15);
+}
+
+.subject-card.selected {
+  border: 2px solid #1989fa;
+}
+
+.subject-icon {
+  width: 48px;
+  height: 48px;
+  background: #f0f9ff;
+  border-radius: 8px;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  color: #1989fa;
+}
+
+.subject-info {
+  flex: 1;
+}
+
+.subject-info h3 {
+  font-size: 16px;
+  font-weight: 600;
+  color: #333;
+  margin: 0 0 4px 0;
+}
+
+.subject-info p {
+  font-size: 12px;
+  color: #666;
+  margin: 0;
+}
+
+.subject-action {
+  color: #1989fa;
+}
+
+/* 模式信息样式 */
+.mode-info {
+  background: #f9f9f9;
+  padding: 16px;
+  border-radius: 8px;
+  margin-bottom: 20px;
+}
+
+.mode-info h3 {
+  font-size: 18px;
+  font-weight: 600;
+  color: #333;
+  margin: 0 0 8px 0;
+}
+
+.mode-info p {
+  font-size: 14px;
+  color: #666;
+  margin: 0;
+}
+
+/* 配置网格样式 */
+.config-grid {
+  display: grid;
+  gap: 20px;
+  margin-bottom: 30px;
+}
+
+.config-item {
+  background: white;
+  padding: 16px;
+  border-radius: 8px;
+  box-shadow: 0 2px 8px rgba(0, 0, 0, 0.1);
+}
+
+.config-item label {
+  display: block;
+  font-size: 14px;
+  font-weight: 600;
+  color: #333;
+  margin-bottom: 8px;
+}
+
+.config-select {
+  width: 100%;
+  padding: 10px;
+  border: 1px solid #ddd;
+  border-radius: 4px;
+  font-size: 14px;
+}
+
+.config-select:focus {
+  outline: none;
+  border-color: #1989fa;
 }
 
 /* 考试模式选择页面样式 */
