@@ -1,12 +1,16 @@
 import { createApp } from 'vue'
 import App from './App.vue'
 import router from './router'
-import * as vant from 'vant';
-import 'vant/lib/index.css';
+import store from './store'
+import 'vant/lib/index.css'
 
-const app = createApp(App)
-app.use(router)
-// 批量注册Vant组件
-app.use(vant);
+async function bootstrap() {
+  await store.dispatch('auth/bootstrap')
 
-app.mount('#app')
+  const app = createApp(App)
+  app.use(store)
+  app.use(router)
+  app.mount('#app')
+}
+
+bootstrap()

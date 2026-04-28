@@ -134,125 +134,14 @@
             </div>
           </div>
           
-          <div class="hero-tech-showcase">
-            <div class="tech-showcase-card">
-              <div class="tech-showcase-header">
-                <h3>RAG技术架构</h3>
-                <div class="tech-status">
-                  <div class="status-pulse"></div>
-                  <span>高性能运行</span>
-                </div>
-              </div>
-              
-              <div class="tech-architecture">
-                <div class="tech-flow">
-                  <div class="tech-step vector-db">
-                    <div class="step-icon">🗄️</div>
-                    <div class="step-content">
-                      <h4>向量数据库</h4>
-                      <p>存储知识点向量，精准检索匹配</p>
-                    </div>
-                  </div>
-                  
-                  <div class="tech-connector"></div>
-                  
-                  <div class="tech-step embedding">
-                    <div class="step-icon">🔍</div>
-                    <div class="step-content">
-                      <h4>Embedding</h4>
-                      <p>文本向量化，相似度计算</p>
-                    </div>
-                  </div>
-                  
-                  <div class="tech-connector"></div>
-                  
-                  <div class="tech-step llm">
-                    <div class="step-icon">🤖</div>
-                    <div class="step-content">
-                      <h4>大模型</h4>
-                      <p>智能生成针对性练习题目</p>
-                    </div>
-                  </div>
-                  
-                  <div class="tech-connector"></div>
-                  
-                  <div class="tech-step rag">
-                    <div class="step-icon">🔄</div>
-                    <div class="step-content">
-                      <h4>RAG融合</h4>
-                      <p>检索增强生成，知识点强化</p>
-                    </div>
-                  </div>
-                </div>
-              </div>
-              
-              <div class="tech-features">
-                <div class="feature-item">
-                  <div class="feature-content">
-                    <h4>精准匹配</h4>
-                    <p>智能识别知识点需求</p>
-                  </div>
-                </div>
-                <div class="feature-item">
-                  <div class="feature-content">
-                    <h4>高效学习</h4>
-                    <p>针对性强化薄弱环节</p>
-                  </div>
-                </div>
-                <div class="feature-item">
-                  <div class="feature-content">
-                    <h4>智能优化</h4>
-                    <p>实时调整学习策略</p>
-                  </div>
-                </div>
-              </div>
-            </div>
-          </div>
+
         </div>
         
 
       </div>
     </section>
-    <section id="platform" class="features-section">
-      <div class="container">
-        <div class="section-header">
-          <h2 class="section-title">平台定位</h2>
-          <p class="section-description">基于RAG+大模型的智能知识点强化系统</p>
-        </div>
-        <div class="features-grid">
-          <div class="feature-card" v-for="(feature, index) in features" :key="index" :data-index="index">
-            <div class="feature-icon">
-              <component :is="feature.icon" />
-            </div>
-            <h3 class="feature-title">{{ feature.title }}</h3>
-            <p class="feature-description">{{ feature.description }}</p>
-            <div class="feature-glow"></div>
-          </div>
-        </div>
-      </div>
-    </section>
-    <section id="capabilities" class="process-section">
-      <div class="container">
-        <div class="section-header">
-          <h2 class="section-title">能力矩阵</h2>
-          <p class="section-description">全方位的AI智能学习能力体系</p>
-        </div>
-        <div class="process-container">
-          <div class="process-step" v-for="(step, index) in processSteps" :key="index" :data-step="index">
-            <div class="step-number">
-              <span>{{ index + 1 }}</span>
-              <div class="number-glow"></div>
-            </div>
-            <h3 class="step-title">{{ step.title }}</h3>
-            <p class="step-description">{{ step.description }}</p>
-            <div class="step-visual">
-              <component :is="step.icon" />
-            </div>
-          </div>
-          <div class="process-connector"></div>
-        </div>
-      </div>
-    </section>
+
+
 
     <section id="advantages" class="advantages-section">
       <div class="container">
@@ -388,80 +277,16 @@ import { onMounted, ref, onUnmounted } from 'vue'
 const router = useRouter()
 const isScrolled = ref(false)
 
-const features = ref([
-  {
-    title: 'AI知识点检测',
-    description: '通过RAG技术精准分析学习数据，智能识别知识点盲区，找出您的薄弱环节。',
-    icon: {
-      template: '<svg width="48" height="48" viewBox="0 0 24 24" fill="none" xmlns="http://www.w3.org/2000/svg"><path d="M12 2L2 7L12 12L22 7L12 2Z" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"/><path d="M2 17L12 22L22 17" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"/><path d="M2 12L12 17L22 12" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"/></svg>'
-    }
-  },
-  {
-    title: '智能出题策略',
-    description: '基于向量数据库和大模型，智能生成针对性题目，精准补漏，提高学习效率。',
-    icon: {
-      template: '<svg width="48" height="48" viewBox="0 0 24 24" fill="none" xmlns="http://www.w3.org/2000/svg"><path d="M14 2H6C4.89543 2 4 2.89543 4 4V20C4 21.1046 4.89543 22 6 22H18C19.1046 22 20 21.1046 20 20V8L14 2Z" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"/><path d="M14 2V8H20" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"/><path d="M16 13H8" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"/><path d="M16 17H8" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"/><path d="M10 9H8" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"/></svg>'
-    }
-  },
-  {
-    title: '实时学习分析',
-    description: '实时跟踪学习进度，生成详细的学习报告，动态调整出题难度和策略。',
-    icon: {
-      template: '<svg width="48" height="48" viewBox="0 0 24 24" fill="none" xmlns="http://www.w3.org/2000/svg"><path d="M18 20V10" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"/><path d="M12 20V4" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"/><path d="M6 20V14" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"/></svg>'
-    }
-  },
-  {
-    title: '智能错题本',
-    description: '自动收集错题，AI分析错误原因，推荐相关知识点练习，强化薄弱环节。',
-    icon: {
-      template: '<svg width="48" height="48" viewBox="0 0 24 24" fill="none" xmlns="http://www.w3.org/2000/svg"><path d="M10.29 3.86L1.82 18a2 2 0 0 0 1.71 3h16.94a2 2 0 0 0 1.71-3L13.71 3.86a2 2 0 0 0-3.42 0z" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"/><line x1="12" y1="9" x2="12" y2="13" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"/><line x1="12" y1="17" x2="12.01" y2="17" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"/></svg>'
-    }
-  },
-  {
-    title: '个性化学习路径',
-    description: '根据学习情况动态调整学习路径，智能推荐最优学习策略和题目。',
-    icon: {
-      template: '<svg width="48" height="48" viewBox="0 0 24 24" fill="none" xmlns="http://www.w3.org/2000/svg"><path d="M12 8v4l3 3m6-3a9 9 0 1 1-18 0 9 9 0 0 1 18 0z" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"/></svg>'
-    }
-  },
-  {
-    title: '多维度数据分析',
-    description: '从正确率、答题时间、知识点掌握度等多个维度进行深度分析。',
-    icon: {
-      template: '<svg width="48" height="48" viewBox="0 0 24 24" fill="none" xmlns="http://www.w3.org/2000/svg"><path d="M22 10v6M2 10l10-5 10 5-10 5z" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"/><path d="M6 12v5c3 3 9 3 12 0v-5" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"/></svg>'
-    }
+const getStoredUser = () => {
+  try {
+    const rawUser = localStorage.getItem('user')
+    return rawUser ? JSON.parse(rawUser) : null
+  } catch (error) {
+    return null
   }
-])
-const processSteps = ref([
-  {
-    title: 'AI知识检测',
-    description: 'AI系统分析您的学习数据，精准识别知识点盲区',
-    icon: {
-      template: '<svg width="48" height="48" viewBox="0 0 24 24" fill="none" xmlns="http://www.w3.org/2000/svg"><circle cx="12" cy="12" r="10" stroke="currentColor" stroke-width="2"/><line x1="12" y1="8" x2="12" y2="12" stroke="currentColor" stroke-width="2" stroke-linecap="round"/><line x1="12" y1="16" x2="12.01" y2="16" stroke="currentColor" stroke-width="2" stroke-linecap="round"/></svg>'
-    }
-  },
-  {
-    title: '智能出题',
-    description: '基于盲区分析，智能生成针对性题目，精准补漏',
-    icon: {
-      template: '<svg width="48" height="48" viewBox="0 0 24 24" fill="none" xmlns="http://www.w3.org/2000/svg"><path d="M21 12h-4l-3 9L9 3l-3 9H3" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"/></svg>'
-    }
-  },
-  {
-    title: '强化练习',
-    description: '针对性练习薄弱知识点，实时反馈学习效果',
-    icon: {
-      template: '<svg width="48" height="48" viewBox="0 0 24 24" fill="none" xmlns="http://www.w3.org/2000/svg"><polygon points="12 2 15.09 8.26 22 9.27 17 14.14 18.18 21.02 12 17.77 5.82 21.02 7 14.14 2 9.27 8.91 8.26 12 2" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"/></svg>'
-    }
-  },
-  {
-    title: '知识巩固',
-    description: 'AI持续优化学习路径，确保知识点完全掌握',
-    icon: {
-      template: '<svg width="48" height="48" viewBox="0 0 24 24" fill="none" xmlns="http://www.w3.org/2000/svg"><path d="M22 11.08V12a10 10 0 1 1-5.93-9.14" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"/><polyline points="22 4 12 14.01 9 11.01" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"/></svg>'
-    }
-  }
-])
+}
+
+
 
 const goToLogin = () => {
   router.push('/login')
@@ -471,16 +296,18 @@ const goToRegister = () => {
 }
 const goToExercise = () => {
   const token = localStorage.getItem('token')
+  const user = getStoredUser()
   if (token) {
-    router.push('/exercise')
+    router.push(user?.isAdmin === 1 ? '/admin' : '/dashboard')
   } else {
     router.push('/login')
   }
 }
 const goToDashboard = () => {
   const token = localStorage.getItem('token')
+  const user = getStoredUser()
   if (token) {
-    router.push('/exercise')
+    router.push(user?.isAdmin === 1 ? '/admin' : '/dashboard')
   } else {
     router.push('/login')
   }
@@ -491,87 +318,9 @@ const goToHome = () => {
 const handleScroll = () => {
   isScrolled.value = window.scrollY > 50
 }
-const initBackgroundAnimation = () => {
-  const canvas = document.getElementById('background-canvas')
-  if (!canvas) return
-  const ctx = canvas.getContext('2d')
-  canvas.width = window.innerWidth
-  canvas.height = window.innerHeight
-  const particles = []
-  const connections = []
-  class Particle {
-    constructor() {
-      this.x = Math.random() * canvas.width
-      this.y = Math.random() * canvas.height
-      this.size = Math.random() * 3 + 1
-      this.speedX = Math.random() * 0.5 - 0.25
-      this.speedY = Math.random() * 0.5 - 0.25
-      this.color = `rgba(${Math.random() * 100 + 155}, ${Math.random() * 100 + 155}, ${Math.random() * 255}, ${Math.random() * 0.5 + 0.5})`
-    }
-    update() {
-      this.x += this.speedX
-      this.y += this.speedY
-      if (this.x > canvas.width) this.x = 0
-      if (this.x< 0) this.x = canvas.width
-      if (this.y >canvas.height) this.y = 0
-      if (this.y< 0) this.y = canvas.height
-    }
-    draw() {
-      ctx.fillStyle = this.color
-      ctx.beginPath()
-      ctx.arc(this.x, this.y, this.size, 0, Math.PI * 2)
-      ctx.fill()
-    }
-  }
-  const createParticles = () =>{
-    for (let i = 0; i< 100; i++) {
-      particles.push(new Particle())
-    }
-  }
-  const connectParticles = () =>{
-    connections.length = 0
-    for (let i = 0; i < particles.length; i++) {
-      for (let j = i + 1; j < particles.length; j++) {
-        const dx = particles[i].x - particles[j].x
-        const dy = particles[i].y - particles[j].y
-        const distance = Math.sqrt(dx * dx + dy * dy)
-        if (distance < 100) {
-          connections.push({
-            p1: particles[i],
-            p2: particles[j],
-            opacity: 1 - distance / 100
-          })
-        }
-      }
-    }
-  }
-  const animate = () => {
-    ctx.clearRect(0, 0, canvas.width, canvas.height)
-    particles.forEach(particle => {
-      particle.update()
-      particle.draw()
-    })
-    connectParticles()
-    connections.forEach(connection => {
-      ctx.strokeStyle = `rgba(255, 255, 255, ${connection.opacity * 0.2})`
-      ctx.lineWidth = 0.5
-      ctx.beginPath()
-      ctx.moveTo(connection.p1.x, connection.p1.y)
-      ctx.lineTo(connection.p2.x, connection.p2.y)
-      ctx.stroke()
-    })
-    requestAnimationFrame(animate)
-  }
-  createParticles()
-  animate()
-  window.addEventListener('resize', () => {
-    canvas.width = window.innerWidth
-    canvas.height = window.innerHeight
-  })
-}
-
 const initScrollAnimations = () => {
-  const animateElements = document.querySelectorAll('.feature-card, .process-step')
+  // 简化的滚动动画，只保留基本的淡入效果
+  const animateElements = document.querySelectorAll('.advantage-card, .scenario-card')
   const observer = new IntersectionObserver((entries) => {
     entries.forEach(entry => {
       if (entry.isIntersecting) {
@@ -582,14 +331,13 @@ const initScrollAnimations = () => {
   }, { threshold: 0.1 })
   animateElements.forEach(el => {
     el.style.opacity = '0'
-    el.style.transform = 'translateY(30px)'
-    el.style.transition = 'opacity 0.6s ease, transform 0.6s ease'
+    el.style.transform = 'translateY(20px)'
+    el.style.transition = 'opacity 0.5s ease, transform 0.5s ease'
     observer.observe(el)
   })
 }
 onMounted(() => {
   window.addEventListener('scroll', handleScroll)
-  initBackgroundAnimation()
   initScrollAnimations()
 })
 onUnmounted(() => {
@@ -1286,74 +1034,6 @@ onUnmounted(() => {
   gap: 1.5rem;
   flex-wrap: wrap;
 }
-.animated-badge {
-  animation: badgePulse 2s ease-in-out infinite;
-}
-@keyframes badgePulse {
-  0%, 100% { 
-    transform: scale(1); 
-    box-shadow: 0 0 20px rgba(59, 130, 246, 0.3);
-  }
-  50% { 
-    transform: scale(1.05); 
-    box-shadow: 0 0 30px rgba(59, 130, 246, 0.5);
-  }
-}
-.animated-title {
-  animation: titleFloat 3s ease-in-out infinite;
-}
-.title-main {
-  animation-delay: 0s;
-}
-.title-accent {
-  animation-delay: 1s;
-}
-@keyframes titleFloat {
-  0%, 100% { transform: translateY(0px); }
-  50% { transform: translateY(-5px); }
-}
-.animated-subtitle {
-  animation: subtitleGlow 4s ease-in-out infinite;
-}
-@keyframes subtitleGlow {
-  0%, 100% { 
-    text-shadow: 0 0 30px rgba(139, 92, 246, 0.4);
-  }
-  50% { 
-    text-shadow: 0 0 50px rgba(139, 92, 246, 0.8);
-  }
-}
-.animated-description {
-  animation: descriptionPulse 3s ease-in-out infinite;
-}
-@keyframes descriptionPulse {
-  0%, 100% { opacity: 0.9; }
-  50% { opacity: 1; }
-}
-.animated-feature {
-  animation: featureFloat 4s ease-in-out infinite;
-}
-.animated-feature[data-delay="0"] { animation-delay: 0s; }
-.animated-feature[data-delay="100"] { animation-delay: 0.5s; }
-.animated-feature[data-delay="200"] { animation-delay: 1s; }
-.animated-feature[data-delay="300"] { animation-delay: 1.5s; }
-@keyframes featureFloat {
-  0%, 100% { transform: translateY(0px); }
-  50% { transform: translateY(-3px); }
-}
-.animated-button {
-  animation: buttonGlow 2s ease-in-out infinite;
-}
-.btn-primary.animated-button { animation-delay: 0s; }
-.btn-secondary.animated-button { animation-delay: 1s; }
-@keyframes buttonGlow {
-  0%, 100% { 
-    box-shadow: var(--shadow-glow);
-  }
-  50% { 
-    box-shadow: var(--shadow-glow-hover);
-  }
-}
 .hero-particles-left {
   position: absolute;
   top: 0;
@@ -1367,61 +1047,37 @@ onUnmounted(() => {
   position: absolute;
   border-radius: 50%;
   background: var(--primary-gradient);
-  opacity: 0.6;
-  animation: particleFloat 6s ease-in-out infinite;
+  opacity: 0.4;
 }
 .particle-1 {
   width: 8px;
   height: 8px;
   top: 20%;
   left: 10%;
-  animation-delay: 0s;
 }
 .particle-2 {
   width: 12px;
   height: 12px;
   top: 40%;
   left: 80%;
-  animation-delay: 1s;
 }
 .particle-3 {
   width: 6px;
   height: 6px;
   top: 60%;
   left: 20%;
-  animation-delay: 2s;
 }
 .particle-4 {
   width: 10px;
   height: 10px;
   top: 80%;
   left: 70%;
-  animation-delay: 3s;
 }
 .particle-5 {
   width: 14px;
   height: 14px;
   top: 30%;
   left: 50%;
-  animation-delay: 4s;
-}
-@keyframes particleFloat {
-  0%, 100% { 
-    transform: translate(0, 0) rotate(0deg);
-    opacity: 0.6;
-  }
-  25% { 
-    transform: translate(10px, -10px) rotate(90deg);
-    opacity: 0.8;
-  }
-  50% { 
-    transform: translate(0, -20px) rotate(180deg);
-    opacity: 1;
-  }
-  75% { 
-    transform: translate(-10px, -10px) rotate(270deg);
-    opacity: 0.8;
-  }
 }
 
 .hero-tech-showcase {
@@ -1814,66 +1470,6 @@ onUnmounted(() => {
   background: linear-gradient(90deg, rgba(59, 130, 246, 0.3), rgba(59, 130, 246, 0.8), rgba(59, 130, 246, 0.3));
   transform: translateY(-50%);
   z-index: -1;
-}
-.testimonials-section {
-  padding: 6rem 0;
-  background: linear-gradient(135deg, rgba(15, 23, 42, 0.8) 0%, rgba(30, 41, 59, 0.6) 100%);
-}
-.testimonials-slider {
-  display: grid;
-  grid-template-columns: repeat(auto-fit, minmax(350px, 1fr));
-  gap: 2rem;
-}
-.testimonial-card {
-  background: rgba(30, 41, 59, 0.5);
-  border: 1px solid rgba(59, 130, 246, 0.3);
-  border-radius: 20px;
-  padding: 2rem;
-  backdrop-filter: blur(10px);
-  transition: var(--transition);
-}
-.testimonial-card:hover {
-  background: rgba(59, 130, 246, 0.1);
-  border-color: rgba(59, 130, 246, 0.6);
-  transform: translateY(-4px);
-  box-shadow: 0 10px 30px rgba(59, 130, 246, 0.2);
-}
-.rating {
-  font-size: 1.2rem;
-  margin-bottom: 1.5rem;
-}
-.testimonial-text {
-  font-size: 1rem;
-  color: var(--text-secondary);
-  line-height: 1.6;
-  margin-bottom: 2rem;
-  font-style: italic;
-}
-.user-info {
-  display: flex;
-  align-items: center;
-  gap: 1rem;
-}
-.user-avatar {
-  width: 48px;
-  height: 48px;
-  background: var(--primary-gradient);
-  border-radius: 50%;
-  display: flex;
-  align-items: center;
-  justify-content: center;
-  color: white;
-  font-size: 1.5rem;
-}
-.user-details h4 {
-  font-size: 1rem;
-  font-weight: 700;
-  color: var(--text-primary);
-  margin-bottom: 0.25rem;
-}
-.user-details p {
-  font-size: 0.85rem;
-  color: var(--text-secondary);
 }
 .advantages-section {
   padding: 6rem 0;
