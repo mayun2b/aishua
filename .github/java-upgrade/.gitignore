@@ -1,0 +1,11 @@
+@"
+node_modules/
+dist/
+build/
+.DS_Store
+*.log
+*.zip
+*.7z
+*.mp4
+*.avi
+"@ | Out-File -FilePath .gitignore -Encoding utf8

@@ -1,0 +1,327 @@
+# 数据库设计文档
+
+本文档与 `aishua.sql` 当前版本保持同步，适用于直接初始化 `aishua` 数据库。
+
+## 一、脚本说明
+
+当前 SQL 脚本已包含以下初始化动作：
+
+- 设置字符集：`SET NAMES utf8mb4`
+- 自动创建数据库：`CREATE DATABASE IF NOT EXISTS aishua`
+- 自动切换数据库：`USE aishua`
+- 导入前关闭外键检查，导入后恢复：`SET FOREIGN_KEY_CHECKS = 0/1`
+
+当前脚本还做了以下结构兼容处理：
+
+- `user` 表使用了反引号：`CREATE TABLE \`user\``
+- 重复外键名已拆分，避免 MySQL 执行报错
+- `options json` 不再声明 `DEFAULT NULL`
+- 非必须字段已尽量去除 `NOT NULL`
+
+## 二、整体结构
+
+当前共 19 张表，分为 7 个业务模块：
+
+1. 用户与学科
+2. 教材目录与考点标签
+3. 题目核心
+4. 练习模块
+5. 统计模块
+6. AI 生成题目
+7. 考试模块
+
+## 三、各表设计
+
+### 1. `user` 用户表
+
+- 用途：存储学员和管理员的基础账号信息
+- 主键：`id`
+- 关键字段：`phone`、`password`
+- 可选字段：`nickname`、`avatar`
+- 状态字段：`status`、`is_admin`、`deleted`
+
+说明：
+- `phone` 唯一，作为登录账号
+- `password` 用于存储加密后的密码
+- 该表名在 SQL 中使用反引号包裹
+
+### 2. `subject` 学科表
+
+- 用途：管理系统内所有学科
+- 主键：`id`
+- 关键字段：`name`、`code`
+- 可选字段：`description`、`icon`
+- 状态字段：`question_count`、`sort`、`is_enabled`、`deleted`
+
+说明：
+- `code` 唯一
+- `question_count` 为题目统计值
+
+### 3. `user_subject` 用户学科关系表
+
+- 用途：记录用户已加入的学科
+- 主键：`id`
+- 外键：`user_id -> user.id`，`subject_id -> subject.id`
+- 关键字段：`user_id`、`subject_id`
+- 可选字段：`joined_at`、`status`、`last_practice_at`、`sort`
+
+说明：
+- 一个用户可加入多个学科
+- `(user_id, subject_id)` 唯一
+
+### 4. `textbook_directory` 教材目录表
+
+- 用途：表示章节目录树
+- 主键：`id`
+- 关键字段：`name`、`subject_id`
+- 可选字段：`parent_id`、`sort`
+
+说明：
+- `parent_id` 默认 `0`，用于表示顶级目录
+- `idx_subject_parent(subject_id, parent_id)` 用于目录树查询
+
+### 5. `exam_tag` 考点标签表
+
+- 用途：管理题目的逻辑知识点标签
+- 主键：`id`
+- 关键字段：`name`、`subject_id`
+- 可选字段：`tag`
+
+说明：
+- `(subject_id, name)` 唯一
+- 可用于知识点分析和个性化推题
+
+### 6. `question` 题目表
+
+- 用途：存储官方题库题目
+- 主键：`id`
+- 外键：`directory_id -> textbook_directory.id`，`subject_id -> subject.id`
+- 关键字段：`title`、`type`、`answer`
+- 可选字段：`content`、`options`、`analysis`、`image_urls`、`image_desc`
+- 统计字段：`difficulty`、`correct_rate`、`do_count`、`deleted`
+
+说明：
+- `type` 约定：
+  - `1` 单选
+  - `2` 多选
+  - `3` 判断
+  - `4` 填空
+  - `5` 简答
+- `options` 使用 `json` 类型
+- `directory_id` 和 `subject_id` 可为空，删除关联对象时使用 `SET NULL`
+
+### 7. `question_tag_relation` 题目考点关联表
+
+- 用途：处理题目与考点的多对多关系
+- 主键：`id`
+- 外键：`question_id -> question.id`，`tag_id -> exam_tag.id`
+- 关键字段：`question_id`、`tag_id`
+
+说明：
+- `(question_id, tag_id)` 唯一
+
+### 8. `practice_session` 刷题会话表
+
+- 用途：记录一次完整刷题过程
+- 主键：`id`
+- 关键字段：`session_code`、`user_id`、`subject_id`、`practice_mode`
+- 过程字段：`question_count`、`answered_count`、`correct_count`、`wrong_count`、`total_time_cost`
+- 状态字段：`status`、`started_at`、`ended_at`
+
+说明：
+- `session_code` 唯一
+- `practice_mode` 约定：
+  - `1` 顺序
+  - `2` 随机
+  - `3` 错题重练
+  - `4` AI 强化
+
+### 9. `exercise_record` 练习记录表
+
+- 用途：记录用户每道题的练习作答日志
+- 主键：`id`
+- 外键：`user_id -> user.id`，`question_id -> question.id`
+- 关键字段：`user_id`、`question_id`
+- 可选字段：`session_ref_id`、`exercise_mode`、`user_answer`
+- 结果字段：`is_correct`、`time_cost`、`exercise_time`
+
+说明：
+- 这是练习流水表，不是考试记录表
+- 当前外键名已修正为：
+  - `fk_exercise_record_user`
+  - `fk_exercise_record_question`
+
+### 10. `wrong_question` 错题本表
+
+- 用途：记录用户个人错题集
+- 主键：`id`
+- 外键：`user_id -> user.id`，`question_id -> question.id`
+- 关键字段：`user_id`、`question_id`
+- 可选字段：`subject_id`、`directory_id`、`tags`
+- 统计字段：`wrong_count`、`last_wrong_time`、`master_status`
+
+说明：
+- `(user_id, question_id)` 唯一
+- 保留 `subject_id` 和 `directory_id`，便于筛选错题
+
+### 11. `user_stats` 用户全局统计表
+
+- 用途：记录用户总体学习统计
+- 主键：`id`
+- 外键：`user_id -> user.id`
+- 关键字段：`user_id`
+- 统计字段：`total_count`、`correct_count`、`wrong_count`、`correct_rate`
+- 可选字段：`last_exercise_date`
+
+说明：
+- `user_id` 唯一
+
+### 12. `user_subject_stats` 用户学科统计表
+
+- 用途：记录用户在各学科上的学习统计
+- 主键：`id`
+- 外键：`user_id -> user.id`，`subject_id -> subject.id`
+- 关键字段：`user_id`、`subject_id`
+- 统计字段：`total_count`、`correct_count`、`wrong_count`、`correct_rate`、`total_time_cost`
+- 可选字段：`last_practice_date`
+
+说明：
+- `(user_id, subject_id)` 唯一
+
+### 13. `daily_stats` 每日统计表
+
+- 用途：记录用户按日维度的学习数据
+- 主键：`id`
+- 外键：`user_id -> user.id`
+- 关键字段：`user_id`、`stat_date`
+- 统计字段：`do_count`、`correct_count`、`time_cost`
+
+说明：
+- `(user_id, stat_date)` 唯一
+- 用于日历打卡、趋势图等场景
+
+### 14. `user_knowledge_mastery` 用户考点掌握度表
+
+- 用途：记录用户对知识点的掌握情况
+- 主键：`id`
+- 外键：
+  - `user_id -> user.id`
+  - `tag_id -> exam_tag.id`
+  - `subject_id -> subject.id`
+- 关键字段：`user_id`、`tag_id`、`subject_id`
+- 统计字段：`total_count`、`correct_count`、`correct_rate`、`wrong_count`
+- 状态字段：`mastery_level`
+
+说明：
+- `(user_id, tag_id)` 唯一
+- `mastery_level` 约定：
+  - `0` 未掌握
+  - `1` 了解
+  - `2` 掌握
+  - `3` 精通
+
+### 15. `ai_generated_question` AI 生成题目表
+
+- 用途：存储 AI 为用户生成的个性化强化题
+- 主键：`id`
+- 外键：`user_id -> user.id`
+- 关键字段：`user_id`、`title`、`type`、`answer`
+- 可选字段：`content`、`directory_id`、`subject_id`、`options`、`analysis`、`tags`、`generate_reason`
+- 状态字段：`difficulty`、`generate_time`、`is_practiced`、`deleted`
+
+说明：
+- 与官方 `question` 表分离，避免污染正式题库
+- `options` 使用 `json` 类型
+
+### 16. `exam_paper` 试卷表
+
+- 用途：定义考试试卷模板
+- 主键：`id`
+- 外键：`subject_id -> subject.id`
+- 关键字段：`paper_name`、`subject_id`
+- 统计字段：`total_questions`、`total_score`、`duration`
+- 状态字段：`status`、`deleted`
+
+说明：
+- 用于管理固定考试模板
+
+### 17. `exam_paper_question` 试卷题目关联表
+
+- 用途：定义试卷中包含哪些题目
+- 主键：`id`
+- 外键：`paper_id -> exam_paper.id`，`question_id -> question.id`
+- 关键字段：`paper_id`、`question_id`
+- 可选字段：`sort`、`score`
+
+说明：
+- `(paper_id, question_id)` 唯一
+- 属于试卷模板层数据
+
+### 18. `exam_record` 考试记录表
+
+- 用途：记录用户某一次完整考试
+- 主键：`id`
+- 外键：`user_id -> user.id`
+- 关键字段：`user_id`、`exam_name`、`exam_mode`、`total_questions`、`start_time`
+- 可选字段：`subject_id`、`correct_questions`、`score`、`duration`、`end_time`
+- 状态字段：`status`、`deleted`
+
+说明：
+- 这是考试主记录表，表示“一次考试”
+- 当前外键名已修正为 `fk_exam_record_user`
+- `status` 当前约定：
+  - `1` 进行中
+  - `2` 已完成
+
+### 19. `exam_record_question` 考试记录题目表
+
+- 用途：记录某次考试中每一道题的作答详情
+- 主键：`id`
+- 外键：`exam_record_id -> exam_record.id`，`question_id -> question.id`
+- 关键字段：`exam_record_id`、`question_id`
+- 可选字段：`user_answer`、`is_correct`、`answer_time`
+
+说明：
+- 属于考试明细层数据
+- 与 `exam_paper_question` 不重复
+
+## 四、考试表关系说明
+
+考试模块建议按以下三层理解：
+
+1. `exam_paper`
+说明：试卷模板，定义“这张卷子是什么”
+
+2. `exam_record`
+说明：考试实例，定义“谁在什么时候考了哪一场”
+
+3. `exam_record_question`
+说明：考试明细，定义“这场考试中每题答了什么”
+
+其中：
+
+- `exam_paper_question` 是模板层
+- `exam_record_question` 是结果层
+
+二者都必须保留，不能互相替代。
+
+## 五、当前版本变更摘要
+
+相较于早期版本，当前文档已同步以下变化：
+
+- 增加了数据库创建与 `USE aishua`
+- `user` 表改为反引号写法
+- 非必须字段大量放宽为可空
+- `exercise_record` 与 `exam_record` 的外键名已去重
+- `question.options` 和 `ai_generated_question.options` 使用 `json`，不再写 `DEFAULT NULL`
+- `exam_record` 中 `correct_questions`、`score`、`duration`、`end_time` 已允许为空
+
+## 六、建议
+
+如果后续你继续修改 `aishua.sql`，建议同步更新本文件中的三类内容：
+
+- 表数量和模块划分
+- 字段是否必填
+- 外键与唯一约束说明
+
+这样后端开发、接口设计、前端联调时不会出现“SQL 已改，文档还是旧版本”的偏差。
