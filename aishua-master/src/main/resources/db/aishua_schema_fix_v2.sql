@@ -423,6 +423,86 @@ JOIN (
 SET w.deleted = 1;
 
 -- ============================================================
+-- 3.7 新增：错题AI分析与追问表
+-- ============================================================
+CREATE TABLE IF NOT EXISTS `wrong_question_ai_analysis` (
+    `id` bigint NOT NULL AUTO_INCREMENT COMMENT '主键ID',
+    `analysis_code` varchar(64) NOT NULL COMMENT '分析唯一编码',
+    `user_id` bigint NOT NULL COMMENT '用户ID',
+    `wrong_question_id` bigint NOT NULL COMMENT '错题ID',
+    `question_id` bigint NOT NULL COMMENT '题目ID',
+    `subject_id` bigint DEFAULT NULL COMMENT '学科ID',
+    `directory_id` bigint DEFAULT NULL COMMENT '目录ID',
+    `analysis_type` tinyint DEFAULT 1 COMMENT '分析类型：1-首轮诊断，2-重分析',
+    `context_snapshot` json NOT NULL COMMENT '分析输入快照',
+    `result_json` json DEFAULT NULL COMMENT '结构化分析结果',
+    `summary` text COMMENT '分析摘要',
+    `model_provider` varchar(32) DEFAULT NULL COMMENT '模型提供方',
+    `model_name` varchar(64) DEFAULT NULL COMMENT '模型名称',
+    `prompt_version` varchar(32) DEFAULT NULL COMMENT 'Prompt版本',
+    `prompt_tokens` int DEFAULT 0 COMMENT '输入token',
+    `completion_tokens` int DEFAULT 0 COMMENT '输出token',
+    `total_tokens` int DEFAULT 0 COMMENT '总token',
+    `latency_ms` int DEFAULT 0 COMMENT '耗时ms',
+    `status` tinyint DEFAULT 1 COMMENT '状态：1-成功，2-失败',
+    `error_message` varchar(1000) DEFAULT NULL COMMENT '失败原因',
+    `create_time` datetime DEFAULT CURRENT_TIMESTAMP COMMENT '创建时间',
+    `update_time` datetime DEFAULT CURRENT_TIMESTAMP ON UPDATE CURRENT_TIMESTAMP COMMENT '更新时间',
+    `deleted` tinyint DEFAULT 0 COMMENT '软删除标记',
+    PRIMARY KEY (`id`),
+    UNIQUE KEY `uk_wq_ai_analysis_code` (`analysis_code`),
+    KEY `idx_wq_ai_analysis_user_wrong_time` (`user_id`, `wrong_question_id`, `create_time`),
+    KEY `idx_wq_ai_analysis_question_time` (`question_id`, `create_time`)
+) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4 COMMENT='错题AI分析结果表';
+
+CREATE TABLE IF NOT EXISTS `wrong_question_ai_chat_session` (
+    `id` bigint NOT NULL AUTO_INCREMENT COMMENT '主键ID',
+    `session_code` varchar(64) NOT NULL COMMENT '会话唯一编码',
+    `user_id` bigint NOT NULL COMMENT '用户ID',
+    `wrong_question_id` bigint NOT NULL COMMENT '错题ID',
+    `analysis_id` bigint DEFAULT NULL COMMENT '关联分析ID',
+    `question_id` bigint NOT NULL COMMENT '题目ID',
+    `subject_id` bigint DEFAULT NULL COMMENT '学科ID',
+    `status` tinyint DEFAULT 1 COMMENT '状态：1-进行中，2-已结束',
+    `round_count` int DEFAULT 0 COMMENT '轮次',
+    `last_message_at` datetime DEFAULT CURRENT_TIMESTAMP COMMENT '最后消息时间',
+    `total_prompt_tokens` int DEFAULT 0 COMMENT '累计输入token',
+    `total_completion_tokens` int DEFAULT 0 COMMENT '累计输出token',
+    `total_tokens` int DEFAULT 0 COMMENT '累计token',
+    `create_time` datetime DEFAULT CURRENT_TIMESTAMP COMMENT '创建时间',
+    `update_time` datetime DEFAULT CURRENT_TIMESTAMP ON UPDATE CURRENT_TIMESTAMP COMMENT '更新时间',
+    `deleted` tinyint DEFAULT 0 COMMENT '软删除标记',
+    PRIMARY KEY (`id`),
+    UNIQUE KEY `uk_wq_ai_chat_session_code` (`session_code`),
+    KEY `idx_wq_ai_chat_user_time` (`user_id`, `last_message_at`),
+    KEY `idx_wq_ai_chat_wrong_time` (`wrong_question_id`, `last_message_at`)
+) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4 COMMENT='错题AI对话会话表';
+
+CREATE TABLE IF NOT EXISTS `wrong_question_ai_chat_message` (
+    `id` bigint NOT NULL AUTO_INCREMENT COMMENT '主键ID',
+    `session_id` bigint NOT NULL COMMENT '会话ID',
+    `seq_no` int NOT NULL COMMENT '会话内顺序号',
+    `role` tinyint NOT NULL COMMENT '角色：1-system，2-user，3-assistant',
+    `message_type` tinyint DEFAULT 1 COMMENT '消息类型：1-text，2-json',
+    `content_text` text COMMENT '文本内容',
+    `content_json` json DEFAULT NULL COMMENT '结构化内容',
+    `model_provider` varchar(32) DEFAULT NULL COMMENT '模型提供方',
+    `model_name` varchar(64) DEFAULT NULL COMMENT '模型名称',
+    `prompt_tokens` int DEFAULT 0 COMMENT '输入token',
+    `completion_tokens` int DEFAULT 0 COMMENT '输出token',
+    `total_tokens` int DEFAULT 0 COMMENT '总token',
+    `latency_ms` int DEFAULT 0 COMMENT '耗时ms',
+    `status` tinyint DEFAULT 1 COMMENT '状态：1-成功，2-失败',
+    `error_message` varchar(1000) DEFAULT NULL COMMENT '失败原因',
+    `create_time` datetime DEFAULT CURRENT_TIMESTAMP COMMENT '创建时间',
+    `update_time` datetime DEFAULT CURRENT_TIMESTAMP ON UPDATE CURRENT_TIMESTAMP COMMENT '更新时间',
+    `deleted` tinyint DEFAULT 0 COMMENT '软删除标记',
+    PRIMARY KEY (`id`),
+    UNIQUE KEY `uk_wq_ai_chat_msg_seq` (`session_id`, `seq_no`),
+    KEY `idx_wq_ai_chat_msg_session_time` (`session_id`, `create_time`)
+) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4 COMMENT='错题AI对话消息表';
+
+-- ============================================================
 -- 4. 常用查询索引补齐
 -- ============================================================
 CALL add_index_if_not_exists('subject', 'idx_subject_enabled_sort', 'ADD INDEX `idx_subject_enabled_sort` (`is_enabled`, `deleted`, `sort`, `id`)');
@@ -455,6 +535,17 @@ CALL add_index_if_not_exists('user_knowledge_mastery', 'idx_ukm_user_subject_lev
 
 CALL add_index_if_not_exists('ai_generated_question', 'idx_agq_subject_directory', 'ADD INDEX `idx_agq_subject_directory` (`subject_id`, `directory_id`, `difficulty`)');
 CALL add_index_if_not_exists('ai_generated_question', 'idx_agq_user_practiced', 'ADD INDEX `idx_agq_user_practiced` (`user_id`, `is_practiced`, `generate_time`)');
+
+CALL add_index_if_not_exists('wrong_question_ai_analysis', 'uk_wq_ai_analysis_code', 'ADD UNIQUE KEY `uk_wq_ai_analysis_code` (`analysis_code`)');
+CALL add_index_if_not_exists('wrong_question_ai_analysis', 'idx_wq_ai_analysis_user_wrong_time', 'ADD INDEX `idx_wq_ai_analysis_user_wrong_time` (`user_id`, `wrong_question_id`, `create_time`)');
+CALL add_index_if_not_exists('wrong_question_ai_analysis', 'idx_wq_ai_analysis_question_time', 'ADD INDEX `idx_wq_ai_analysis_question_time` (`question_id`, `create_time`)');
+
+CALL add_index_if_not_exists('wrong_question_ai_chat_session', 'uk_wq_ai_chat_session_code', 'ADD UNIQUE KEY `uk_wq_ai_chat_session_code` (`session_code`)');
+CALL add_index_if_not_exists('wrong_question_ai_chat_session', 'idx_wq_ai_chat_user_time', 'ADD INDEX `idx_wq_ai_chat_user_time` (`user_id`, `last_message_at`)');
+CALL add_index_if_not_exists('wrong_question_ai_chat_session', 'idx_wq_ai_chat_wrong_time', 'ADD INDEX `idx_wq_ai_chat_wrong_time` (`wrong_question_id`, `last_message_at`)');
+
+CALL add_index_if_not_exists('wrong_question_ai_chat_message', 'uk_wq_ai_chat_msg_seq', 'ADD UNIQUE KEY `uk_wq_ai_chat_msg_seq` (`session_id`, `seq_no`)');
+CALL add_index_if_not_exists('wrong_question_ai_chat_message', 'idx_wq_ai_chat_msg_session_time', 'ADD INDEX `idx_wq_ai_chat_msg_session_time` (`session_id`, `create_time`)');
 
 CALL add_index_if_not_exists('exam_paper', 'idx_ep_subject_status', 'ADD INDEX `idx_ep_subject_status` (`subject_id`, `status`, `deleted`)');
 
@@ -528,6 +619,72 @@ CALL add_fk_if_not_exists(
     'ai_generated_question',
     'fk_agq_directory',
     '`fk_agq_directory` FOREIGN KEY (`directory_id`) REFERENCES `textbook_directory` (`id`) ON DELETE SET NULL ON UPDATE CASCADE'
+);
+
+CALL add_fk_if_not_exists(
+    'wrong_question_ai_analysis',
+    'fk_wqa_user',
+    '`fk_wqa_user` FOREIGN KEY (`user_id`) REFERENCES `user` (`id`) ON DELETE CASCADE ON UPDATE CASCADE'
+);
+
+CALL add_fk_if_not_exists(
+    'wrong_question_ai_analysis',
+    'fk_wqa_wrong',
+    '`fk_wqa_wrong` FOREIGN KEY (`wrong_question_id`) REFERENCES `wrong_question` (`id`) ON DELETE CASCADE ON UPDATE CASCADE'
+);
+
+CALL add_fk_if_not_exists(
+    'wrong_question_ai_analysis',
+    'fk_wqa_question',
+    '`fk_wqa_question` FOREIGN KEY (`question_id`) REFERENCES `question` (`id`) ON DELETE CASCADE ON UPDATE CASCADE'
+);
+
+CALL add_fk_if_not_exists(
+    'wrong_question_ai_analysis',
+    'fk_wqa_subject',
+    '`fk_wqa_subject` FOREIGN KEY (`subject_id`) REFERENCES `subject` (`id`) ON DELETE SET NULL ON UPDATE CASCADE'
+);
+
+CALL add_fk_if_not_exists(
+    'wrong_question_ai_analysis',
+    'fk_wqa_directory',
+    '`fk_wqa_directory` FOREIGN KEY (`directory_id`) REFERENCES `textbook_directory` (`id`) ON DELETE SET NULL ON UPDATE CASCADE'
+);
+
+CALL add_fk_if_not_exists(
+    'wrong_question_ai_chat_session',
+    'fk_wqacs_user',
+    '`fk_wqacs_user` FOREIGN KEY (`user_id`) REFERENCES `user` (`id`) ON DELETE CASCADE ON UPDATE CASCADE'
+);
+
+CALL add_fk_if_not_exists(
+    'wrong_question_ai_chat_session',
+    'fk_wqacs_wrong',
+    '`fk_wqacs_wrong` FOREIGN KEY (`wrong_question_id`) REFERENCES `wrong_question` (`id`) ON DELETE CASCADE ON UPDATE CASCADE'
+);
+
+CALL add_fk_if_not_exists(
+    'wrong_question_ai_chat_session',
+    'fk_wqacs_analysis',
+    '`fk_wqacs_analysis` FOREIGN KEY (`analysis_id`) REFERENCES `wrong_question_ai_analysis` (`id`) ON DELETE SET NULL ON UPDATE CASCADE'
+);
+
+CALL add_fk_if_not_exists(
+    'wrong_question_ai_chat_session',
+    'fk_wqacs_question',
+    '`fk_wqacs_question` FOREIGN KEY (`question_id`) REFERENCES `question` (`id`) ON DELETE CASCADE ON UPDATE CASCADE'
+);
+
+CALL add_fk_if_not_exists(
+    'wrong_question_ai_chat_session',
+    'fk_wqacs_subject',
+    '`fk_wqacs_subject` FOREIGN KEY (`subject_id`) REFERENCES `subject` (`id`) ON DELETE SET NULL ON UPDATE CASCADE'
+);
+
+CALL add_fk_if_not_exists(
+    'wrong_question_ai_chat_message',
+    'fk_wqacm_session',
+    '`fk_wqacm_session` FOREIGN KEY (`session_id`) REFERENCES `wrong_question_ai_chat_session` (`id`) ON DELETE CASCADE ON UPDATE CASCADE'
 );
 
 CALL add_fk_if_not_exists(

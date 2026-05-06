@@ -15,6 +15,9 @@ SET FOREIGN_KEY_CHECKS = 0;
 -- ----------------------------
 DROP TABLE IF EXISTS exam_record_question;
 DROP TABLE IF EXISTS exam_record;
+DROP TABLE IF EXISTS wrong_question_ai_chat_message;
+DROP TABLE IF EXISTS wrong_question_ai_chat_session;
+DROP TABLE IF EXISTS wrong_question_ai_analysis;
 DROP TABLE IF EXISTS user_subject_stats;
 DROP TABLE IF EXISTS user_knowledge_mastery;
 DROP TABLE IF EXISTS question_tag_relation;
@@ -322,6 +325,97 @@ CREATE TABLE ai_generated_question (
                                        KEY idx_user_id (user_id),
                                        CONSTRAINT fk_agq_user FOREIGN KEY (user_id) REFERENCES `user` (id) ON DELETE CASCADE
 ) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4 COMMENT='AI生成题目表：个性化强化练习题';
+
+-- 错题AI分析结果表
+CREATE TABLE wrong_question_ai_analysis (
+                                            id bigint NOT NULL AUTO_INCREMENT COMMENT '主键ID',
+                                            analysis_code varchar(64) NOT NULL COMMENT '分析唯一编码',
+                                            user_id bigint NOT NULL COMMENT '用户ID',
+                                            wrong_question_id bigint NOT NULL COMMENT '错题ID',
+                                            question_id bigint NOT NULL COMMENT '题目ID',
+                                            subject_id bigint DEFAULT NULL COMMENT '学科ID',
+                                            directory_id bigint DEFAULT NULL COMMENT '目录ID',
+                                            analysis_type tinyint DEFAULT 1 COMMENT '分析类型：1-首轮诊断，2-重分析',
+                                            context_snapshot json NOT NULL COMMENT '分析输入快照',
+                                            result_json json DEFAULT NULL COMMENT '结构化分析结果',
+                                            summary text COMMENT '分析摘要',
+                                            model_provider varchar(32) DEFAULT NULL COMMENT '模型提供方',
+                                            model_name varchar(64) DEFAULT NULL COMMENT '模型名称',
+                                            prompt_version varchar(32) DEFAULT NULL COMMENT 'Prompt版本',
+                                            prompt_tokens int DEFAULT 0 COMMENT '输入token',
+                                            completion_tokens int DEFAULT 0 COMMENT '输出token',
+                                            total_tokens int DEFAULT 0 COMMENT '总token',
+                                            latency_ms int DEFAULT 0 COMMENT '耗时ms',
+                                            status tinyint DEFAULT 1 COMMENT '状态：1-成功，2-失败',
+                                            error_message varchar(1000) DEFAULT NULL COMMENT '失败原因',
+                                            create_time datetime DEFAULT CURRENT_TIMESTAMP COMMENT '创建时间',
+                                            update_time datetime DEFAULT CURRENT_TIMESTAMP ON UPDATE CURRENT_TIMESTAMP COMMENT '更新时间',
+                                            deleted tinyint DEFAULT 0 COMMENT '软删除标记',
+                                            PRIMARY KEY (id),
+                                            UNIQUE KEY uk_wq_ai_analysis_code (analysis_code),
+                                            KEY idx_wq_ai_analysis_user_wrong_time (user_id, wrong_question_id, create_time),
+                                            KEY idx_wq_ai_analysis_question_time (question_id, create_time),
+                                            CONSTRAINT fk_wqa_user FOREIGN KEY (user_id) REFERENCES `user` (id) ON DELETE CASCADE,
+                                            CONSTRAINT fk_wqa_wrong FOREIGN KEY (wrong_question_id) REFERENCES wrong_question (id) ON DELETE CASCADE,
+                                            CONSTRAINT fk_wqa_question FOREIGN KEY (question_id) REFERENCES question (id) ON DELETE CASCADE,
+                                            CONSTRAINT fk_wqa_subject FOREIGN KEY (subject_id) REFERENCES subject (id) ON DELETE SET NULL,
+                                            CONSTRAINT fk_wqa_directory FOREIGN KEY (directory_id) REFERENCES textbook_directory (id) ON DELETE SET NULL
+) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4 COMMENT='错题AI分析结果表';
+
+-- 错题AI对话会话表
+CREATE TABLE wrong_question_ai_chat_session (
+                                                id bigint NOT NULL AUTO_INCREMENT COMMENT '主键ID',
+                                                session_code varchar(64) NOT NULL COMMENT '会话唯一编码',
+                                                user_id bigint NOT NULL COMMENT '用户ID',
+                                                wrong_question_id bigint NOT NULL COMMENT '错题ID',
+                                                analysis_id bigint DEFAULT NULL COMMENT '关联分析ID',
+                                                question_id bigint NOT NULL COMMENT '题目ID',
+                                                subject_id bigint DEFAULT NULL COMMENT '学科ID',
+                                                status tinyint DEFAULT 1 COMMENT '状态：1-进行中，2-已结束',
+                                                round_count int DEFAULT 0 COMMENT '轮次',
+                                                last_message_at datetime DEFAULT CURRENT_TIMESTAMP COMMENT '最后消息时间',
+                                                total_prompt_tokens int DEFAULT 0 COMMENT '累计输入token',
+                                                total_completion_tokens int DEFAULT 0 COMMENT '累计输出token',
+                                                total_tokens int DEFAULT 0 COMMENT '累计token',
+                                                create_time datetime DEFAULT CURRENT_TIMESTAMP COMMENT '创建时间',
+                                                update_time datetime DEFAULT CURRENT_TIMESTAMP ON UPDATE CURRENT_TIMESTAMP COMMENT '更新时间',
+                                                deleted tinyint DEFAULT 0 COMMENT '软删除标记',
+                                                PRIMARY KEY (id),
+                                                UNIQUE KEY uk_wq_ai_chat_session_code (session_code),
+                                                KEY idx_wq_ai_chat_user_time (user_id, last_message_at),
+                                                KEY idx_wq_ai_chat_wrong_time (wrong_question_id, last_message_at),
+                                                CONSTRAINT fk_wqacs_user FOREIGN KEY (user_id) REFERENCES `user` (id) ON DELETE CASCADE,
+                                                CONSTRAINT fk_wqacs_wrong FOREIGN KEY (wrong_question_id) REFERENCES wrong_question (id) ON DELETE CASCADE,
+                                                CONSTRAINT fk_wqacs_analysis FOREIGN KEY (analysis_id) REFERENCES wrong_question_ai_analysis (id) ON DELETE SET NULL,
+                                                CONSTRAINT fk_wqacs_question FOREIGN KEY (question_id) REFERENCES question (id) ON DELETE CASCADE,
+                                                CONSTRAINT fk_wqacs_subject FOREIGN KEY (subject_id) REFERENCES subject (id) ON DELETE SET NULL
+) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4 COMMENT='错题AI对话会话表';
+
+-- 错题AI对话消息表
+CREATE TABLE wrong_question_ai_chat_message (
+                                                id bigint NOT NULL AUTO_INCREMENT COMMENT '主键ID',
+                                                session_id bigint NOT NULL COMMENT '会话ID',
+                                                seq_no int NOT NULL COMMENT '会话内顺序号',
+                                                role tinyint NOT NULL COMMENT '角色：1-system，2-user，3-assistant',
+                                                message_type tinyint DEFAULT 1 COMMENT '消息类型：1-text，2-json',
+                                                content_text text COMMENT '文本内容',
+                                                content_json json DEFAULT NULL COMMENT '结构化内容',
+                                                model_provider varchar(32) DEFAULT NULL COMMENT '模型提供方',
+                                                model_name varchar(64) DEFAULT NULL COMMENT '模型名称',
+                                                prompt_tokens int DEFAULT 0 COMMENT '输入token',
+                                                completion_tokens int DEFAULT 0 COMMENT '输出token',
+                                                total_tokens int DEFAULT 0 COMMENT '总token',
+                                                latency_ms int DEFAULT 0 COMMENT '耗时ms',
+                                                status tinyint DEFAULT 1 COMMENT '状态：1-成功，2-失败',
+                                                error_message varchar(1000) DEFAULT NULL COMMENT '失败原因',
+                                                create_time datetime DEFAULT CURRENT_TIMESTAMP COMMENT '创建时间',
+                                                update_time datetime DEFAULT CURRENT_TIMESTAMP ON UPDATE CURRENT_TIMESTAMP COMMENT '更新时间',
+                                                deleted tinyint DEFAULT 0 COMMENT '软删除标记',
+                                                PRIMARY KEY (id),
+                                                UNIQUE KEY uk_wq_ai_chat_msg_seq (session_id, seq_no),
+                                                KEY idx_wq_ai_chat_msg_session_time (session_id, create_time),
+                                                CONSTRAINT fk_wqacm_session FOREIGN KEY (session_id) REFERENCES wrong_question_ai_chat_session (id) ON DELETE CASCADE
+) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4 COMMENT='错题AI对话消息表';
 
 -- ----------------------------
 -- 8. 考试模块（两张表不重复，都保留）
