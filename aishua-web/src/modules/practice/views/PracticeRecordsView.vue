@@ -156,6 +156,8 @@ const resolveModeLabel = (mode) => {
       return '顺序练习'
     case 2:
       return '随机练习'
+    case 3:
+      return '知识点练习'
     default:
       return mode ? `模式 ${mode}` : '-'
   }

@@ -16,6 +16,12 @@ export default {
   listWrongQuestions(params) {
     return request.get('/practice/wrong-questions', { params })
   },
+  getStats(params) {
+    return request.get('/practice/stats', { params })
+  },
+  listTags(params) {
+    return request.get('/practice/tags', { params })
+  },
   getQuestions(sessionId) {
     return request.get(`/practice/${sessionId}/questions`)
   },

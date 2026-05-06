@@ -42,6 +42,7 @@
           <select v-model.number="practiceMode" :disabled="hasActiveSession">
             <option :value="1">顺序练习</option>
             <option :value="2">随机练习</option>
+            <option :value="3">知识点练习</option>
           </select>
         </label>
 
@@ -49,10 +50,50 @@
           <span>题量</span>
           <input v-model.number="questionCount" type="number" min="1" max="50" :disabled="hasActiveSession" />
         </label>
+
+        <div v-if="isKnowledgeMode" class="tag-picker">
+          <div class="tag-picker-head">
+            <span>知识点</span>
+            <strong>已选 {{ selectedTagIds.length }} / {{ knowledgeTags.length }}</strong>
+          </div>
+
+          <div v-if="loadingTags" class="tag-state">正在加载知识点...</div>
+          <div v-else-if="!knowledgeTags.length" class="tag-state">当前学科暂无可选知识点</div>
+          <div v-else class="tag-picker-body">
+            <div class="tag-filter-row">
+              <input
+                v-model.trim="tagKeyword"
+                type="search"
+                maxlength="60"
+                placeholder="搜索知识点名称或备注"
+                :disabled="hasActiveSession"
+              />
+              <button type="button" class="secondary-button small-button" :disabled="!visibleKnowledgeTags.length || hasActiveSession" @click="selectVisibleTags">
+                选中当前
+              </button>
+              <button type="button" class="secondary-button small-button" :disabled="!selectedTagIds.length || hasActiveSession" @click="clearSelectedTags">
+                清空
+              </button>
+            </div>
+
+            <div v-if="!visibleKnowledgeTags.length" class="tag-state compact">没有匹配的知识点</div>
+            <div v-else class="tag-options">
+              <label
+                v-for="tag in visibleKnowledgeTags"
+                :key="tag.id"
+                :class="['tag-option', selectedTagIds.includes(tag.id) ? 'active' : '']"
+              >
+                <input v-model="selectedTagIds" type="checkbox" :value="tag.id" :disabled="hasActiveSession" />
+                <span>{{ tag.name }}</span>
+                <small v-if="tag.tag">{{ tag.tag }}</small>
+              </label>
+            </div>
+          </div>
+        </div>
       </div>
 
       <div v-if="subjects.length" class="config-actions">
-        <button type="button" :disabled="starting || !selectedSubjectId || hasActiveSession" @click="startPractice">
+        <button type="button" :disabled="!canStartPractice" @click="startPractice">
           {{ starting ? '正在开始...' : hasActiveSession ? '练习已开始' : '开始练习' }}
         </button>
       </div>
@@ -108,7 +149,7 @@
           <div class="question-head">
             <div class="question-meta">
               <span class="chip">{{ resolveTypeLabel(currentQuestion.type) }}</span>
-              <span class="chip ghost-chip">难度 {{ currentQuestion.difficulty ?? 1 }}</span>
+              <span class="chip ghost-chip">{{ resolveDifficultyLabel(currentQuestion.difficulty) }}</span>
               <span class="chip ghost-chip">第 {{ currentIndex + 1 }} / {{ questions.length }} 题</span>
             </div>
             <span class="answer-state">
@@ -249,11 +290,15 @@ import subjectApi from '../../subject/api/subject'
 const route = useRoute()
 
 const loadingSubjects = ref(false)
+const loadingTags = ref(false)
 const starting = ref(false)
 const loadingSheet = ref(false)
 const submitting = ref(false)
 
 const subjects = ref([])
+const knowledgeTags = ref([])
+const selectedTagIds = ref([])
+const tagKeyword = ref('')
 const selectedSubjectId = ref('')
 const practiceMode = ref(1)
 const questionCount = ref(10)
@@ -271,6 +316,23 @@ const hasActiveSession = computed(() => Boolean(session.value))
 const questions = computed(() => questionSheet.value?.questions || [])
 const currentQuestion = computed(() => questions.value[currentIndex.value] || null)
 const isSubmitted = computed(() => Boolean(submitResult.value))
+const isKnowledgeMode = computed(() => Number(practiceMode.value) === 3)
+const visibleKnowledgeTags = computed(() => {
+  const keyword = tagKeyword.value.trim().toLowerCase()
+  if (!keyword) {
+    return knowledgeTags.value
+  }
+  return knowledgeTags.value.filter((tag) => {
+    return String(tag.name || '').toLowerCase().includes(keyword)
+      || String(tag.tag || '').toLowerCase().includes(keyword)
+  })
+})
+const canStartPractice = computed(() => {
+  return !starting.value
+    && Boolean(selectedSubjectId.value)
+    && !hasActiveSession.value
+    && (!isKnowledgeMode.value || (!loadingTags.value && selectedTagIds.value.length > 0))
+})
 
 const answeredCount = computed(() => questions.value.filter((question) => isAnswered(question.questionId)).length)
 const unansweredCount = computed(() => Math.max(questions.value.length - answeredCount.value, 0))
@@ -445,8 +507,28 @@ const resolveTypeLabel = (type) => {
   }
 }
 
+const resolveDifficultyLabel = (difficulty) => {
+  switch (Number(difficulty || 1)) {
+    case 1:
+      return '简单'
+    case 2:
+      return '中等'
+    case 3:
+      return '困难'
+    default:
+      return difficulty ? `难度 ${difficulty}` : '简单'
+  }
+}
+
 const resolveModeLabel = (mode) => {
-  return mode === 2 ? '随机练习' : '顺序练习'
+  switch (mode) {
+    case 2:
+      return '随机练习'
+    case 3:
+      return '知识点练习'
+    default:
+      return '顺序练习'
+  }
 }
 
 const formatAnswerDisplay = (value) => {
@@ -494,6 +576,45 @@ const loadSubjects = async () => {
   } finally {
     loadingSubjects.value = false
   }
+}
+
+const loadKnowledgeTags = async () => {
+  if (!selectedSubjectId.value || !isKnowledgeMode.value) {
+    knowledgeTags.value = []
+    selectedTagIds.value = []
+    tagKeyword.value = ''
+    return
+  }
+
+  loadingTags.value = true
+  knowledgeTags.value = []
+  selectedTagIds.value = []
+  tagKeyword.value = ''
+  try {
+    const response = await practiceApi.listTags({
+      subjectId: Number(selectedSubjectId.value)
+    })
+    const tags = response.data || []
+    const tagIdSet = new Set(tags.map((tag) => tag.id))
+    knowledgeTags.value = tags
+    selectedTagIds.value = selectedTagIds.value.filter((tagId) => tagIdSet.has(tagId))
+  } catch (error) {
+    knowledgeTags.value = []
+    selectedTagIds.value = []
+    showToast(error.message || '加载知识点失败')
+  } finally {
+    loadingTags.value = false
+  }
+}
+
+const selectVisibleTags = () => {
+  const mergedTagIds = new Set(selectedTagIds.value)
+  visibleKnowledgeTags.value.forEach((tag) => mergedTagIds.add(tag.id))
+  selectedTagIds.value = Array.from(mergedTagIds)
+}
+
+const clearSelectedTags = () => {
+  selectedTagIds.value = []
 }
 
 const beginQuestionTimer = () => {
@@ -544,15 +665,23 @@ const startPractice = async () => {
     showToast('请先选择学科')
     return
   }
+  if (isKnowledgeMode.value && !selectedTagIds.value.length) {
+    showToast('请至少选择一个知识点')
+    return
+  }
 
   starting.value = true
   try {
     initializeSessionState()
-    const response = await practiceApi.start({
+    const payload = {
       subjectId: Number(selectedSubjectId.value),
       practiceMode: Number(practiceMode.value),
       questionCount: Number(questionCount.value)
-    })
+    }
+    if (isKnowledgeMode.value) {
+      payload.tagIds = selectedTagIds.value.map(Number)
+    }
+    const response = await practiceApi.start(payload)
     session.value = response.data
     await loadQuestionSheet()
   } catch (error) {
@@ -636,6 +765,22 @@ const resetPractice = () => {
   session.value = null
   initializeSessionState()
 }
+
+watch(
+  [selectedSubjectId, practiceMode],
+  async () => {
+    if (session.value) {
+      return
+    }
+    if (isKnowledgeMode.value) {
+      await loadKnowledgeTags()
+      return
+    }
+    knowledgeTags.value = []
+    selectedTagIds.value = []
+    tagKeyword.value = ''
+  }
+)
 
 watch(
   () => route.query.subjectId,
@@ -774,6 +919,109 @@ onBeforeUnmount(() => {
   box-sizing: border-box;
   resize: vertical;
   background: #fff;
+}
+
+.tag-picker {
+  grid-column: 1 / -1;
+  display: grid;
+  gap: 12px;
+}
+
+.tag-picker-head {
+  display: flex;
+  justify-content: space-between;
+  align-items: center;
+  gap: 12px;
+  color: #17324d;
+  font-weight: 600;
+}
+
+.tag-picker-head strong {
+  color: #6c7a8d;
+  font-size: 13px;
+}
+
+.tag-picker-body {
+  display: grid;
+  gap: 10px;
+}
+
+.tag-filter-row {
+  display: grid;
+  grid-template-columns: minmax(180px, 1fr) auto auto;
+  gap: 10px;
+  align-items: center;
+}
+
+.tag-filter-row input {
+  width: 100%;
+  padding: 11px 12px;
+  border: 1px solid #cad7e3;
+  border-radius: 14px;
+  box-sizing: border-box;
+  font-size: 14px;
+}
+
+.tag-options {
+  max-height: 260px;
+  overflow-y: auto;
+  padding-right: 4px;
+  display: grid;
+  grid-template-columns: repeat(auto-fit, minmax(180px, 1fr));
+  gap: 10px;
+}
+
+.tag-option {
+  min-height: 58px;
+  display: grid;
+  grid-template-columns: auto minmax(0, 1fr);
+  gap: 6px 10px;
+  align-items: center;
+  padding: 12px;
+  border: 1px solid #d9e3ee;
+  border-radius: 14px;
+  background: #f8fbff;
+  color: #17324d;
+  cursor: pointer;
+}
+
+.tag-option.active {
+  border-color: #78b998;
+  background: #ecf7f1;
+}
+
+.tag-option input {
+  width: auto;
+  padding: 0;
+  border: 0;
+  border-radius: 0;
+  accent-color: #0f7a43;
+}
+
+.tag-option small {
+  grid-column: 2;
+  min-width: 0;
+  color: #6c7a8d;
+  font-weight: 400;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
+.tag-state {
+  padding: 18px;
+  border-radius: 14px;
+  background: #f3f7fb;
+  color: #6c7a8d;
+}
+
+.tag-state.compact {
+  padding: 14px;
+}
+
+.small-button {
+  padding: 8px 12px;
+  font-size: 13px;
 }
 
 .config-actions {
@@ -1035,6 +1283,10 @@ button:disabled {
 @media (max-width: 768px) {
   .practice-page {
     padding: 18px 14px 30px;
+  }
+
+  .tag-filter-row {
+    grid-template-columns: 1fr;
   }
 
   .hero-card,

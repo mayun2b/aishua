@@ -17,9 +17,11 @@ import zysy.iflytek.aishua.modules.practice.entity.vo.PracticeExerciseRecordVO;
 import zysy.iflytek.aishua.modules.practice.entity.vo.PracticeQuestionSheetVO;
 import zysy.iflytek.aishua.modules.practice.entity.vo.PracticeSessionDetailVO;
 import zysy.iflytek.aishua.modules.practice.entity.vo.PracticeSessionSummaryVO;
+import zysy.iflytek.aishua.modules.practice.entity.vo.PracticeStatsVO;
 import zysy.iflytek.aishua.modules.practice.entity.vo.PracticeStartVO;
 import zysy.iflytek.aishua.modules.practice.entity.vo.PracticeWrongQuestionVO;
 import zysy.iflytek.aishua.modules.practice.service.PracticeService;
+import zysy.iflytek.aishua.modules.tag.entity.vo.ExamTagVO;
 
 import java.util.List;
 
@@ -72,6 +74,22 @@ public class PracticeController {
     ) {
         Long userId = UserContext.requireUserId();
         return Result.success(practiceService.listWrongQuestions(userId, subjectId));
+    }
+
+    @GetMapping("/stats")
+    public Result<PracticeStatsVO> getPracticeStats(
+            @RequestParam(required = false) Integer days
+    ) {
+        Long userId = UserContext.requireUserId();
+        return Result.success(practiceService.getPracticeStats(userId, days));
+    }
+
+    @GetMapping("/tags")
+    public Result<List<ExamTagVO>> listPracticeTags(
+            @RequestParam Long subjectId
+    ) {
+        Long userId = UserContext.requireUserId();
+        return Result.success(practiceService.listPracticeTags(userId, subjectId));
     }
 
     @PostMapping("/{sessionId}/submit-all")

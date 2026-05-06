@@ -7,8 +7,10 @@ import zysy.iflytek.aishua.modules.practice.entity.vo.PracticeExerciseRecordVO;
 import zysy.iflytek.aishua.modules.practice.entity.vo.PracticeQuestionSheetVO;
 import zysy.iflytek.aishua.modules.practice.entity.vo.PracticeSessionDetailVO;
 import zysy.iflytek.aishua.modules.practice.entity.vo.PracticeSessionSummaryVO;
+import zysy.iflytek.aishua.modules.practice.entity.vo.PracticeStatsVO;
 import zysy.iflytek.aishua.modules.practice.entity.vo.PracticeStartVO;
 import zysy.iflytek.aishua.modules.practice.entity.vo.PracticeWrongQuestionVO;
+import zysy.iflytek.aishua.modules.tag.entity.vo.ExamTagVO;
 
 import java.util.List;
 
@@ -26,4 +28,8 @@ public interface PracticeService {
     List<PracticeExerciseRecordVO> listExerciseRecords(Long userId, Long subjectId);
 
     List<PracticeWrongQuestionVO> listWrongQuestions(Long userId, Long subjectId);
+
+    PracticeStatsVO getPracticeStats(Long userId, Integer days);
+
+    List<ExamTagVO> listPracticeTags(Long userId, Long subjectId);
 }

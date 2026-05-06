@@ -21,6 +21,7 @@ import zysy.iflytek.aishua.modules.practice.entity.vo.PracticeQuestionItemVO;
 import zysy.iflytek.aishua.modules.practice.entity.vo.PracticeQuestionSheetVO;
 import zysy.iflytek.aishua.modules.practice.entity.vo.PracticeSessionDetailVO;
 import zysy.iflytek.aishua.modules.practice.entity.vo.PracticeSessionSummaryVO;
+import zysy.iflytek.aishua.modules.practice.entity.vo.PracticeStatsVO;
 import zysy.iflytek.aishua.modules.practice.entity.vo.PracticeStartVO;
 import zysy.iflytek.aishua.modules.practice.entity.vo.PracticeBatchSubmitResultVO;
 import zysy.iflytek.aishua.modules.practice.entity.vo.PracticeWrongQuestionVO;
@@ -43,6 +44,7 @@ import zysy.iflytek.aishua.modules.subject.entity.UserSubject;
 import zysy.iflytek.aishua.modules.subject.mapper.SubjectMapper;
 import zysy.iflytek.aishua.modules.subject.mapper.UserSubjectMapper;
 import zysy.iflytek.aishua.modules.tag.entity.ExamTag;
+import zysy.iflytek.aishua.modules.tag.entity.vo.ExamTagVO;
 import zysy.iflytek.aishua.modules.tag.mapper.ExamTagMapper;
 
 import java.math.BigDecimal;
@@ -51,9 +53,11 @@ import java.time.LocalDate;
 import java.time.LocalDateTime;
 import java.util.ArrayList;
 import java.util.Collections;
+import java.util.HashSet;
 import java.util.LinkedHashMap;
 import java.util.List;
 import java.util.Map;
+import java.util.Set;
 import java.util.UUID;
 import java.util.function.Function;
 import java.util.stream.Collectors;
@@ -117,7 +121,13 @@ public class PracticeServiceImpl implements PracticeService {
 
         int practiceMode = normalizePracticeMode(practiceStartDTO.getPracticeMode());
         int questionCount = normalizeQuestionCount(practiceStartDTO.getQuestionCount());
-        List<Question> selectedQuestions = selectSessionQuestions(subject.getId(), practiceMode, questionCount);
+        List<Long> tagIds = practiceMode == PracticeModeConstants.KNOWLEDGE_POINT
+                ? normalizeTagIds(practiceStartDTO.getTagIds())
+                : List.of();
+        List<Question> selectedQuestions = selectSessionQuestions(subject.getId(), practiceMode, questionCount, tagIds);
+        if (selectedQuestions.isEmpty() && practiceMode == PracticeModeConstants.KNOWLEDGE_POINT) {
+            throw new BusinessException("所选知识点暂无可练习题目", 400);
+        }
         if (selectedQuestions.isEmpty()) {
             throw new BusinessException("当前学科暂无可练习题目", 400);
         }
@@ -354,6 +364,55 @@ public class PracticeServiceImpl implements PracticeService {
     }
 
     @Override
+    public PracticeStatsVO getPracticeStats(Long userId, Integer days) {
+        int statsDays = normalizeStatsDays(days);
+        LocalDate today = LocalDate.now();
+        LocalDate startDate = today.minusDays(statsDays - 1L);
+
+        UserStats userStats = userStatsMapper.selectOne(new LambdaQueryWrapper<UserStats>()
+                .eq(UserStats::getUserId, userId)
+                .last("LIMIT 1"));
+        List<DailyStats> allDailyStats = dailyStatsMapper.selectList(new LambdaQueryWrapper<DailyStats>()
+                .eq(DailyStats::getUserId, userId)
+                .orderByDesc(DailyStats::getStatDate));
+        List<DailyStats> windowDailyStats = allDailyStats.stream()
+                .filter(stats -> stats.getStatDate() != null && !stats.getStatDate().isBefore(startDate))
+                .toList();
+        List<UserSubjectStats> subjectStats = userSubjectStatsMapper.selectList(new LambdaQueryWrapper<UserSubjectStats>()
+                .eq(UserSubjectStats::getUserId, userId)
+                .orderByDesc(UserSubjectStats::getTotalCount)
+                .orderByDesc(UserSubjectStats::getLastPracticeDate));
+        List<UserKnowledgeMastery> knowledgeMasteries = userKnowledgeMasteryMapper.selectList(new LambdaQueryWrapper<UserKnowledgeMastery>()
+                .eq(UserKnowledgeMastery::getUserId, userId)
+                .orderByAsc(UserKnowledgeMastery::getMasteryLevel)
+                .orderByDesc(UserKnowledgeMastery::getWrongCount)
+                .orderByDesc(UserKnowledgeMastery::getTotalCount));
+
+        PracticeStatsVO statsVO = new PracticeStatsVO();
+        statsVO.setDailyTrends(buildDailyTrends(startDate, today, windowDailyStats));
+        statsVO.setSubjectStats(buildSubjectStats(subjectStats));
+        statsVO.setKnowledgeMasteries(buildKnowledgeMasteries(knowledgeMasteries, 30));
+        statsVO.setWeakPoints(buildWeakPoints(knowledgeMasteries, 8));
+        statsVO.setRecentSessions(listRecentPracticeSessions(userId, 5));
+        statsVO.setOverview(buildOverview(userId, userStats, allDailyStats, subjectStats, today));
+        return statsVO;
+    }
+
+    @Override
+    public List<ExamTagVO> listPracticeTags(Long userId, Long subjectId) {
+        Subject subject = requireEnabledSubject(subjectId);
+        requireJoinedSubject(userId, subject.getId());
+
+        return examTagMapper.selectList(new LambdaQueryWrapper<ExamTag>()
+                        .eq(ExamTag::getSubjectId, subject.getId())
+                        .orderByAsc(ExamTag::getName)
+                        .orderByAsc(ExamTag::getId))
+                .stream()
+                .map(tag -> toExamTagVO(tag, subject.getName()))
+                .toList();
+    }
+
+    @Override
     @Transactional
     public PracticeBatchSubmitResultVO submitPractice(Long userId, Long sessionId, PracticeBatchSubmitDTO practiceBatchSubmitDTO) {
         PracticeSession practiceSession = requireSession(userId, sessionId);
@@ -503,6 +562,238 @@ public class PracticeServiceImpl implements PracticeService {
         return resultVO;
     }
 
+    private PracticeStatsVO.OverviewVO buildOverview(
+            Long userId,
+            UserStats userStats,
+            List<DailyStats> dailyStatsList,
+            List<UserSubjectStats> subjectStatsList,
+            LocalDate today
+    ) {
+        PracticeStatsVO.OverviewVO overviewVO = new PracticeStatsVO.OverviewVO();
+        if (userStats != null) {
+            overviewVO.setTotalCount(defaultNumber(userStats.getTotalCount()));
+            overviewVO.setCorrectCount(defaultNumber(userStats.getCorrectCount()));
+            overviewVO.setWrongCount(defaultNumber(userStats.getWrongCount()));
+            overviewVO.setCorrectRate(defaultDecimal(userStats.getCorrectRate()));
+            overviewVO.setLastExerciseDate(userStats.getLastExerciseDate());
+        }
+
+        int totalTimeCost = subjectStatsList.stream()
+                .map(UserSubjectStats::getTotalTimeCost)
+                .mapToInt(this::defaultNumber)
+                .sum();
+        overviewVO.setTotalTimeCost(totalTimeCost);
+        overviewVO.setActiveDays((int) dailyStatsList.stream()
+                .filter(stats -> defaultNumber(stats.getDoCount()) > 0)
+                .count());
+        overviewVO.setContinuousDays(calculateContinuousDays(dailyStatsList, today));
+        overviewVO.setMaxContinuousDays(calculateMaxContinuousDays(dailyStatsList));
+
+        DailyStats todayStats = dailyStatsList.stream()
+                .filter(stats -> today.equals(stats.getStatDate()))
+                .findFirst()
+                .orElse(null);
+        if (todayStats != null) {
+            overviewVO.setTodayCount(defaultNumber(todayStats.getDoCount()));
+            overviewVO.setTodayTimeCost(defaultNumber(todayStats.getTimeCost()));
+        }
+
+        Long wrongQuestionCount = wrongQuestionMapper.selectCount(new LambdaQueryWrapper<WrongQuestion>()
+                .eq(WrongQuestion::getUserId, userId));
+        Long masteredWrongQuestionCount = wrongQuestionMapper.selectCount(new LambdaQueryWrapper<WrongQuestion>()
+                .eq(WrongQuestion::getUserId, userId)
+                .eq(WrongQuestion::getMasterStatus, 1));
+        Long finishedSessionCount = practiceSessionMapper.selectCount(new LambdaQueryWrapper<PracticeSession>()
+                .eq(PracticeSession::getUserId, userId)
+                .eq(PracticeSession::getStatus, PracticeModeConstants.STATUS_FINISHED));
+
+        overviewVO.setWrongQuestionCount(toInt(wrongQuestionCount));
+        overviewVO.setMasteredWrongQuestionCount(toInt(masteredWrongQuestionCount));
+        overviewVO.setFinishedSessionCount(toInt(finishedSessionCount));
+        return overviewVO;
+    }
+
+    private List<PracticeStatsVO.DailyTrendVO> buildDailyTrends(LocalDate startDate, LocalDate today, List<DailyStats> dailyStatsList) {
+        Map<LocalDate, DailyStats> dailyStatsMap = dailyStatsList.stream()
+                .filter(stats -> stats.getStatDate() != null)
+                .collect(Collectors.toMap(DailyStats::getStatDate, Function.identity(), (left, right) -> left));
+
+        List<PracticeStatsVO.DailyTrendVO> result = new ArrayList<>();
+        LocalDate cursor = startDate;
+        while (!cursor.isAfter(today)) {
+            DailyStats dailyStats = dailyStatsMap.get(cursor);
+            PracticeStatsVO.DailyTrendVO trendVO = new PracticeStatsVO.DailyTrendVO();
+            trendVO.setStatDate(cursor);
+            if (dailyStats != null) {
+                int doCount = defaultNumber(dailyStats.getDoCount());
+                int correctCount = defaultNumber(dailyStats.getCorrectCount());
+                trendVO.setDoCount(doCount);
+                trendVO.setCorrectCount(correctCount);
+                trendVO.setWrongCount(Math.max(doCount - correctCount, 0));
+                trendVO.setCorrectRate(calculateRate(correctCount, doCount));
+                trendVO.setTimeCost(defaultNumber(dailyStats.getTimeCost()));
+            }
+            result.add(trendVO);
+            cursor = cursor.plusDays(1);
+        }
+        return result;
+    }
+
+    private List<PracticeStatsVO.SubjectStatsVO> buildSubjectStats(List<UserSubjectStats> subjectStatsList) {
+        Map<Long, Subject> subjectMap = loadSubjectMap(subjectStatsList.stream()
+                .map(UserSubjectStats::getSubjectId)
+                .filter(id -> id != null && id > 0)
+                .distinct()
+                .toList());
+
+        List<PracticeStatsVO.SubjectStatsVO> result = new ArrayList<>();
+        for (UserSubjectStats subjectStats : subjectStatsList) {
+            Subject subject = subjectMap.get(subjectStats.getSubjectId());
+            PracticeStatsVO.SubjectStatsVO subjectStatsVO = new PracticeStatsVO.SubjectStatsVO();
+            subjectStatsVO.setSubjectId(subjectStats.getSubjectId());
+            subjectStatsVO.setSubjectName(subject == null ? "已删除学科" : subject.getName());
+            subjectStatsVO.setTotalCount(defaultNumber(subjectStats.getTotalCount()));
+            subjectStatsVO.setCorrectCount(defaultNumber(subjectStats.getCorrectCount()));
+            subjectStatsVO.setWrongCount(defaultNumber(subjectStats.getWrongCount()));
+            subjectStatsVO.setCorrectRate(defaultDecimal(subjectStats.getCorrectRate()));
+            subjectStatsVO.setTotalTimeCost(defaultNumber(subjectStats.getTotalTimeCost()));
+            subjectStatsVO.setLastPracticeDate(subjectStats.getLastPracticeDate());
+            result.add(subjectStatsVO);
+        }
+        return result;
+    }
+
+    private List<PracticeStatsVO.KnowledgeMasteryVO> buildKnowledgeMasteries(List<UserKnowledgeMastery> knowledgeMasteries, int limit) {
+        if (knowledgeMasteries.isEmpty()) {
+            return Collections.emptyList();
+        }
+
+        Map<Long, Subject> subjectMap = loadSubjectMap(knowledgeMasteries.stream()
+                .map(UserKnowledgeMastery::getSubjectId)
+                .filter(id -> id != null && id > 0)
+                .distinct()
+                .toList());
+        Map<Long, ExamTag> tagMap = loadTagMap(knowledgeMasteries.stream()
+                .map(UserKnowledgeMastery::getTagId)
+                .filter(id -> id != null && id > 0)
+                .distinct()
+                .toList());
+
+        List<PracticeStatsVO.KnowledgeMasteryVO> result = new ArrayList<>();
+        for (UserKnowledgeMastery mastery : knowledgeMasteries.stream().limit(limit).toList()) {
+            result.add(toKnowledgeMasteryVO(mastery, subjectMap, tagMap));
+        }
+        return result;
+    }
+
+    private List<PracticeStatsVO.KnowledgeMasteryVO> buildWeakPoints(List<UserKnowledgeMastery> knowledgeMasteries, int limit) {
+        if (knowledgeMasteries.isEmpty()) {
+            return Collections.emptyList();
+        }
+
+        List<UserKnowledgeMastery> weakMasteries = knowledgeMasteries.stream()
+                .filter(mastery -> defaultNumber(mastery.getTotalCount()) > 0)
+                .sorted((left, right) -> {
+                    int levelCompare = Integer.compare(defaultNumber(left.getMasteryLevel()), defaultNumber(right.getMasteryLevel()));
+                    if (levelCompare != 0) {
+                        return levelCompare;
+                    }
+                    int wrongCompare = Integer.compare(defaultNumber(right.getWrongCount()), defaultNumber(left.getWrongCount()));
+                    if (wrongCompare != 0) {
+                        return wrongCompare;
+                    }
+                    return defaultDecimal(left.getCorrectRate()).compareTo(defaultDecimal(right.getCorrectRate()));
+                })
+                .limit(limit)
+                .toList();
+        return buildKnowledgeMasteries(weakMasteries, limit);
+    }
+
+    private PracticeStatsVO.KnowledgeMasteryVO toKnowledgeMasteryVO(
+            UserKnowledgeMastery mastery,
+            Map<Long, Subject> subjectMap,
+            Map<Long, ExamTag> tagMap
+    ) {
+        Subject subject = subjectMap.get(mastery.getSubjectId());
+        ExamTag tag = tagMap.get(mastery.getTagId());
+
+        PracticeStatsVO.KnowledgeMasteryVO masteryVO = new PracticeStatsVO.KnowledgeMasteryVO();
+        masteryVO.setTagId(mastery.getTagId());
+        masteryVO.setTagName(tag == null ? "已删除考点" : tag.getName());
+        masteryVO.setSubjectId(mastery.getSubjectId());
+        masteryVO.setSubjectName(subject == null ? "已删除学科" : subject.getName());
+        masteryVO.setTotalCount(defaultNumber(mastery.getTotalCount()));
+        masteryVO.setCorrectCount(defaultNumber(mastery.getCorrectCount()));
+        masteryVO.setWrongCount(defaultNumber(mastery.getWrongCount()));
+        masteryVO.setCorrectRate(defaultDecimal(mastery.getCorrectRate()));
+        masteryVO.setMasteryLevel(defaultNumber(mastery.getMasteryLevel()));
+        masteryVO.setUpdateTime(mastery.getUpdateTime());
+        return masteryVO;
+    }
+
+    private List<PracticeSessionSummaryVO> listRecentPracticeSessions(Long userId, int limit) {
+        List<PracticeSession> sessions = practiceSessionMapper.selectList(new LambdaQueryWrapper<PracticeSession>()
+                .eq(PracticeSession::getUserId, userId)
+                .orderByDesc(PracticeSession::getStartedAt)
+                .orderByDesc(PracticeSession::getId)
+                .last("LIMIT " + limit));
+        if (sessions.isEmpty()) {
+            return Collections.emptyList();
+        }
+
+        Map<Long, Subject> subjectMap = loadSubjectMap(sessions.stream()
+                .map(PracticeSession::getSubjectId)
+                .filter(id -> id != null && id > 0)
+                .distinct()
+                .toList());
+
+        List<PracticeSessionSummaryVO> result = new ArrayList<>();
+        for (PracticeSession session : sessions) {
+            result.add(buildPracticeSessionSummary(session, subjectMap.get(session.getSubjectId())));
+        }
+        return result;
+    }
+
+    private int calculateContinuousDays(List<DailyStats> dailyStatsList, LocalDate today) {
+        Set<LocalDate> activeDates = toActiveDateSet(dailyStatsList);
+        int continuousDays = 0;
+        LocalDate cursor = today;
+        while (activeDates.contains(cursor)) {
+            continuousDays++;
+            cursor = cursor.minusDays(1);
+        }
+        return continuousDays;
+    }
+
+    private int calculateMaxContinuousDays(List<DailyStats> dailyStatsList) {
+        List<LocalDate> activeDates = new ArrayList<>(toActiveDateSet(dailyStatsList));
+        Collections.sort(activeDates);
+
+        int maxContinuousDays = 0;
+        int currentContinuousDays = 0;
+        LocalDate previousDate = null;
+        for (LocalDate activeDate : activeDates) {
+            if (previousDate != null && activeDate.equals(previousDate.plusDays(1))) {
+                currentContinuousDays++;
+            } else {
+                currentContinuousDays = 1;
+            }
+            maxContinuousDays = Math.max(maxContinuousDays, currentContinuousDays);
+            previousDate = activeDate;
+        }
+        return maxContinuousDays;
+    }
+
+    private Set<LocalDate> toActiveDateSet(List<DailyStats> dailyStatsList) {
+        Set<LocalDate> activeDates = new HashSet<>();
+        for (DailyStats dailyStats : dailyStatsList) {
+            if (dailyStats.getStatDate() != null && defaultNumber(dailyStats.getDoCount()) > 0) {
+                activeDates.add(dailyStats.getStatDate());
+            }
+        }
+        return activeDates;
+    }
+
     private Subject requireEnabledSubject(Long subjectId) {
         if (subjectId == null || subjectId <= 0) {
             throw new BusinessException("学科ID不合法", 400);
@@ -545,7 +836,11 @@ public class PracticeServiceImpl implements PracticeService {
         return practiceSession;
     }
 
-    private List<Question> selectSessionQuestions(Long subjectId, int practiceMode, int questionCount) {
+    private List<Question> selectSessionQuestions(Long subjectId, int practiceMode, int questionCount, List<Long> tagIds) {
+        if (practiceMode == PracticeModeConstants.KNOWLEDGE_POINT) {
+            return selectTaggedQuestions(subjectId, tagIds, questionCount);
+        }
+
         List<Question> questions = questionMapper.selectList(new LambdaQueryWrapper<Question>()
                 .eq(Question::getSubjectId, subjectId)
                 .orderByAsc(Question::getId));
@@ -560,6 +855,58 @@ public class PracticeServiceImpl implements PracticeService {
 
         int limit = Math.min(selectedQuestions.size(), questionCount);
         return new ArrayList<>(selectedQuestions.subList(0, limit));
+    }
+
+    private List<Question> selectTaggedQuestions(Long subjectId, List<Long> tagIds, int questionCount) {
+        ensureTagsBelongToSubject(subjectId, tagIds);
+
+        List<QuestionTagRelation> relations = questionTagRelationMapper.selectList(new LambdaQueryWrapper<QuestionTagRelation>()
+                .in(QuestionTagRelation::getTagId, tagIds));
+        if (relations.isEmpty()) {
+            return Collections.emptyList();
+        }
+
+        List<Long> questionIds = relations.stream()
+                .map(QuestionTagRelation::getQuestionId)
+                .filter(id -> id != null && id > 0)
+                .distinct()
+                .toList();
+        if (questionIds.isEmpty()) {
+            return Collections.emptyList();
+        }
+
+        Map<Long, Question> questionMap = questionMapper.selectBatchIds(questionIds).stream()
+                .filter(question -> question != null)
+                .filter(question -> subjectId.equals(question.getSubjectId()))
+                .filter(question -> !Integer.valueOf(1).equals(question.getDeleted()))
+                .collect(Collectors.toMap(Question::getId, Function.identity(), (left, right) -> left));
+
+        List<Question> selectedQuestions = new ArrayList<>();
+        for (Long questionId : questionIds) {
+            Question question = questionMap.get(questionId);
+            if (question != null) {
+                selectedQuestions.add(question);
+            }
+        }
+
+        Collections.shuffle(selectedQuestions);
+        int limit = Math.min(selectedQuestions.size(), questionCount);
+        return new ArrayList<>(selectedQuestions.subList(0, limit));
+    }
+
+    private void ensureTagsBelongToSubject(Long subjectId, List<Long> tagIds) {
+        if (tagIds.isEmpty()) {
+            throw new BusinessException("请选择知识点", 400);
+        }
+
+        List<ExamTag> tags = examTagMapper.selectBatchIds(tagIds);
+        Set<Long> matchedTagIds = tags.stream()
+                .filter(tag -> tag != null && subjectId.equals(tag.getSubjectId()))
+                .map(ExamTag::getId)
+                .collect(Collectors.toSet());
+        if (matchedTagIds.size() != tagIds.size()) {
+            throw new BusinessException("存在不属于当前学科的知识点", 400);
+        }
     }
 
     private List<ExerciseRecord> listSessionRecords(Long sessionId) {
@@ -640,6 +987,27 @@ public class PracticeServiceImpl implements PracticeService {
         return subjectMapper.selectBatchIds(subjectIds).stream()
                 .filter(subject -> subject != null)
                 .collect(Collectors.toMap(Subject::getId, Function.identity(), (left, right) -> left));
+    }
+
+    private Map<Long, ExamTag> loadTagMap(List<Long> tagIds) {
+        if (tagIds.isEmpty()) {
+            return Map.of();
+        }
+        return examTagMapper.selectBatchIds(tagIds).stream()
+                .filter(tag -> tag != null)
+                .collect(Collectors.toMap(ExamTag::getId, Function.identity(), (left, right) -> left));
+    }
+
+    private ExamTagVO toExamTagVO(ExamTag tag, String subjectName) {
+        ExamTagVO tagVO = new ExamTagVO();
+        tagVO.setId(tag.getId());
+        tagVO.setName(tag.getName());
+        tagVO.setSubjectId(tag.getSubjectId());
+        tagVO.setSubjectName(subjectName);
+        tagVO.setTag(tag.getTag());
+        tagVO.setCreateTime(tag.getCreateTime());
+        tagVO.setUpdateTime(tag.getUpdateTime());
+        return tagVO;
     }
 
     private Map<Long, PracticeAnswerItemDTO> toAnswerMap(List<PracticeAnswerItemDTO> answers) {
@@ -874,8 +1242,10 @@ public class PracticeServiceImpl implements PracticeService {
 
     private int normalizePracticeMode(Integer practiceMode) {
         int mode = practiceMode == null ? PracticeModeConstants.SEQUENTIAL : practiceMode;
-        if (mode != PracticeModeConstants.SEQUENTIAL && mode != PracticeModeConstants.RANDOM) {
-            throw new BusinessException("当前最小闭环仅支持顺序练习和随机练习", 400);
+        if (mode != PracticeModeConstants.SEQUENTIAL
+                && mode != PracticeModeConstants.RANDOM
+                && mode != PracticeModeConstants.KNOWLEDGE_POINT) {
+            throw new BusinessException("当前仅支持顺序练习、随机练习和知识点练习", 400);
         }
         return mode;
     }
@@ -888,6 +1258,31 @@ public class PracticeServiceImpl implements PracticeService {
             throw new BusinessException("题目数量范围应为 1 到 50", 400);
         }
         return questionCount;
+    }
+
+    private List<Long> normalizeTagIds(List<Long> tagIds) {
+        if (tagIds == null || tagIds.isEmpty()) {
+            throw new BusinessException("请选择知识点", 400);
+        }
+
+        List<Long> normalizedTagIds = tagIds.stream()
+                .filter(id -> id != null && id > 0)
+                .distinct()
+                .toList();
+        if (normalizedTagIds.isEmpty() || normalizedTagIds.size() != tagIds.size()) {
+            throw new BusinessException("知识点参数不合法", 400);
+        }
+        return normalizedTagIds;
+    }
+
+    private int normalizeStatsDays(Integer days) {
+        if (days == null) {
+            return 30;
+        }
+        if (days < 7 || days > 90) {
+            throw new BusinessException("统计天数范围应为 7 到 90", 400);
+        }
+        return days;
     }
 
     private int normalizeTimeCost(Integer timeCost) {
@@ -931,6 +1326,16 @@ public class PracticeServiceImpl implements PracticeService {
 
     private int defaultNumber(Integer value) {
         return value == null ? 0 : value;
+    }
+
+    private int toInt(Long value) {
+        if (value == null) {
+            return 0;
+        }
+        if (value > Integer.MAX_VALUE) {
+            return Integer.MAX_VALUE;
+        }
+        return value.intValue();
     }
 
     private BigDecimal defaultDecimal(BigDecimal value) {

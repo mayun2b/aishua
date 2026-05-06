@@ -19,29 +19,29 @@ export const navConfig = {
     },
     {
       name: '考试记录',
-      path: '/exercise/records',
+      path: '/practice-records',
       icon: 'records'
     },
     {
       name: '错题本',
-      path: '/exercise/wrong',
+      path: '/wrong-questions',
       icon: 'wrong'
     },
     {
       name: '学习统计',
-      path: '/exercise/stats',
+      path: '/dashboard',
       icon: 'stats'
     }
   ],
   adminMenu: [
     {
       name: '题目管理',
-      path: '/exercise/questions',
+      path: '/admin/questions',
       icon: 'questions'
     },
     {
       name: '学科管理',
-      path: '/exercise/subjects',
+      path: '/admin/subjects',
       icon: 'subjects'
     },
     {
