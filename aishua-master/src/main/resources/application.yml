@@ -21,12 +21,15 @@ spring:
 ai:
   zhipu:
     embedding-api: https://open.bigmodel.cn/api/paas/v4/embeddings
-    api-key: 29dca5d253234978a022637f1743e5c9.1mT1SGEBqXvqJD8O
+    chat-api: https://dashscope.aliyuncs.com/compatible-mode/v1/chat/completions
+    api-key: sk-e61dc444fb6f4503965af827b50a4ab0
     model: embedding-2
+    chat-model: qwen3.5-plus-2026-02-15
+    chat-max-tokens: 220
   qwen:
     api-url: https://dashscope.aliyuncs.com/api/v1/services/aigc/text-generation/generation
     api-key: sk-e61dc444fb6f4503965af827b50a4ab0
-    model: qwen3.5-flash
+    model: qwen3.5-plus-2026-02-15
 
 mybatis-plus:
   configuration:

@@ -70,13 +70,23 @@
               <td>{{ question.wrongCount ?? 0 }}</td>
               <td>{{ formatDateTime(question.lastWrongTime) }}</td>
               <td>
-                <router-link
-                  v-if="question.subjectId"
-                  class="practice-link"
-                  :to="`/practice?subjectId=${question.subjectId}`"
-                >
-                  去练习
-                </router-link>
+                <div class="action-stack">
+                  <router-link
+                    v-if="question.subjectId"
+                    class="practice-link"
+                    :to="`/practice?subjectId=${question.subjectId}`"
+                  >
+                    去练习
+                  </router-link>
+                  <button
+                    type="button"
+                    class="ai-link"
+                    :disabled="aiAnalyzing && activeWrongQuestion?.wrongQuestionId === question.wrongQuestionId"
+                    @click="openAiAssistant(question)"
+                  >
+                    {{ aiAnalyzing && activeWrongQuestion?.wrongQuestionId === question.wrongQuestionId ? '分析中...' : 'AI分析' }}
+                  </button>
+                </div>
               </td>
             </tr>
           </tbody>
@@ -89,11 +99,110 @@
         :total="wrongQuestions.length"
       />
     </section>
+
+    <div v-if="aiPanelVisible" class="ai-modal-overlay" @click.self="closeAiPanel">
+      <section class="ai-modal" role="dialog" aria-modal="true" aria-label="AI 错题分析助手">
+        <header class="ai-modal-head">
+          <div>
+            <h2>AI 错题分析助手</h2>
+            <p>{{ activeWrongQuestion?.questionTitle || '-' }}</p>
+          </div>
+          <div class="panel-actions">
+            <button type="button" class="ghost" @click="refreshAiAnalysis">重新分析</button>
+            <button type="button" class="ghost" @click="closeAiPanel">关闭</button>
+          </div>
+        </header>
+
+        <div class="ai-modal-body ai-modal-split">
+          <div class="ai-analysis-pane">
+            <div v-if="aiAnalyzing" class="empty-state">AI 正在分析该错题，请稍候...</div>
+            <div v-else-if="!aiAnalysis" class="empty-state">暂无 AI 分析结果。</div>
+            <div v-else class="analysis-card">
+              <h3>分析摘要</h3>
+              <p class="summary">{{ aiAnalysis.summary || '暂无摘要' }}</p>
+
+              <div class="analysis-grid">
+                <div>
+                  <h4>错因判断</h4>
+                  <ul>
+                    <li v-for="item in aiAnalysis.errorReasons" :key="`reason-${item}`">{{ item }}</li>
+                  </ul>
+                </div>
+                <div>
+                  <h4>判断依据</h4>
+                  <ul>
+                    <li v-for="item in aiAnalysis.reasonEvidence" :key="`evidence-${item}`">{{ item }}</li>
+                  </ul>
+                </div>
+                <div>
+                  <h4>解题步骤</h4>
+                  <ul>
+                    <li v-for="item in aiAnalysis.solutionSteps" :key="`step-${item}`">{{ item }}</li>
+                  </ul>
+                </div>
+                <div>
+                  <h4>涉及考点</h4>
+                  <ul>
+                    <li v-for="item in aiAnalysis.knowledgePoints" :key="`kp-${item}`">{{ item }}</li>
+                  </ul>
+                </div>
+                <div>
+                  <h4>避免再错建议</h4>
+                  <ul>
+                    <li v-for="item in aiAnalysis.avoidanceTips" :key="`tip-${item}`">{{ item }}</li>
+                  </ul>
+                </div>
+              </div>
+            </div>
+          </div>
+
+          <div class="ai-chat-pane">
+            <div class="chat-card">
+              <div class="chat-head">
+                <h3>继续追问</h3>
+                <button v-if="aiSession?.status === 1" type="button" class="ghost" @click="closeAiSession">结束会话</button>
+                <button v-else type="button" class="ghost" @click="createAiSession">新建会话</button>
+              </div>
+
+              <div v-if="chatLoading" class="empty-state">正在加载会话...</div>
+              <div v-else class="chat-body">
+                <div v-if="!aiMessages.length" class="empty-state">当前会话还没有消息，开始提问吧。</div>
+                <div v-else class="message-list">
+                  <div
+                    v-for="message in aiMessages"
+                    :key="message.messageId"
+                    :class="['message-item', message.roleName === 'user' ? 'user' : 'assistant']"
+                  >
+                    <p class="role">{{ message.roleName === 'user' ? '你' : 'AI' }}</p>
+                    <p class="content">{{ formatAiMessageContent(message.content || message.errorMessage) }}</p>
+                    <p class="time">{{ formatDateTime(message.createTime) }}</p>
+                  </div>
+                </div>
+              </div>
+
+              <div class="input-row">
+                <input
+                  v-model="chatInput"
+                  type="text"
+                  placeholder="例如：第二步为什么可以这样变形？"
+                  :disabled="!canInputMessage"
+                  @keyup.enter="sendAiMessage"
+                >
+                <button type="button" :disabled="!canSendMessage || sendingMessage" @click="sendAiMessage">
+                  {{ sendingMessage ? '发送中...' : '发送' }}
+                </button>
+              </div>
+              <p class="disclaimer">提示：AI 分析用于学习参考，请结合教材与老师讲解综合判断。</p>
+            </div>
+          </div>
+        </div>
+      </section>
+    </div>
   </div>
 </template>
 
 <script setup>
-import { onMounted, reactive, ref, watch } from 'vue'
+import { computed, onBeforeUnmount, onMounted, reactive, ref, watch } from 'vue'
 import { useRoute } from 'vue-router'
 import { showToast } from 'vant'
 import BasePagination from '@/components/BasePagination.vue'
@@ -108,9 +217,42 @@ const subjects = ref([])
 const wrongQuestions = ref([])
 const { currentPage, pagedItems: pagedWrongQuestions, resetPage } = useClientPagination(wrongQuestions)
 
+const aiPanelVisible = ref(false)
+const aiAnalyzing = ref(false)
+const chatLoading = ref(false)
+const sendingMessage = ref(false)
+const activeWrongQuestion = ref(null)
+const aiAnalysis = ref(null)
+const aiSession = ref(null)
+const aiMessages = ref([])
+const chatInput = ref('')
+
 const filters = reactive({
   subjectId: ''
 })
+
+const canInputMessage = computed(() => {
+  return Boolean(aiSession.value && aiSession.value.status === 1)
+})
+
+const canSendMessage = computed(() => {
+  return canInputMessage.value && chatInput.value.trim().length > 0
+})
+
+const toggleBodyScroll = (locked) => {
+  if (typeof document === 'undefined') {
+    return
+  }
+  document.body.style.overflow = locked ? 'hidden' : ''
+}
+
+const resolveErrorMessage = (error, fallback) => {
+  const message = error?.message || ''
+  if (error?.code === 'ECONNABORTED' || message.toLowerCase().includes('timeout')) {
+    return 'AI 响应超时，请稍后重试'
+  }
+  return message || fallback
+}
 
 const resolveRouteSubjectId = () => {
   return route.query.subjectId ? String(route.query.subjectId) : ''
@@ -143,6 +285,205 @@ const loadWrongQuestions = async () => {
 const resetFilters = async () => {
   filters.subjectId = resolveRouteSubjectId()
   await loadWrongQuestions()
+}
+
+const openAiAssistant = async (question) => {
+  activeWrongQuestion.value = question
+  aiPanelVisible.value = true
+  aiMessages.value = []
+  chatInput.value = ''
+  await analyzeCurrentWrongQuestion({ preferLatest: true })
+  const loadedLatestSession = await tryLoadLatestAiSession()
+  if (!loadedLatestSession) {
+    createAiSession()
+  }
+}
+
+const tryLoadLatestAnalysis = async () => {
+  if (!activeWrongQuestion.value?.wrongQuestionId) {
+    return false
+  }
+  try {
+    const response = await practiceApi.getLatestWrongQuestionAnalysis(activeWrongQuestion.value.wrongQuestionId)
+    aiAnalysis.value = normalizeAnalysis(response.data)
+    return true
+  } catch (error) {
+    // 404 表示当前错题还没有分析记录，此时由调用方决定是否发起新分析。
+    if (error.response?.data?.code !== 404) {
+      showToast(resolveErrorMessage(error, '加载历史分析失败'))
+    }
+    return false
+  }
+}
+
+const analyzeCurrentWrongQuestion = async ({ preferLatest = false } = {}) => {
+  if (!activeWrongQuestion.value?.wrongQuestionId) {
+    return
+  }
+
+  if (preferLatest) {
+    const loaded = await tryLoadLatestAnalysis()
+    if (loaded) {
+      return
+    }
+  }
+
+  aiAnalyzing.value = true
+  try {
+    const response = await practiceApi.analyzeWrongQuestion(activeWrongQuestion.value.wrongQuestionId, {})
+    aiAnalysis.value = normalizeAnalysis(response.data)
+  } catch (error) {
+    showToast(resolveErrorMessage(error, 'AI 分析失败'))
+    aiAnalysis.value = null
+  } finally {
+    aiAnalyzing.value = false
+  }
+}
+
+const refreshAiAnalysis = async () => {
+  await analyzeCurrentWrongQuestion({ preferLatest: false })
+}
+
+const tryLoadLatestAiSession = async () => {
+  if (!activeWrongQuestion.value?.wrongQuestionId) {
+    return false
+  }
+  chatLoading.value = true
+  try {
+    const response = await practiceApi.getLatestWrongQuestionAiSession(activeWrongQuestion.value.wrongQuestionId)
+    aiSession.value = response.data || null
+    if (!aiSession.value?.sessionId) {
+      return false
+    }
+    await loadAiMessages()
+    return true
+  } catch (error) {
+    if (error.response?.data?.code !== 404) {
+      showToast(resolveErrorMessage(error, '加载历史会话失败'))
+    }
+    aiSession.value = null
+    aiMessages.value = []
+    return false
+  } finally {
+    chatLoading.value = false
+  }
+}
+
+const createAiSession = async () => {
+  aiSession.value = {
+    sessionId: null,
+    status: 1,
+    wrongQuestionId: activeWrongQuestion.value?.wrongQuestionId || null,
+    analysisId: aiAnalysis.value?.analysisId || null,
+    roundCount: 0
+  }
+  aiMessages.value = []
+  chatInput.value = ''
+}
+
+const ensureAiSessionCreated = async () => {
+  if (!activeWrongQuestion.value?.wrongQuestionId) {
+    return false
+  }
+  if (aiSession.value?.sessionId) {
+    return true
+  }
+  try {
+    const response = await practiceApi.createWrongQuestionAiSession(activeWrongQuestion.value.wrongQuestionId, {
+      analysisId: aiAnalysis.value?.analysisId
+    })
+    aiSession.value = response.data || null
+    return Boolean(aiSession.value?.sessionId)
+  } catch (error) {
+    showToast(resolveErrorMessage(error, '创建会话失败'))
+    return false
+  }
+}
+
+const loadAiMessages = async () => {
+  if (!activeWrongQuestion.value?.wrongQuestionId || !aiSession.value?.sessionId) {
+    aiMessages.value = []
+    return
+  }
+  try {
+    const response = await practiceApi.listWrongQuestionAiMessages(
+      activeWrongQuestion.value.wrongQuestionId,
+      aiSession.value.sessionId
+    )
+    aiMessages.value = response.data || []
+  } catch (error) {
+    showToast(resolveErrorMessage(error, '加载会话消息失败'))
+  }
+}
+
+const sendAiMessage = async () => {
+  if (!canSendMessage.value || sendingMessage.value) {
+    return
+  }
+  sendingMessage.value = true
+  try {
+    const sessionReady = await ensureAiSessionCreated()
+    if (!sessionReady) {
+      return
+    }
+    await practiceApi.sendWrongQuestionAiMessage(
+      activeWrongQuestion.value.wrongQuestionId,
+      aiSession.value.sessionId,
+      { content: chatInput.value.trim() }
+    )
+    chatInput.value = ''
+    await loadAiMessages()
+  } catch (error) {
+    showToast(resolveErrorMessage(error, '发送失败'))
+  } finally {
+    sendingMessage.value = false
+  }
+}
+
+const closeAiSession = async () => {
+  if (!aiSession.value) {
+    return
+  }
+  if (!activeWrongQuestion.value?.wrongQuestionId || !aiSession.value?.sessionId) {
+    aiSession.value = { ...aiSession.value, status: 2 }
+    return
+  }
+  try {
+    const response = await practiceApi.closeWrongQuestionAiSession(
+      activeWrongQuestion.value.wrongQuestionId,
+      aiSession.value.sessionId
+    )
+    aiSession.value = response.data || { ...aiSession.value, status: 2 }
+  } catch (error) {
+    showToast(resolveErrorMessage(error, '关闭会话失败'))
+  }
+}
+
+const closeAiPanel = () => {
+  aiPanelVisible.value = false
+  activeWrongQuestion.value = null
+  aiAnalysis.value = null
+  aiSession.value = null
+  aiMessages.value = []
+  chatInput.value = ''
+}
+
+const handleEscClose = (event) => {
+  if (event.key === 'Escape' && aiPanelVisible.value) {
+    closeAiPanel()
+  }
+}
+
+const normalizeAnalysis = (analysis) => {
+  const toArray = (value) => (Array.isArray(value) ? value : [])
+  return {
+    ...analysis,
+    errorReasons: toArray(analysis?.errorReasons),
+    reasonEvidence: toArray(analysis?.reasonEvidence),
+    solutionSteps: toArray(analysis?.solutionSteps),
+    knowledgePoints: toArray(analysis?.knowledgePoints),
+    avoidanceTips: toArray(analysis?.avoidanceTips)
+  }
 }
 
 const resolveTypeLabel = (type) => {
@@ -189,6 +530,67 @@ const formatAnswerDisplay = (value) => {
   return String(value).trim()
 }
 
+const normalizeLatexFractions = (rawText) => {
+  let text = rawText
+  let guard = 0
+  const fractionExistsPattern = /\\frac\s*\{([^{}]+)\}\s*\{([^{}]+)\}/
+  while (fractionExistsPattern.test(text) && guard < 8) {
+    text = text.replace(/\\frac\s*\{([^{}]+)\}\s*\{([^{}]+)\}/g, '($1)/($2)')
+    guard += 1
+  }
+  return text
+}
+
+const formatAiMessageContent = (value) => {
+  if (value == null) {
+    return ''
+  }
+  let text = String(value).replace(/\r\n/g, '\n')
+
+  // markdown markers
+  text = text.replace(/^#{1,6}\s*/gm, '')
+  text = text.replace(/\*\*(.*?)\*\*/g, '$1')
+  text = text.replace(/`([^`]+)`/g, '$1')
+
+  // latex wrappers
+  text = text.replace(/\\\[([\s\S]*?)\\\]/g, '$1')
+  text = text.replace(/\\\(([\s\S]*?)\\\)/g, '$1')
+  text = text.replace(/\$\$([\s\S]*?)\$\$/g, '$1')
+  text = text.replace(/\$([^$\n]+)\$/g, '$1')
+
+  // latex commands to readable symbols
+  text = normalizeLatexFractions(text)
+  text = text.replace(/\\sqrt\s*\{([^{}]+)\}/g, '√($1)')
+  text = text.replace(/\\left/g, '')
+  text = text.replace(/\\right/g, '')
+  text = text.replace(/\\cdot/g, '·')
+  text = text.replace(/\\times/g, '×')
+  text = text.replace(/\\div/g, '÷')
+  text = text.replace(/\\leq/g, '≤')
+  text = text.replace(/\\geq/g, '≥')
+  text = text.replace(/\\neq/g, '≠')
+  text = text.replace(/\\approx/g, '≈')
+  text = text.replace(/\\pm/g, '±')
+  text = text.replace(/\\Delta/g, 'Δ')
+  text = text.replace(/\\alpha/g, 'α')
+  text = text.replace(/\\beta/g, 'β')
+  text = text.replace(/\\theta/g, 'θ')
+  text = text.replace(/\\pi/g, 'π')
+
+  // superscript/subscript braces
+  text = text.replace(/\^\{([^{}]+)\}/g, '^$1')
+  text = text.replace(/_\{([^{}]+)\}/g, '_$1')
+  text = text.replace(/\{([^{}]+)\}/g, '$1')
+
+  // fallback cleanup for leftover escapes
+  text = text.replace(/\\,/g, ' ')
+  text = text.replace(/\\;/g, ' ')
+  text = text.replace(/\\\\/g, '\n')
+  text = text.replace(/\\+/g, '')
+
+  return text.trim()
+}
+
 watch(
   () => route.query.subjectId,
   async () => {
@@ -197,10 +599,26 @@ watch(
   }
 )
 
+watch(
+  () => aiPanelVisible.value,
+  (visible) => {
+    toggleBodyScroll(visible)
+  }
+)
+
+onMounted(() => {
+  window.addEventListener('keydown', handleEscClose)
+})
+
 onMounted(async () => {
   filters.subjectId = resolveRouteSubjectId()
   await loadSubjects()
   await loadWrongQuestions()
+})
+
+onBeforeUnmount(() => {
+  window.removeEventListener('keydown', handleEscClose)
+  toggleBodyScroll(false)
 })
 </script>
 
@@ -316,6 +734,84 @@ onMounted(async () => {
   overflow: auto;
 }
 
+.ai-modal-overlay {
+  position: fixed;
+  inset: 0;
+  z-index: 1200;
+  padding: 20px;
+  background: rgba(18, 30, 45, 0.45);
+  backdrop-filter: blur(2px);
+  display: flex;
+  align-items: center;
+  justify-content: center;
+}
+
+.ai-modal {
+  width: min(1280px, 100%);
+  max-height: calc(100vh - 40px);
+  display: flex;
+  flex-direction: column;
+  background: rgba(255, 255, 255, 0.98);
+  border-radius: 24px;
+  box-shadow: 0 30px 80px rgba(22, 38, 58, 0.28);
+  overflow: hidden;
+}
+
+.ai-modal-head {
+  padding: 22px 24px 18px;
+  border-bottom: 1px solid #e7edf4;
+  display: flex;
+  justify-content: space-between;
+  align-items: flex-start;
+  gap: 12px;
+  flex-wrap: wrap;
+}
+
+.ai-modal-head h2 {
+  margin: 0;
+  color: #17324d;
+}
+
+.ai-modal-head p {
+  margin: 8px 0 0;
+  color: #5e6d7c;
+}
+
+.ai-modal-body {
+  flex: 1;
+  min-height: 0;
+  padding: 20px 24px 24px;
+  overflow: hidden;
+}
+
+.ai-modal-split {
+  display: grid;
+  grid-template-columns: minmax(0, 1.45fr) minmax(360px, 1fr);
+  gap: 16px;
+  align-items: start;
+  height: 100%;
+}
+
+.ai-analysis-pane,
+.ai-chat-pane {
+  min-height: 0;
+  height: 100%;
+  overflow-y: auto;
+  padding-right: 4px;
+}
+
+.ai-modal-body > .empty-state,
+.ai-modal-body > .analysis-card {
+  margin-top: 0;
+}
+
+.ai-analysis-pane > .empty-state,
+.ai-analysis-pane > .analysis-card,
+.ai-chat-pane > .empty-state,
+.ai-chat-pane > .chat-card {
+  margin-top: 0;
+}
+
 table {
   width: 100%;
   min-width: 980px;
@@ -360,6 +856,12 @@ th {
   overflow: hidden;
 }
 
+.action-stack {
+  display: flex;
+  gap: 8px;
+  flex-wrap: wrap;
+}
+
 .empty-state {
   margin: 18px 0 0;
   padding: 34px;
@@ -371,7 +873,8 @@ th {
 
 button,
 .ghost,
-.practice-link {
+.practice-link,
+.ai-link {
   border: 0;
   border-radius: 14px;
   padding: 12px 18px;
@@ -390,7 +893,8 @@ button {
   color: #17324d;
 }
 
-.practice-link {
+.practice-link,
+.ai-link {
   display: inline-flex;
   align-items: center;
   background: #17324d;
@@ -398,6 +902,139 @@ button {
   padding: 8px 12px;
   border-radius: 12px;
   font-size: 13px;
+}
+
+.ai-link {
+  background: #0f7a43;
+}
+
+.panel-head,
+.chat-head {
+  display: flex;
+  justify-content: space-between;
+  align-items: flex-start;
+  gap: 12px;
+  flex-wrap: wrap;
+}
+
+.panel-head h2,
+.chat-head h3 {
+  margin: 0;
+  color: #17324d;
+}
+
+.panel-head p {
+  margin: 8px 0 0;
+  color: #5e6d7c;
+}
+
+.panel-actions {
+  display: flex;
+  gap: 8px;
+  flex-wrap: wrap;
+}
+
+.analysis-card,
+.chat-card {
+  margin-top: 16px;
+  padding: 18px;
+  border-radius: 18px;
+  background: #f7fbff;
+}
+
+.chat-card {
+  min-height: 100%;
+  display: flex;
+  flex-direction: column;
+}
+
+.analysis-card h3,
+.analysis-card h4 {
+  margin: 0;
+  color: #17324d;
+}
+
+.summary {
+  margin: 10px 0 0;
+  color: #334b64;
+  line-height: 1.8;
+}
+
+.analysis-grid {
+  margin-top: 16px;
+  display: grid;
+  grid-template-columns: repeat(auto-fit, minmax(260px, 1fr));
+  gap: 16px;
+}
+
+.analysis-grid ul {
+  margin: 8px 0 0;
+  padding-left: 18px;
+  color: #4f6175;
+  line-height: 1.7;
+}
+
+.chat-body {
+  margin-top: 14px;
+  flex: 1;
+  min-height: 0;
+  overflow-y: auto;
+}
+
+.message-list {
+  display: grid;
+  gap: 10px;
+}
+
+.message-item {
+  padding: 12px;
+  border-radius: 12px;
+  background: #ecf2f8;
+}
+
+.message-item.user {
+  background: #e7f8ef;
+}
+
+.message-item .role {
+  margin: 0;
+  color: #17324d;
+  font-size: 12px;
+  font-weight: 600;
+}
+
+.message-item .content {
+  margin: 8px 0 0;
+  color: #334b64;
+  white-space: pre-wrap;
+  line-height: 1.7;
+}
+
+.message-item .time {
+  margin: 6px 0 0;
+  color: #7b8a9b;
+  font-size: 12px;
+}
+
+.input-row {
+  margin-top: 16px;
+  display: grid;
+  grid-template-columns: 1fr auto;
+  gap: 10px;
+}
+
+.input-row input {
+  min-width: 0;
+  border: 1px solid #c6d5e4;
+  border-radius: 12px;
+  padding: 10px 12px;
+  font-size: 14px;
+}
+
+.disclaimer {
+  margin: 12px 0 0;
+  color: #7b8a9b;
+  font-size: 12px;
 }
 
 @media (max-width: 768px) {
@@ -414,6 +1051,47 @@ button {
 
   .hero-card h1 {
     font-size: 28px;
+  }
+
+  .ai-modal-overlay {
+    padding: 10px;
+  }
+
+  .ai-modal {
+    max-height: calc(100vh - 20px);
+    border-radius: 18px;
+  }
+
+  .ai-modal-head,
+  .ai-modal-body {
+    padding: 16px;
+  }
+
+  .ai-modal-body {
+    overflow-y: auto;
+  }
+
+  .ai-modal-split {
+    grid-template-columns: 1fr;
+    gap: 12px;
+    height: auto;
+  }
+
+  .ai-analysis-pane,
+  .ai-chat-pane {
+    height: auto;
+    overflow: visible;
+    padding-right: 0;
+  }
+
+  .chat-card,
+  .chat-body {
+    min-height: 0;
+    overflow: visible;
+  }
+
+  .input-row {
+    grid-template-columns: 1fr;
   }
 }
 </style>

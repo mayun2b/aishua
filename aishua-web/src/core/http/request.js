@@ -3,7 +3,7 @@ import { clearAuthStorage, loadAuthStorage } from '../../modules/auth/utils/auth
 
 const request = axios.create({
   baseURL: process.env.VUE_APP_API_BASE_URL || '/api',
-  timeout: 10000,
+  timeout: 60000,
   headers: {
     'Content-Type': 'application/json'
   }
