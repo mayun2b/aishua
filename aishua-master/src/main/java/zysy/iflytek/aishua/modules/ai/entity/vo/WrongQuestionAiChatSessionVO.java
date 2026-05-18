@@ -1,4 +1,4 @@
-package zysy.iflytek.aishua.modules.practice.entity.vo;
+package zysy.iflytek.aishua.modules.ai.entity.vo;
 
 import lombok.Data;
 

@@ -1,11 +1,11 @@
-package zysy.iflytek.aishua.modules.practice.service;
+package zysy.iflytek.aishua.modules.ai.service;
 
-import zysy.iflytek.aishua.modules.practice.entity.dto.WrongQuestionAiAnalysisRequestDTO;
-import zysy.iflytek.aishua.modules.practice.entity.dto.WrongQuestionAiCreateSessionDTO;
-import zysy.iflytek.aishua.modules.practice.entity.dto.WrongQuestionAiSendMessageDTO;
-import zysy.iflytek.aishua.modules.practice.entity.vo.WrongQuestionAiAnalysisVO;
-import zysy.iflytek.aishua.modules.practice.entity.vo.WrongQuestionAiChatMessageVO;
-import zysy.iflytek.aishua.modules.practice.entity.vo.WrongQuestionAiChatSessionVO;
+import zysy.iflytek.aishua.modules.ai.entity.dto.WrongQuestionAiAnalysisRequestDTO;
+import zysy.iflytek.aishua.modules.ai.entity.dto.WrongQuestionAiCreateSessionDTO;
+import zysy.iflytek.aishua.modules.ai.entity.dto.WrongQuestionAiSendMessageDTO;
+import zysy.iflytek.aishua.modules.ai.entity.vo.WrongQuestionAiAnalysisVO;
+import zysy.iflytek.aishua.modules.ai.entity.vo.WrongQuestionAiChatMessageVO;
+import zysy.iflytek.aishua.modules.ai.entity.vo.WrongQuestionAiChatSessionVO;
 
 import java.util.List;
 

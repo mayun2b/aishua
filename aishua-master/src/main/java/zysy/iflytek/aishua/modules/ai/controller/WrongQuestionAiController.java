@@ -1,4 +1,4 @@
-package zysy.iflytek.aishua.modules.practice.controller;
+package zysy.iflytek.aishua.modules.ai.controller;
 
 import jakarta.validation.Valid;
 import org.springframework.web.bind.annotation.GetMapping;
@@ -10,13 +10,13 @@ import org.springframework.web.bind.annotation.RequestMapping;
 import org.springframework.web.bind.annotation.RestController;
 import zysy.iflytek.aishua.common.context.UserContext;
 import zysy.iflytek.aishua.common.result.Result;
-import zysy.iflytek.aishua.modules.practice.entity.dto.WrongQuestionAiAnalysisRequestDTO;
-import zysy.iflytek.aishua.modules.practice.entity.dto.WrongQuestionAiCreateSessionDTO;
-import zysy.iflytek.aishua.modules.practice.entity.dto.WrongQuestionAiSendMessageDTO;
-import zysy.iflytek.aishua.modules.practice.entity.vo.WrongQuestionAiAnalysisVO;
-import zysy.iflytek.aishua.modules.practice.entity.vo.WrongQuestionAiChatMessageVO;
-import zysy.iflytek.aishua.modules.practice.entity.vo.WrongQuestionAiChatSessionVO;
-import zysy.iflytek.aishua.modules.practice.service.WrongQuestionAiService;
+import zysy.iflytek.aishua.modules.ai.entity.dto.WrongQuestionAiAnalysisRequestDTO;
+import zysy.iflytek.aishua.modules.ai.entity.dto.WrongQuestionAiCreateSessionDTO;
+import zysy.iflytek.aishua.modules.ai.entity.dto.WrongQuestionAiSendMessageDTO;
+import zysy.iflytek.aishua.modules.ai.entity.vo.WrongQuestionAiAnalysisVO;
+import zysy.iflytek.aishua.modules.ai.entity.vo.WrongQuestionAiChatMessageVO;
+import zysy.iflytek.aishua.modules.ai.entity.vo.WrongQuestionAiChatSessionVO;
+import zysy.iflytek.aishua.modules.ai.service.WrongQuestionAiService;
 
 import java.util.List;
 

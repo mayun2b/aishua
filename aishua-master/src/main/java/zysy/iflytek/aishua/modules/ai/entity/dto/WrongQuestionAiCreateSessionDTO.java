@@ -1,4 +1,4 @@
-package zysy.iflytek.aishua.modules.practice.entity.dto;
+package zysy.iflytek.aishua.modules.ai.entity.dto;
 
 import lombok.Data;
 

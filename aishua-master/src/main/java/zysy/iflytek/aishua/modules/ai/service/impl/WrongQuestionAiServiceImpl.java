@@ -1,4 +1,4 @@
-package zysy.iflytek.aishua.modules.practice.service.impl;
+package zysy.iflytek.aishua.modules.ai.service.impl;
 
 import com.alibaba.fastjson2.JSON;
 import com.alibaba.fastjson2.JSONArray;
@@ -13,23 +13,23 @@ import zysy.iflytek.aishua.config.properties.ZhipuAiProperties;
 import zysy.iflytek.aishua.modules.practice.entity.ExerciseRecord;
 import zysy.iflytek.aishua.modules.practice.entity.UserKnowledgeMastery;
 import zysy.iflytek.aishua.modules.practice.entity.WrongQuestion;
-import zysy.iflytek.aishua.modules.practice.entity.WrongQuestionAiAnalysis;
-import zysy.iflytek.aishua.modules.practice.entity.WrongQuestionAiChatMessage;
-import zysy.iflytek.aishua.modules.practice.entity.WrongQuestionAiChatSession;
-import zysy.iflytek.aishua.modules.practice.entity.dto.WrongQuestionAiAnalysisRequestDTO;
-import zysy.iflytek.aishua.modules.practice.entity.dto.WrongQuestionAiCreateSessionDTO;
-import zysy.iflytek.aishua.modules.practice.entity.dto.WrongQuestionAiSendMessageDTO;
-import zysy.iflytek.aishua.modules.practice.entity.vo.WrongQuestionAiAnalysisVO;
-import zysy.iflytek.aishua.modules.practice.entity.vo.WrongQuestionAiChatMessageVO;
-import zysy.iflytek.aishua.modules.practice.entity.vo.WrongQuestionAiChatSessionVO;
+import zysy.iflytek.aishua.modules.ai.entity.WrongQuestionAiAnalysis;
+import zysy.iflytek.aishua.modules.ai.entity.WrongQuestionAiChatMessage;
+import zysy.iflytek.aishua.modules.ai.entity.WrongQuestionAiChatSession;
+import zysy.iflytek.aishua.modules.ai.entity.dto.WrongQuestionAiAnalysisRequestDTO;
+import zysy.iflytek.aishua.modules.ai.entity.dto.WrongQuestionAiCreateSessionDTO;
+import zysy.iflytek.aishua.modules.ai.entity.dto.WrongQuestionAiSendMessageDTO;
+import zysy.iflytek.aishua.modules.ai.entity.vo.WrongQuestionAiAnalysisVO;
+import zysy.iflytek.aishua.modules.ai.entity.vo.WrongQuestionAiChatMessageVO;
+import zysy.iflytek.aishua.modules.ai.entity.vo.WrongQuestionAiChatSessionVO;
 import zysy.iflytek.aishua.modules.practice.mapper.ExerciseRecordMapper;
 import zysy.iflytek.aishua.modules.practice.mapper.UserKnowledgeMasteryMapper;
-import zysy.iflytek.aishua.modules.practice.mapper.WrongQuestionAiAnalysisMapper;
-import zysy.iflytek.aishua.modules.practice.mapper.WrongQuestionAiChatMessageMapper;
-import zysy.iflytek.aishua.modules.practice.mapper.WrongQuestionAiChatSessionMapper;
+import zysy.iflytek.aishua.modules.ai.mapper.WrongQuestionAiAnalysisMapper;
+import zysy.iflytek.aishua.modules.ai.mapper.WrongQuestionAiChatMessageMapper;
+import zysy.iflytek.aishua.modules.ai.mapper.WrongQuestionAiChatSessionMapper;
 import zysy.iflytek.aishua.modules.practice.mapper.WrongQuestionMapper;
-import zysy.iflytek.aishua.modules.practice.service.WrongQuestionAiService;
-import zysy.iflytek.aishua.modules.practice.support.ZhipuChatClient;
+import zysy.iflytek.aishua.modules.ai.service.WrongQuestionAiService;
+import zysy.iflytek.aishua.modules.ai.support.ZhipuChatClient;
 import zysy.iflytek.aishua.modules.question.entity.Question;
 import zysy.iflytek.aishua.modules.question.mapper.QuestionMapper;
 import zysy.iflytek.aishua.modules.tag.entity.ExamTag;
@@ -91,10 +91,26 @@ public class WrongQuestionAiServiceImpl implements WrongQuestionAiService {
             """;
 
     private static final String ANALYSIS_SYSTEM_PROMPT = """
-            你是一名严谨且高效的中学刷题辅导老师。请基于给定错题上下文，输出“精简但关键点完整”的结构化诊断�?            输出必须是严格JSON对象；不要markdown、不要代码块、不要额外解释�?            必须包含以下字段�?            - summary: string�?0~90字，直接给结�?            - error_reasons: string[]，错因分类，1~3�?            - reason_evidence: string[]，判断依据，1~3�?            - solution_steps: string[]，解题步骤，2~3�?            - knowledge_points: string[]，核心考点�?~3�?            - avoidance_tips: string[]，避免再错建议，1~2�?            约束�?            1) 每条error_reasons/reason_evidence/knowledge_points不超�?8字�?            2) 每条solution_steps不超�?8字，必须可执行�?            3) 每条avoidance_tips不超�?8字，尽量短句�?            4) 不要输出 follow_up_questions 字段�?            5) 不要输出以上字段之外的任何字段�?            6) 保留必要知识点讲解，避免空泛和重复�?            """;
+            你是一名严谨高效的中学刷题辅导老师。
+            请基于给定错题上下文输出结构化诊断结果。
+            输出必须是 JSON（json）对象，不要 markdown、不要代码块、不要额外解释。
+            必须包含字段：
+            - summary: string（结论）
+            - error_reasons: string[]（1~3条）
+            - reason_evidence: string[]（1~3条）
+            - solution_steps: string[]（2~3条）
+            - knowledge_points: string[]（1~3条）
+            - avoidance_tips: string[]（1~2条）
+            约束：
+            1) 不输出以上字段之外的任何字段。
+            2) 内容简洁、可执行、避免重复。
+            """;
 
     private static final String CHAT_SYSTEM_PROMPT = """
-            你是一名耐心的错题辅导老师。你要在已给出的错题分析基础上回答追问�?            规则�?            1. 回答必须紧扣当前错题和用户问题，不扩展无关内容�?            2. 先给结论，再给简明推理步骤�?            3. 如果用户理解不到位，给一个更简单的解释或反例�?            4. 不要编造题目信息；若上下文缺失，要明确说明并给出下一步建议�?            """;
+            你是一名耐心的错题讲解老师。
+            请严格围绕当前错题和用户追问作答，不要编造题目信息。
+            先给结论，再给简短推理；若上下文不足，明确说明缺失信息并给出下一步建议。
+            """;
 
     private final WrongQuestionMapper wrongQuestionMapper;
     private final QuestionMapper questionMapper;
@@ -140,7 +156,7 @@ public class WrongQuestionAiServiceImpl implements WrongQuestionAiService {
         WrongQuestion wrongQuestion = requireWrongQuestion(userId, wrongQuestionId);
         Question question = requireQuestion(wrongQuestion.getQuestionId());
 
-        // 固化本次分析输入，便于后续审计、重放与定位错误原因。
+        // Build immutable snapshot for reproducibility and troubleshooting.
         JSONObject contextSnapshot = buildContextSnapshot(userId, wrongQuestion, question);
         String userPrompt = buildAnalysisUserPrompt(contextSnapshot, requestDTO == null ? null : requestDTO.getExtraInstruction());
         List<ZhipuChatClient.ChatMessage> messages = List.of(
@@ -183,7 +199,7 @@ public class WrongQuestionAiServiceImpl implements WrongQuestionAiService {
         } catch (Exception exception) {
             persistFailedAnalysis(userId, wrongQuestion, question, contextSnapshot, "AI 分析失败",
                     (int) (System.currentTimeMillis() - beginMs));
-            log.error("错题AI分析失败，userId={}, wrongQuestionId={}", userId, wrongQuestionId, exception);
+            log.error("错题AI分析失败, userId={}, wrongQuestionId={}", userId, wrongQuestionId, exception);
             throw new BusinessException("AI 分析失败，请稍后重试", 500);
         }
     }
@@ -310,7 +326,7 @@ public class WrongQuestionAiServiceImpl implements WrongQuestionAiService {
         userMessage.setLatencyMs(0);
         wrongQuestionAiChatMessageMapper.insert(userMessage);
 
-        // 会话上下文采用“题目事实 + 最近分析 + 有限历史消息”，平衡效果与成本。
+        // Build context with question facts, latest analysis and short history.
         JSONObject chatContext = buildChatContext(userId, wrongQuestion, question, session);
         List<ZhipuChatClient.ChatMessage> messages = buildChatPromptMessages(chatContext, sessionId, content);
         int chatMaxTokens = resolveChatMaxTokens(content);
@@ -434,7 +450,7 @@ public class WrongQuestionAiServiceImpl implements WrongQuestionAiService {
         context.put("wrongQuestion", wrongNode);
 
         context.put("recentWrongRecords", loadRecentWrongRecords(userId, question.getId()));
-        // 注入用户薄弱知识点画像，帮助模型做个性化错因判断。
+        // Inject weak-knowledge profile for personalized diagnosis.
         context.put("knowledgeProfile", loadKnowledgeProfile(userId, question.getSubjectId()));
         context.put("generatedAt", LocalDateTime.now().toString());
         return context;
@@ -513,7 +529,7 @@ public class WrongQuestionAiServiceImpl implements WrongQuestionAiService {
 
     private String buildAnalysisUserPrompt(JSONObject contextSnapshot, String extraInstruction) {
         StringBuilder prompt = new StringBuilder();
-        prompt.append("请对以下错题进行诊断，输出JSON。\n");
+        prompt.append("请对以下错题进行诊断，并输出 JSON（json）对象。\n");
         if (StringUtils.hasText(extraInstruction)) {
             prompt.append("用户补充要求：").append(extraInstruction.trim()).append("\n");
         }
@@ -580,7 +596,7 @@ public class WrongQuestionAiServiceImpl implements WrongQuestionAiService {
         messages.add(new ZhipuChatClient.ChatMessage("system", CHAT_CONCISE_POLICY_PROMPT));
         messages.add(new ZhipuChatClient.ChatMessage("system", "会话上下文：" + context.toJSONString()));
 
-        // 只回放有限历史，控制成本并避免上下文无限增长。
+        // Replay a limited number of historical messages to control cost and context size.
         List<WrongQuestionAiChatMessage> historyMessages = wrongQuestionAiChatMessageMapper.selectList(
                 new LambdaQueryWrapper<WrongQuestionAiChatMessage>()
                         .eq(WrongQuestionAiChatMessage::getSessionId, sessionId)
@@ -762,7 +778,7 @@ public class WrongQuestionAiServiceImpl implements WrongQuestionAiService {
         vo.setSolutionSteps(compactList(resultJson.getJSONArray("solution_steps"), MAX_SOLUTION_STEPS, MAX_SOLUTION_STEP_CHARS));
         vo.setKnowledgePoints(compactList(resultJson.getJSONArray("knowledge_points"), MAX_KNOWLEDGE_POINTS, MAX_NORMAL_ITEM_CHARS));
         vo.setAvoidanceTips(compactList(resultJson.getJSONArray("avoidance_tips"), MAX_AVOIDANCE_TIPS, MAX_AVOIDANCE_ITEM_CHARS));
-        // 精简版分析不再生成建议追问，避免无效 token 消耗。
+        // Lean analysis does not generate follow-up questions.
         vo.setFollowUpQuestions(Collections.emptyList());
         if (!StringUtils.hasText(vo.getSummary())) {
             vo.setSummary(compactText(resultJson.getString("summary"), MAX_SUMMARY_CHARS));

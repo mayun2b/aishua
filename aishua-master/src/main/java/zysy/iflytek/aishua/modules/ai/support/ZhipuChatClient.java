@@ -1,4 +1,4 @@
-package zysy.iflytek.aishua.modules.practice.support;
+package zysy.iflytek.aishua.modules.ai.support;
 
 import com.alibaba.fastjson2.JSON;
 import com.alibaba.fastjson2.JSONArray;
@@ -8,6 +8,7 @@ import org.springframework.http.HttpEntity;
 import org.springframework.http.HttpHeaders;
 import org.springframework.http.MediaType;
 import org.springframework.http.ResponseEntity;
+
 import org.springframework.stereotype.Component;
 import org.springframework.util.StringUtils;
 import org.springframework.web.client.HttpStatusCodeException;
@@ -47,12 +48,22 @@ public class ZhipuChatClient {
         payload.put("model", model);
         payload.put("stream", false);
         if (model.toLowerCase().startsWith("qwen")) {
-            // 关闭思考模式可显著降低时延，避免前端请求超时。
+            // Disable thinking mode to reduce latency.
             payload.put("enable_thinking", false);
         }
 
+        List<ChatMessage> requestMessages = new ArrayList<>(messages);
+        if (jsonResponse) {
+            boolean hasJsonHint = requestMessages.stream()
+                    .anyMatch(message -> StringUtils.hasText(message.content())
+                            && message.content().toLowerCase().contains("json"));
+            if (!hasJsonHint) {
+                requestMessages.add(0, new ChatMessage("system", "Return a valid JSON object only."));
+            }
+        }
+
         JSONArray messageArray = new JSONArray();
-        for (ChatMessage message : messages) {
+        for (ChatMessage message : requestMessages) {
             JSONObject item = new JSONObject();
             item.put("role", message.role());
             item.put("content", message.content());
@@ -75,7 +86,7 @@ public class ZhipuChatClient {
         HttpEntity<String> entity = new HttpEntity<>(payload.toJSONString(), headers);
 
         try {
-            // 使用统一 OpenAPI 风格接口，兼容 JSON 模式与普通对话模式。
+            // Use unified OpenAPI style endpoint.
             ResponseEntity<String> response = restTemplate.postForEntity(zhipuAiProperties.getChatApi(), entity, String.class);
             if (!response.getStatusCode().is2xxSuccessful() || !StringUtils.hasText(response.getBody())) {
                 throw new BusinessException("AI 服务响应异常", 502);
@@ -102,7 +113,7 @@ public class ZhipuChatClient {
         String configured = zhipuAiProperties.getChatModel();
         if (StringUtils.hasText(configured)) {
             String model = configured.trim();
-            // 前端展示名常写成 GLM-4.7-Flash，这里统一映射到 API 模型 ID。
+            // Map display name to provider model id.
             if ("GLM-4.7-Flash".equalsIgnoreCase(model)) {
                 return "glm-4.7-flash";
             }
@@ -171,7 +182,7 @@ public class ZhipuChatClient {
                 return body;
             }
 
-            // 兼容 { "error": { "message": "..."} } 与扁平 message 结构。
+            // Compatible with nested error and flat message formats.
             JSONObject error = root.getJSONObject("error");
             if (error != null && StringUtils.hasText(error.getString("message"))) {
                 return error.getString("message");

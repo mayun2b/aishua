@@ -1,4 +1,4 @@
-package zysy.iflytek.aishua.modules.practice.entity;
+package zysy.iflytek.aishua.modules.ai.entity;
 
 import com.baomidou.mybatisplus.annotation.IdType;
 import com.baomidou.mybatisplus.annotation.TableId;

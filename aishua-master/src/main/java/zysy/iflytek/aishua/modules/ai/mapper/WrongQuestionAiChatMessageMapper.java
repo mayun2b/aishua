@@ -1,8 +1,8 @@
-package zysy.iflytek.aishua.modules.practice.mapper;
+package zysy.iflytek.aishua.modules.ai.mapper;
 
 import com.baomidou.mybatisplus.core.mapper.BaseMapper;
 import org.apache.ibatis.annotations.Mapper;
-import zysy.iflytek.aishua.modules.practice.entity.WrongQuestionAiChatMessage;
+import zysy.iflytek.aishua.modules.ai.entity.WrongQuestionAiChatMessage;
 
 @Mapper
 public interface WrongQuestionAiChatMessageMapper extends BaseMapper<WrongQuestionAiChatMessage> {
