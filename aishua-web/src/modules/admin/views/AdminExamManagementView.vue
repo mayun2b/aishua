@@ -213,6 +213,10 @@
               <input v-model.number="paperForm.duration" type="number" min="1" max="300" />
             </label>
             <label>
+              <span>目标总分</span>
+              <input v-model.number="paperForm.totalScore" type="number" min="1" max="1000" />
+            </label>
+            <label>
               <span>状态</span>
               <select v-model.number="paperForm.status">
                 <option :value="1">启用</option>
@@ -243,28 +247,34 @@
           <section class="config-panel">
             <div class="table-head">
               <h3>题库候选题</h3>
-              <span>{{ questionBank.length }} 道</span>
+              <span>{{ questionBankTotal }} 道</span>
             </div>
             <div class="mini-filters">
-              <select v-model="questionBankFilters.directoryId">
+              <select v-model="questionBankFilters.volumeId" @change="onVolumeFilterChange">
+                <option value="">选择册</option>
+                <option v-for="volume in volumeOptions" :key="volume.id" :value="String(volume.id)">
+                  {{ volume.name }}
+                </option>
+              </select>
+              <select v-model="questionBankFilters.directoryId" @change="onDirectoryFilterChange">
                 <option value="">选择知识点（目录）</option>
-                <option v-for="directory in directoryOptions" :key="directory.id" :value="String(directory.id)">
+                <option v-for="directory in filteredDirectoryOptions" :key="directory.id" :value="String(directory.id)">
                   {{ directory.label }}
                 </option>
               </select>
-              <select v-model="questionBankFilters.tagId">
+              <select v-model="questionBankFilters.tagId" @change="onTagFilterChange">
                 <option value="">选择考点（标签）</option>
-                <option v-for="tag in tagOptions" :key="tag.id" :value="String(tag.id)">
-                  {{ tag.name }}
+                <option v-for="tag in tagOptions" :key="tag.tagId" :value="String(tag.tagId)">
+                  {{ tag.tagName }}（{{ tag.questionCount }}）
                 </option>
               </select>
               <input
                 v-model.trim="questionBankFilters.keyword"
                 type="text"
-                placeholder="题目关键字（兜底）"
-                @keyup.enter="loadQuestionBank"
+                placeholder="题目关键字"
+                @keyup.enter="searchQuestionBank"
               />
-              <select v-model="questionBankFilters.type">
+              <select v-model="questionBankFilters.type" @change="onSimpleFilterChange">
                 <option value="">题型</option>
                 <option value="1">单选</option>
                 <option value="2">多选</option>
@@ -272,14 +282,14 @@
                 <option value="4">填空</option>
                 <option value="5">简答</option>
               </select>
-              <select v-model="questionBankFilters.difficulty">
+              <select v-model="questionBankFilters.difficulty" @change="onSimpleFilterChange">
                 <option value="">难度</option>
                 <option value="1">简单</option>
                 <option value="2">中等</option>
                 <option value="3">困难</option>
               </select>
-              <button type="button" class="ghost small" @click="loadQuestionBank">按知识点/考点选题</button>
-              <button type="button" class="ghost small" @click="loadQuestionBankFallback">题目兜底搜索</button>
+              <button type="button" class="ghost small" @click="searchQuestionBank">按知识点/考点选题</button>
+              <button type="button" class="ghost small" @click="resetQuestionFilters">重置筛选</button>
             </div>
             <div v-if="loadingQuestionBank" class="empty-state small-empty">加载题库中...</div>
             <div v-else-if="!questionBank.length" class="empty-state small-empty">暂无可选题目</div>
@@ -299,12 +309,25 @@
                     <td>{{ question.title }}</td>
                     <td>{{ resolveTypeLabel(question.type) }} / {{ resolveDifficultyLabel(question.difficulty) }}</td>
                     <td>
-                      <button type="button" class="ghost small" @click="addQuestionToPaper(question)">加入</button>
+                      <button
+                        type="button"
+                        class="ghost small"
+                        :disabled="isQuestionSelected(question.id)"
+                        @click="addQuestionToPaper(question)"
+                      >
+                        {{ isQuestionSelected(question.id) ? '已加入' : '加入' }}
+                      </button>
                     </td>
                   </tr>
                 </tbody>
               </table>
             </div>
+            <BasePagination
+              v-if="!loadingQuestionBank && questionBankTotal > 0"
+              v-model="questionBankPage"
+              :total="questionBankTotal"
+              :page-size="questionBankPageSize"
+            />
           </section>
 
           <section class="config-panel">
@@ -414,15 +437,12 @@
 </template>
 
 <script setup>
-import { computed, onMounted, reactive, ref } from 'vue'
+import { computed, onMounted, reactive, ref, watch } from 'vue'
 import { showToast } from 'vant'
 import BasePagination from '@/components/BasePagination.vue'
 import useClientPagination from '@/composables/useClientPagination'
-import directoryApi from '../api/directory'
 import examApi from '../api/exam'
-import questionApi from '../api/question'
 import subjectApi from '../api/subject'
-import tagApi from '../api/tag'
 
 const QUESTION_TYPE_MAP = {
   1: '单选',
@@ -469,6 +489,7 @@ const paperForm = reactive({
   paperName: '',
   subjectId: '',
   duration: 120,
+  totalScore: 100,
   status: 1
 })
 
@@ -476,9 +497,11 @@ const questionModalVisible = ref(false)
 const submittingQuestions = ref(false)
 const selectedPaper = ref(null)
 const loadingQuestionBank = ref(false)
+const volumeOptions = ref([])
 const directoryOptions = ref([])
 const tagOptions = ref([])
 const questionBankFilters = reactive({
+  volumeId: '',
   directoryId: '',
   tagId: '',
   keyword: '',
@@ -486,6 +509,9 @@ const questionBankFilters = reactive({
   difficulty: ''
 })
 const questionBank = ref([])
+const questionBankPage = ref(1)
+const questionBankPageSize = 10
+const questionBankTotal = ref(0)
 const editablePaperQuestions = ref([])
 const sortedEditableQuestions = computed(() => {
   return [...editablePaperQuestions.value].sort((left, right) => {
@@ -568,6 +594,7 @@ const fillPaperForm = (payload) => {
   paperForm.paperName = payload.paperName || ''
   paperForm.subjectId = payload.subjectId ? String(payload.subjectId) : ''
   paperForm.duration = payload.duration ?? 120
+  paperForm.totalScore = payload.totalScore ?? 100
   paperForm.status = payload.status ?? 1
 }
 
@@ -576,6 +603,7 @@ const resetPaperForm = () => {
     paperName: '',
     subjectId: '',
     duration: 120,
+    totalScore: 100,
     status: 1
   })
 }
@@ -592,6 +620,7 @@ const openEditPaper = (paper) => {
     paperName: paper.paperName,
     subjectId: paper.subjectId,
     duration: paper.duration,
+    totalScore: paper.totalScore,
     status: paper.status
   })
   paperModalVisible.value = true
@@ -614,6 +643,10 @@ const validatePaperForm = () => {
     showToast('考试时长需在 1 到 300 分钟之间')
     return false
   }
+  if (!Number.isInteger(paperForm.totalScore) || paperForm.totalScore < 1 || paperForm.totalScore > 1000) {
+    showToast('目标总分需在 1 到 1000 之间')
+    return false
+  }
   if (paperForm.status !== 0 && paperForm.status !== 1) {
     showToast('状态只能是 0 或 1')
     return false
@@ -631,6 +664,7 @@ const submitPaper = async () => {
       paperName: paperForm.paperName,
       subjectId: Number(paperForm.subjectId),
       duration: paperForm.duration,
+      totalScore: paperForm.totalScore,
       status: paperForm.status
     }
     if (editingPaperId.value) {
@@ -687,60 +721,139 @@ const loadCurrentPaperQuestions = async () => {
   }))
 }
 
-const flattenDirectoryTree = (nodes, level = 0, output = []) => {
+const flattenDirectoryTree = (nodes, level = 0, volumeId = null, output = []) => {
   if (!Array.isArray(nodes)) {
     return output
   }
   for (const node of nodes) {
+    const currentVolumeId = volumeId ?? node.id
     output.push({
       id: node.id,
-      label: `${'　'.repeat(level)}${node.name}`
+      label: `${'　'.repeat(level)}${node.name}`,
+      volumeId: currentVolumeId
     })
-    flattenDirectoryTree(node.children || [], level + 1, output)
+    flattenDirectoryTree(node.children || [], level + 1, currentVolumeId, output)
   }
   return output
 }
+
+const getDirectoryOptionsByVolume = (volumeId) => {
+  if (!volumeId) {
+    return directoryOptions.value
+  }
+  return directoryOptions.value.filter((item) => String(item.volumeId) === String(volumeId))
+}
+
+const filteredDirectoryOptions = computed(() => {
+  return getDirectoryOptionsByVolume(questionBankFilters.volumeId)
+})
 
 const loadKnowledgeMeta = async () => {
   if (!selectedPaper.value) {
     return
   }
-  const subjectId = Number(selectedPaper.value.subjectId)
-  const [directoryResponse, tagResponse] = await Promise.all([
-    directoryApi.listTree(subjectId),
-    tagApi.list({ subjectId })
-  ])
-  directoryOptions.value = flattenDirectoryTree(directoryResponse.data || [])
-  tagOptions.value = tagResponse.data || []
+  const directoryResponse = await examApi.getPaperDirectories(selectedPaper.value.id)
+  const directoryTree = directoryResponse.data || []
+  volumeOptions.value = directoryTree.map((node) => ({
+    id: node.id,
+    name: node.name
+  }))
+  directoryOptions.value = flattenDirectoryTree(directoryTree)
+  if (!directoryOptions.value.length || !volumeOptions.value.length) {
+    questionBankFilters.volumeId = ''
+    questionBankFilters.directoryId = ''
+    questionBankFilters.tagId = ''
+    tagOptions.value = []
+    return
+  }
+
+  const currentVolumeId = questionBankFilters.volumeId
+    && volumeOptions.value.some((item) => String(item.id) === questionBankFilters.volumeId)
+    ? questionBankFilters.volumeId
+    : String(volumeOptions.value[0].id)
+  questionBankFilters.volumeId = currentVolumeId
+
+  const scopedDirectoryOptions = getDirectoryOptionsByVolume(currentVolumeId)
+  const currentDirectoryId = questionBankFilters.directoryId
+    && scopedDirectoryOptions.some((item) => String(item.id) === questionBankFilters.directoryId)
+    ? questionBankFilters.directoryId
+    : (scopedDirectoryOptions.length ? String(scopedDirectoryOptions[0].id) : '')
+  questionBankFilters.directoryId = currentDirectoryId
+  questionBankFilters.tagId = ''
+  if (!currentDirectoryId) {
+    tagOptions.value = []
+    return
+  }
+  await loadDirectoryTags(Number(currentDirectoryId))
 }
 
-const loadQuestionBank = async ({ fallback = false } = {}) => {
+const loadDirectoryTags = async (directoryId) => {
+  if (!selectedPaper.value || !directoryId) {
+    tagOptions.value = []
+    return
+  }
+  const response = await examApi.getPaperDirectoryTags(selectedPaper.value.id, directoryId)
+  tagOptions.value = response.data || []
+}
+
+// 筛选动作统一收口，避免目录/标签/题型/难度各自重复写查询逻辑。
+const refreshQuestionBankByFilters = async ({ reloadTags = false } = {}) => {
   if (!selectedPaper.value) {
     return
   }
-  if (!fallback && !questionBankFilters.directoryId && !questionBankFilters.tagId) {
-    showToast('请先选择知识点或考点')
+  if (reloadTags) {
+    const nextDirectoryId = questionBankFilters.directoryId ? Number(questionBankFilters.directoryId) : null
+    questionBankFilters.tagId = ''
+    await loadDirectoryTags(nextDirectoryId)
+  }
+  await loadQuestionBank({ resetPage: true, silent: true })
+}
+
+const onVolumeFilterChange = async () => {
+  const scopedDirectoryOptions = getDirectoryOptionsByVolume(questionBankFilters.volumeId)
+  questionBankFilters.directoryId = scopedDirectoryOptions.length ? String(scopedDirectoryOptions[0].id) : ''
+  await refreshQuestionBankByFilters({ reloadTags: true })
+}
+
+const onDirectoryFilterChange = async () => {
+  await refreshQuestionBankByFilters({ reloadTags: true })
+}
+
+const onTagFilterChange = async () => {
+  await refreshQuestionBankByFilters()
+}
+
+const onSimpleFilterChange = async () => {
+  await refreshQuestionBankByFilters()
+}
+
+const loadQuestionBank = async ({ resetPage = false, silent = false } = {}) => {
+  if (!selectedPaper.value) {
     return
+  }
+  if (resetPage) {
+    questionBankPage.value = 1
   }
   loadingQuestionBank.value = true
   try {
-    const response = await questionApi.list({
-      subjectId: selectedPaper.value.subjectId,
-      directoryId: !fallback && questionBankFilters.directoryId
+    const tagIdsParam = questionBankFilters.tagId || undefined
+    const response = await examApi.getAvailablePaperQuestions(selectedPaper.value.id, {
+      directoryId: questionBankFilters.directoryId
         ? Number(questionBankFilters.directoryId)
         : undefined,
+      tagIds: tagIdsParam,
       type: questionBankFilters.type ? Number(questionBankFilters.type) : undefined,
       difficulty: questionBankFilters.difficulty ? Number(questionBankFilters.difficulty) : undefined,
-      keyword: questionBankFilters.keyword || undefined
+      keyword: questionBankFilters.keyword || undefined,
+      page: questionBankPage.value,
+      pageSize: questionBankPageSize
     })
-    let list = response.data || []
-    if (!fallback && questionBankFilters.tagId) {
-      const selectedTagId = Number(questionBankFilters.tagId)
-      list = list.filter((item) => Array.isArray(item.tagIds) && item.tagIds.includes(selectedTagId))
-    }
-    questionBank.value = list
-    if (!fallback && !list.length) {
-      showToast('当前知识点/考点下暂无题目，可用兜底搜索')
+    const payload = response.data || {}
+    questionBank.value = payload.records || []
+    questionBankTotal.value = Number(payload.total || 0)
+    questionBankPage.value = Number(payload.page || questionBankPage.value)
+    if (!silent && !questionBank.value.length) {
+      showToast('当前筛选条件下暂无题目')
     }
   } catch (error) {
     showToast(error.message || '加载题库失败')
@@ -749,8 +862,20 @@ const loadQuestionBank = async ({ fallback = false } = {}) => {
   }
 }
 
-const loadQuestionBankFallback = async () => {
-  await loadQuestionBank({ fallback: true })
+const searchQuestionBank = async () => {
+  await loadQuestionBank({ resetPage: true })
+}
+
+const resetQuestionFilters = async () => {
+  questionBankFilters.volumeId = volumeOptions.value.length ? String(volumeOptions.value[0].id) : ''
+  const scopedDirectoryOptions = getDirectoryOptionsByVolume(questionBankFilters.volumeId)
+  questionBankFilters.directoryId = scopedDirectoryOptions.length ? String(scopedDirectoryOptions[0].id) : ''
+  questionBankFilters.tagId = ''
+  questionBankFilters.keyword = ''
+  questionBankFilters.type = ''
+  questionBankFilters.difficulty = ''
+  await loadDirectoryTags(questionBankFilters.directoryId ? Number(questionBankFilters.directoryId) : null)
+  await loadQuestionBank({ resetPage: true, silent: true })
 }
 
 const nextSortValue = () => {
@@ -760,19 +885,34 @@ const nextSortValue = () => {
   return Math.max(...editablePaperQuestions.value.map((item) => Number(item.sort || 0)), 0) + 1
 }
 
+const isQuestionSelected = (questionId) => {
+  return editablePaperQuestions.value.some((item) => item.questionId === questionId)
+}
+
 const addQuestionToPaper = (question) => {
-  const exists = editablePaperQuestions.value.some((item) => item.questionId === question.id)
-  if (exists) {
+  if (isQuestionSelected(question.id)) {
     showToast('题目已在试卷中')
     return
   }
+
+  // 选入题目时允许教师即时设定分值，避免后续批量回改。
+  const rawScore = window.prompt('请输入该题分值（正整数）', '5')
+  if (rawScore === null) {
+    return
+  }
+  const score = Number(rawScore)
+  if (!Number.isInteger(score) || score <= 0) {
+    showToast('分值必须是大于 0 的整数')
+    return
+  }
+
   editablePaperQuestions.value.push({
     questionId: question.id,
     title: question.title,
     type: question.type,
     difficulty: question.difficulty,
     sort: nextSortValue(),
-    score: 5
+    score
   })
 }
 
@@ -811,6 +951,9 @@ const buildQuestionPayload = () => {
 const openQuestionConfig = async (paper) => {
   selectedPaper.value = paper
   questionModalVisible.value = true
+  questionBankPage.value = 1
+  questionBankTotal.value = 0
+  questionBankFilters.volumeId = ''
   questionBankFilters.directoryId = ''
   questionBankFilters.tagId = ''
   questionBankFilters.keyword = ''
@@ -818,7 +961,7 @@ const openQuestionConfig = async (paper) => {
   questionBankFilters.difficulty = ''
   try {
     await Promise.all([loadCurrentPaperQuestions(), loadKnowledgeMeta()])
-    questionBank.value = []
+    await loadQuestionBank({ resetPage: true, silent: true })
   } catch (error) {
     showToast(error.message || '加载配题数据失败')
   }
@@ -827,9 +970,12 @@ const openQuestionConfig = async (paper) => {
 const closeQuestionModal = () => {
   questionModalVisible.value = false
   selectedPaper.value = null
+  volumeOptions.value = []
   directoryOptions.value = []
   tagOptions.value = []
   questionBank.value = []
+  questionBankPage.value = 1
+  questionBankTotal.value = 0
   editablePaperQuestions.value = []
 }
 
@@ -910,6 +1056,13 @@ const resolveTypeLabel = (type) => {
 const resolveDifficultyLabel = (difficulty) => {
   return DIFFICULTY_MAP[difficulty] || `难度${difficulty || '-'}`
 }
+
+watch(questionBankPage, async (nextPage, previousPage) => {
+  if (!questionModalVisible.value || nextPage === previousPage) {
+    return
+  }
+  await loadQuestionBank()
+})
 
 onMounted(async () => {
   await loadSubjects()

@@ -21,6 +21,15 @@ export default {
   getPaperQuestions(id) {
     return request.get(`/admin/exams/papers/${id}/questions`)
   },
+  getPaperDirectories(id) {
+    return request.get(`/admin/exams/papers/${id}/directories`)
+  },
+  getPaperDirectoryTags(id, directoryId) {
+    return request.get(`/admin/exams/papers/${id}/directories/${directoryId}/tags`)
+  },
+  getAvailablePaperQuestions(id, params) {
+    return request.get(`/admin/exams/papers/${id}/questions/available`, { params })
+  },
   updatePaperQuestions(id, payload) {
     return request.put(`/admin/exams/papers/${id}/questions`, payload)
   },

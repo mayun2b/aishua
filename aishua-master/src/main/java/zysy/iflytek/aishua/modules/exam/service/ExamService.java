@@ -5,12 +5,15 @@ import zysy.iflytek.aishua.modules.exam.entity.dto.AdminExamPaperUpsertDTO;
 import zysy.iflytek.aishua.modules.exam.entity.dto.ExamStartDTO;
 import zysy.iflytek.aishua.modules.exam.entity.dto.ExamSubmitDTO;
 import zysy.iflytek.aishua.modules.exam.entity.dto.LegacyExamRecordSaveDTO;
+import zysy.iflytek.aishua.modules.exam.entity.vo.ExamAvailableQuestionPageVO;
+import zysy.iflytek.aishua.modules.exam.entity.vo.ExamDirectoryTagVO;
 import zysy.iflytek.aishua.modules.exam.entity.vo.ExamPaperQuestionVO;
 import zysy.iflytek.aishua.modules.exam.entity.vo.ExamPaperVO;
 import zysy.iflytek.aishua.modules.exam.entity.vo.ExamRecordQuestionVO;
 import zysy.iflytek.aishua.modules.exam.entity.vo.ExamRecordSummaryVO;
 import zysy.iflytek.aishua.modules.exam.entity.vo.ExamStartVO;
 import zysy.iflytek.aishua.modules.exam.entity.vo.ExamSubmitResultVO;
+import zysy.iflytek.aishua.modules.directory.entity.vo.DirectoryTreeVO;
 
 import java.time.LocalDate;
 import java.util.List;
@@ -29,6 +32,21 @@ public interface ExamService {
     List<ExamPaperQuestionVO> listPaperQuestions(Long paperId);
 
     List<ExamPaperQuestionVO> assignPaperQuestions(Long paperId, AdminExamPaperQuestionAssignDTO assignDTO);
+
+    List<DirectoryTreeVO> listPaperDirectories(Long paperId);
+
+    List<ExamDirectoryTagVO> listPaperDirectoryTags(Long paperId, Long directoryId);
+
+    ExamAvailableQuestionPageVO listPaperAvailableQuestions(
+            Long paperId,
+            Long directoryId,
+            String tagIds,
+            Integer type,
+            Integer difficulty,
+            String keyword,
+            Integer page,
+            Integer pageSize
+    );
 
     List<ExamRecordSummaryVO> listAdminRecords(Long subjectId, Long userId, String keyword, LocalDate startDate, LocalDate endDate);
 

@@ -5,6 +5,12 @@ import lombok.extern.slf4j.Slf4j;
 import org.springframework.stereotype.Service;
 import org.springframework.transaction.annotation.Transactional;
 import zysy.iflytek.aishua.common.exception.BusinessException;
+import zysy.iflytek.aishua.modules.directory.entity.TextbookDirectory;
+import zysy.iflytek.aishua.modules.directory.entity.DirectoryTagRelation;
+import zysy.iflytek.aishua.modules.directory.mapper.TextbookDirectoryMapper;
+import zysy.iflytek.aishua.modules.directory.mapper.DirectoryTagRelationMapper;
+import zysy.iflytek.aishua.modules.directory.support.DirectoryScopeResolver;
+import zysy.iflytek.aishua.modules.directory.service.DirectoryService;
 import zysy.iflytek.aishua.modules.exam.entity.ExamPaper;
 import zysy.iflytek.aishua.modules.exam.entity.ExamPaperQuestion;
 import zysy.iflytek.aishua.modules.exam.entity.ExamRecord;
@@ -17,6 +23,9 @@ import zysy.iflytek.aishua.modules.exam.entity.dto.ExamSubmitAnswerItemDTO;
 import zysy.iflytek.aishua.modules.exam.entity.dto.ExamSubmitDTO;
 import zysy.iflytek.aishua.modules.exam.entity.dto.LegacyExamRecordQuestionDTO;
 import zysy.iflytek.aishua.modules.exam.entity.dto.LegacyExamRecordSaveDTO;
+import zysy.iflytek.aishua.modules.exam.entity.vo.ExamAvailableQuestionPageVO;
+import zysy.iflytek.aishua.modules.exam.entity.vo.ExamAvailableQuestionVO;
+import zysy.iflytek.aishua.modules.exam.entity.vo.ExamDirectoryTagVO;
 import zysy.iflytek.aishua.modules.exam.entity.vo.ExamPaperQuestionVO;
 import zysy.iflytek.aishua.modules.exam.entity.vo.ExamPaperVO;
 import zysy.iflytek.aishua.modules.exam.entity.vo.ExamQuestionItemVO;
@@ -31,11 +40,16 @@ import zysy.iflytek.aishua.modules.exam.mapper.ExamRecordQuestionMapper;
 import zysy.iflytek.aishua.modules.exam.service.ExamService;
 import zysy.iflytek.aishua.modules.practice.support.AnswerJudgeSupport;
 import zysy.iflytek.aishua.modules.question.entity.Question;
+import zysy.iflytek.aishua.modules.question.entity.QuestionTagRelation;
 import zysy.iflytek.aishua.modules.question.mapper.QuestionMapper;
+import zysy.iflytek.aishua.modules.question.mapper.QuestionTagRelationMapper;
 import zysy.iflytek.aishua.modules.subject.entity.Subject;
 import zysy.iflytek.aishua.modules.subject.mapper.SubjectMapper;
+import zysy.iflytek.aishua.modules.tag.entity.ExamTag;
+import zysy.iflytek.aishua.modules.tag.mapper.ExamTagMapper;
 import zysy.iflytek.aishua.modules.user.entity.User;
 import zysy.iflytek.aishua.modules.user.mapper.UserMapper;
+import zysy.iflytek.aishua.modules.directory.entity.vo.DirectoryTreeVO;
 
 import java.time.Duration;
 import java.time.LocalDate;
@@ -69,7 +83,13 @@ public class ExamServiceImpl implements ExamService {
     private final ExamRecordQuestionMapper examRecordQuestionMapper;
     private final SubjectMapper subjectMapper;
     private final QuestionMapper questionMapper;
+    private final QuestionTagRelationMapper questionTagRelationMapper;
+    private final TextbookDirectoryMapper textbookDirectoryMapper;
+    private final DirectoryTagRelationMapper directoryTagRelationMapper;
+    private final ExamTagMapper examTagMapper;
     private final UserMapper userMapper;
+    private final DirectoryService directoryService;
+    private final DirectoryScopeResolver directoryScopeResolver;
     private final AnswerJudgeSupport answerJudgeSupport;
 
     public ExamServiceImpl(
@@ -79,7 +99,13 @@ public class ExamServiceImpl implements ExamService {
             ExamRecordQuestionMapper examRecordQuestionMapper,
             SubjectMapper subjectMapper,
             QuestionMapper questionMapper,
+            QuestionTagRelationMapper questionTagRelationMapper,
+            TextbookDirectoryMapper textbookDirectoryMapper,
+            DirectoryTagRelationMapper directoryTagRelationMapper,
+            ExamTagMapper examTagMapper,
             UserMapper userMapper,
+            DirectoryService directoryService,
+            DirectoryScopeResolver directoryScopeResolver,
             AnswerJudgeSupport answerJudgeSupport
     ) {
         this.examPaperMapper = examPaperMapper;
@@ -88,7 +114,13 @@ public class ExamServiceImpl implements ExamService {
         this.examRecordQuestionMapper = examRecordQuestionMapper;
         this.subjectMapper = subjectMapper;
         this.questionMapper = questionMapper;
+        this.questionTagRelationMapper = questionTagRelationMapper;
+        this.textbookDirectoryMapper = textbookDirectoryMapper;
+        this.directoryTagRelationMapper = directoryTagRelationMapper;
+        this.examTagMapper = examTagMapper;
         this.userMapper = userMapper;
+        this.directoryService = directoryService;
+        this.directoryScopeResolver = directoryScopeResolver;
         this.answerJudgeSupport = answerJudgeSupport;
     }
 
@@ -122,8 +154,9 @@ public class ExamServiceImpl implements ExamService {
         examPaper.setSubjectId(subject.getId());
         examPaper.setDuration(upsertDTO.getDuration());
         examPaper.setStatus(upsertDTO.getStatus());
+        // totalScore is the target score configured when creating the paper.
+        examPaper.setTotalScore(upsertDTO.getTotalScore());
         examPaper.setTotalQuestions(0);
-        examPaper.setTotalScore(0);
         examPaperMapper.insert(examPaper);
 
         log.info("试卷创建成功，paperId={}, subjectId={}", examPaper.getId(), subject.getId());
@@ -147,6 +180,7 @@ public class ExamServiceImpl implements ExamService {
         existing.setPaperName(upsertDTO.getPaperName().trim());
         existing.setSubjectId(subject.getId());
         existing.setDuration(upsertDTO.getDuration());
+        existing.setTotalScore(upsertDTO.getTotalScore());
         existing.setStatus(upsertDTO.getStatus());
         examPaperMapper.updateById(existing);
 
@@ -200,10 +234,14 @@ public class ExamServiceImpl implements ExamService {
         }
 
         Map<Long, AdminExamPaperQuestionItemDTO> uniqueItemMap = new LinkedHashMap<>();
+        Set<Integer> uniqueSortSet = new LinkedHashSet<>();
         for (AdminExamPaperQuestionItemDTO item : items) {
             Long questionId = item.getQuestionId();
             if (uniqueItemMap.containsKey(questionId)) {
                 throw new BusinessException("试卷题目存在重复", 400);
+            }
+            if (!uniqueSortSet.add(item.getSort())) {
+                throw new BusinessException("题目排序存在重复", 400);
             }
             uniqueItemMap.put(questionId, item);
         }
@@ -226,7 +264,6 @@ public class ExamServiceImpl implements ExamService {
         examPaperQuestionMapper.delete(new LambdaQueryWrapper<ExamPaperQuestion>()
                 .eq(ExamPaperQuestion::getPaperId, paper.getId()));
 
-        int totalScore = 0;
         for (AdminExamPaperQuestionItemDTO item : items) {
             ExamPaperQuestion relation = new ExamPaperQuestion();
             relation.setPaperId(paper.getId());
@@ -234,15 +271,145 @@ public class ExamServiceImpl implements ExamService {
             relation.setSort(item.getSort());
             relation.setScore(item.getScore());
             examPaperQuestionMapper.insert(relation);
-            totalScore += item.getScore();
         }
 
+        // Keep paper.totalScore as target score, only sync selected question count here.
         paper.setTotalQuestions(items.size());
-        paper.setTotalScore(totalScore);
         examPaperMapper.updateById(paper);
 
-        log.info("试卷题目配置成功，paperId={}, questionCount={}, totalScore={}", paper.getId(), items.size(), totalScore);
+        log.info("试卷题目配置成功，paperId={}, questionCount={}", paper.getId(), items.size());
         return buildPaperQuestionVOList(listPaperQuestionRelations(paper.getId()));
+    }
+
+    @Override
+    public List<DirectoryTreeVO> listPaperDirectories(Long paperId) {
+        ExamPaper paper = requirePaper(paperId);
+        return directoryService.listTreeBySubject(paper.getSubjectId());
+    }
+
+    @Override
+    public List<ExamDirectoryTagVO> listPaperDirectoryTags(Long paperId, Long directoryId) {
+        ExamPaper paper = requirePaper(paperId);
+        if (directoryId == null || directoryId <= 0) {
+            throw new BusinessException("目录ID不合法", 400);
+        }
+
+        List<Long> directoryScopeIds = directoryScopeResolver.resolveSelfAndDescendants(directoryId, paper.getSubjectId());
+        List<DirectoryTagRelation> relations = directoryTagRelationMapper.selectList(new LambdaQueryWrapper<DirectoryTagRelation>()
+                .eq(DirectoryTagRelation::getSubjectId, paper.getSubjectId())
+                .eq(DirectoryTagRelation::getDirectoryId, directoryId)
+                .eq(DirectoryTagRelation::getIsEnabled, 1)
+                .orderByAsc(DirectoryTagRelation::getSort)
+                .orderByAsc(DirectoryTagRelation::getId));
+        if (relations.isEmpty()) {
+            return Collections.emptyList();
+        }
+
+        List<Long> tagIds = relations.stream().map(DirectoryTagRelation::getTagId).filter(Objects::nonNull).distinct().toList();
+        Map<Long, ExamTag> tagMap = examTagMapper.selectBatchIds(tagIds).stream()
+                .filter(tag -> tag != null && !Integer.valueOf(1).equals(tag.getDeleted()))
+                .collect(Collectors.toMap(ExamTag::getId, Function.identity(), (left, right) -> left));
+        if (tagMap.isEmpty()) {
+            return Collections.emptyList();
+        }
+
+        List<Question> scopeQuestions = questionMapper.selectList(new LambdaQueryWrapper<Question>()
+                .eq(Question::getSubjectId, paper.getSubjectId())
+                .in(Question::getDirectoryId, directoryScopeIds));
+        Set<Long> scopeQuestionIds = scopeQuestions.stream().map(Question::getId).collect(Collectors.toSet());
+        Map<Long, Integer> tagQuestionCountMap = Collections.emptyMap();
+        if (!scopeQuestionIds.isEmpty()) {
+            List<QuestionTagRelation> scopeRelations = questionTagRelationMapper.selectList(new LambdaQueryWrapper<QuestionTagRelation>()
+                    .in(QuestionTagRelation::getTagId, tagMap.keySet())
+                    .in(QuestionTagRelation::getQuestionId, scopeQuestionIds));
+            Map<Long, Set<Long>> tagQuestionIdSetMap = new HashMap<>();
+            for (QuestionTagRelation relation : scopeRelations) {
+                if (relation.getTagId() == null || relation.getQuestionId() == null) {
+                    continue;
+                }
+                tagQuestionIdSetMap
+                        .computeIfAbsent(relation.getTagId(), key -> new LinkedHashSet<>())
+                        .add(relation.getQuestionId());
+            }
+            tagQuestionCountMap = new HashMap<>();
+            for (Map.Entry<Long, Set<Long>> entry : tagQuestionIdSetMap.entrySet()) {
+                tagQuestionCountMap.put(entry.getKey(), entry.getValue().size());
+            }
+        }
+
+        List<ExamDirectoryTagVO> result = new ArrayList<>();
+        for (DirectoryTagRelation relation : relations) {
+            ExamTag tag = tagMap.get(relation.getTagId());
+            if (tag == null) {
+                continue;
+            }
+            ExamDirectoryTagVO item = new ExamDirectoryTagVO();
+            item.setTagId(tag.getId());
+            item.setTagName(tag.getName());
+            item.setRelationType(relation.getRelationType());
+            item.setImportanceLevel(relation.getImportanceLevel());
+            item.setExamFrequency(relation.getExamFrequency());
+            item.setSort(relation.getSort());
+            item.setQuestionCount(tagQuestionCountMap.getOrDefault(tag.getId(), 0));
+            result.add(item);
+        }
+        return result;
+    }
+
+    @Override
+    public ExamAvailableQuestionPageVO listPaperAvailableQuestions(
+            Long paperId,
+            Long directoryId,
+            String tagIds,
+            Integer type,
+            Integer difficulty,
+            String keyword,
+            Integer page,
+            Integer pageSize
+    ) {
+        ExamPaper paper = requirePaper(paperId);
+        int safePage = page == null || page <= 0 ? 1 : page;
+        int safePageSize = pageSize == null || pageSize <= 0 ? 10 : Math.min(pageSize, 100);
+
+        List<Long> directoryFilterIds = directoryId == null
+                ? Collections.emptyList()
+                : directoryScopeResolver.resolveSelfAndDescendants(directoryId, paper.getSubjectId());
+
+        List<Long> requestedTagIds = parseTagIds(tagIds);
+        if (!requestedTagIds.isEmpty()) {
+            validateTagScope(requestedTagIds, paper.getSubjectId());
+        }
+
+        long total = countAvailableQuestions(
+                paper,
+                directoryFilterIds,
+                requestedTagIds,
+                type,
+                difficulty,
+                keyword
+        );
+        if (total <= 0) {
+            return emptyAvailableQuestionPage(safePage, safePageSize);
+        }
+
+        int offset = (safePage - 1) * safePageSize;
+        List<Question> questions = queryAvailableQuestions(
+                paper,
+                directoryFilterIds,
+                requestedTagIds,
+                type,
+                difficulty,
+                keyword,
+                offset,
+                safePageSize
+        );
+
+        ExamAvailableQuestionPageVO pageVO = new ExamAvailableQuestionPageVO();
+        pageVO.setTotal(total);
+        pageVO.setPage(safePage);
+        pageVO.setPageSize(safePageSize);
+        pageVO.setRecords(buildAvailableQuestionVOList(paper.getId(), questions));
+        return pageVO;
     }
 
     @Override
@@ -551,6 +718,185 @@ public class ExamServiceImpl implements ExamService {
 
         log.info("兼容考试记录保存成功，recordId={}, userId={}", record.getId(), targetUserId);
         return toRecordSummaryVO(record, loadSubjectNameMap(List.of(record)).get(record.getSubjectId()), loadUserMap(List.of(record)).get(record.getUserId()));
+    }
+
+    private long countAvailableQuestions(
+            ExamPaper paper,
+            List<Long> directoryFilterIds,
+            List<Long> tagFilterIds,
+            Integer type,
+            Integer difficulty,
+            String keyword
+    ) {
+        LambdaQueryWrapper<Question> countWrapper = buildAvailableQuestionQuery(
+                paper,
+                directoryFilterIds,
+                tagFilterIds,
+                type,
+                difficulty,
+                keyword
+        );
+        Long total = questionMapper.selectCount(countWrapper);
+        return total == null ? 0L : total;
+    }
+
+    private List<Question> queryAvailableQuestions(
+            ExamPaper paper,
+            List<Long> directoryFilterIds,
+            List<Long> tagFilterIds,
+            Integer type,
+            Integer difficulty,
+            String keyword,
+            int offset,
+            int pageSize
+    ) {
+        LambdaQueryWrapper<Question> queryWrapper = buildAvailableQuestionQuery(
+                paper,
+                directoryFilterIds,
+                tagFilterIds,
+                type,
+                difficulty,
+                keyword
+        );
+        queryWrapper.orderByDesc(Question::getUpdateTime)
+                .orderByDesc(Question::getId)
+                .last("limit " + offset + ", " + pageSize);
+        return questionMapper.selectList(queryWrapper);
+    }
+
+    private LambdaQueryWrapper<Question> buildAvailableQuestionQuery(
+            ExamPaper paper,
+            List<Long> directoryFilterIds,
+            List<Long> tagFilterIds,
+            Integer type,
+            Integer difficulty,
+            String keyword
+    ) {
+        LambdaQueryWrapper<Question> wrapper = new LambdaQueryWrapper<Question>()
+                .eq(Question::getSubjectId, paper.getSubjectId());
+
+        if (!directoryFilterIds.isEmpty()) {
+            wrapper.in(Question::getDirectoryId, directoryFilterIds);
+        }
+        if (!tagFilterIds.isEmpty()) {
+            String csvTagIds = tagFilterIds.stream().map(String::valueOf).collect(Collectors.joining(","));
+            // Use DB-side tag filtering so frontend only passes tagIds and renders paged results.
+            wrapper.inSql(Question::getId,
+                    "SELECT DISTINCT question_id FROM question_tag_relation WHERE tag_id IN (" + csvTagIds + ")");
+        }
+        if (type != null) {
+            wrapper.eq(Question::getType, type);
+        }
+        if (difficulty != null) {
+            wrapper.eq(Question::getDifficulty, difficulty);
+        }
+        if (keyword != null && !keyword.isBlank()) {
+            String trimmedKeyword = keyword.trim();
+            wrapper.and(inner -> inner.like(Question::getTitle, trimmedKeyword)
+                    .or()
+                    .like(Question::getContent, trimmedKeyword));
+        }
+        return wrapper;
+    }
+
+    private List<Long> parseTagIds(String rawTagIds) {
+        if (rawTagIds == null || rawTagIds.isBlank()) {
+            return Collections.emptyList();
+        }
+        LinkedHashSet<Long> parsed = new LinkedHashSet<>();
+        String[] parts = rawTagIds.split(",");
+        for (String part : parts) {
+            String trimmed = part == null ? "" : part.trim();
+            if (trimmed.isEmpty()) {
+                continue;
+            }
+            long id;
+            try {
+                id = Long.parseLong(trimmed);
+            } catch (NumberFormatException exception) {
+                throw new BusinessException("考点ID不合法", 400);
+            }
+            if (id <= 0) {
+                throw new BusinessException("考点ID不合法", 400);
+            }
+            parsed.add(id);
+        }
+        return new ArrayList<>(parsed);
+    }
+
+    private void validateTagScope(List<Long> tagIds, Long subjectId) {
+        List<ExamTag> tags = examTagMapper.selectBatchIds(tagIds);
+        if (tags.size() != tagIds.size()) {
+            throw new BusinessException("存在无效考点", 400);
+        }
+        for (ExamTag tag : tags) {
+            if (tag == null || Integer.valueOf(1).equals(tag.getDeleted())) {
+                throw new BusinessException("存在无效考点", 400);
+            }
+            if (!Objects.equals(subjectId, tag.getSubjectId())) {
+                throw new BusinessException("考点不属于当前试卷学科", 400);
+            }
+        }
+    }
+
+    private List<ExamAvailableQuestionVO> buildAvailableQuestionVOList(Long paperId, List<Question> questions) {
+        if (questions == null || questions.isEmpty()) {
+            return Collections.emptyList();
+        }
+
+        Set<Long> directoryIds = questions.stream()
+                .map(Question::getDirectoryId)
+                .filter(Objects::nonNull)
+                .collect(Collectors.toSet());
+        Map<Long, TextbookDirectory> directoryMap = directoryIds.isEmpty()
+                ? Collections.emptyMap()
+                : textbookDirectoryMapper.selectBatchIds(directoryIds).stream()
+                .filter(Objects::nonNull)
+                .collect(Collectors.toMap(TextbookDirectory::getId, Function.identity(), (left, right) -> left));
+
+        Set<Long> questionIds = questions.stream().map(Question::getId).collect(Collectors.toSet());
+        List<QuestionTagRelation> tagRelations = questionTagRelationMapper.selectList(new LambdaQueryWrapper<QuestionTagRelation>()
+                .in(QuestionTagRelation::getQuestionId, questionIds));
+        Map<Long, List<Long>> questionTagMap = tagRelations.stream()
+                .collect(Collectors.groupingBy(
+                        QuestionTagRelation::getQuestionId,
+                        Collectors.mapping(QuestionTagRelation::getTagId, Collectors.toList())
+                ));
+        for (List<Long> tags : questionTagMap.values()) {
+            tags.sort(Long::compareTo);
+        }
+
+        Set<Long> selectedQuestionIds = examPaperQuestionMapper.selectList(new LambdaQueryWrapper<ExamPaperQuestion>()
+                        .eq(ExamPaperQuestion::getPaperId, paperId)
+                        .in(ExamPaperQuestion::getQuestionId, questionIds))
+                .stream()
+                .map(ExamPaperQuestion::getQuestionId)
+                .collect(Collectors.toSet());
+
+        List<ExamAvailableQuestionVO> result = new ArrayList<>();
+        for (Question question : questions) {
+            TextbookDirectory directory = directoryMap.get(question.getDirectoryId());
+            ExamAvailableQuestionVO item = new ExamAvailableQuestionVO();
+            item.setId(question.getId());
+            item.setTitle(question.getTitle());
+            item.setType(question.getType());
+            item.setDifficulty(question.getDifficulty());
+            item.setDirectoryId(question.getDirectoryId());
+            item.setDirectoryName(directory == null ? null : directory.getName());
+            item.setTagIds(questionTagMap.getOrDefault(question.getId(), Collections.emptyList()));
+            item.setSelected(selectedQuestionIds.contains(question.getId()));
+            result.add(item);
+        }
+        return result;
+    }
+
+    private ExamAvailableQuestionPageVO emptyAvailableQuestionPage(int page, int pageSize) {
+        ExamAvailableQuestionPageVO pageVO = new ExamAvailableQuestionPageVO();
+        pageVO.setTotal(0L);
+        pageVO.setPage(page);
+        pageVO.setPageSize(pageSize);
+        pageVO.setRecords(Collections.emptyList());
+        return pageVO;
     }
 
     private List<ExamPaperVO> toPaperVOList(List<ExamPaper> papers) {
