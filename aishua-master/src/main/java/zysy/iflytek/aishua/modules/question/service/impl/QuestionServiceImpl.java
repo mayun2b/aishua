@@ -23,8 +23,11 @@ import zysy.iflytek.aishua.modules.tag.entity.ExamTag;
 import zysy.iflytek.aishua.modules.tag.mapper.ExamTagMapper;
 
 import java.math.BigDecimal;
+import java.util.ArrayDeque;
 import java.util.ArrayList;
 import java.util.Collections;
+import java.util.Deque;
+import java.util.HashMap;
 import java.util.LinkedHashSet;
 import java.util.List;
 import java.util.Map;
@@ -63,7 +66,12 @@ public class QuestionServiceImpl implements QuestionService {
             queryWrapper.eq(Question::getSubjectId, subjectId);
         }
         if (directoryId != null) {
-            queryWrapper.eq(Question::getDirectoryId, directoryId);
+            // 目录筛选包含当前目录及其所有子目录，避免父目录筛选不到子目录题目
+            List<Long> directoryIds = resolveDirectoryFilterIds(directoryId, subjectId);
+            if (directoryIds.isEmpty()) {
+                return Collections.emptyList();
+            }
+            queryWrapper.in(Question::getDirectoryId, directoryIds);
         }
         if (difficulty != null) {
             queryWrapper.eq(Question::getDifficulty, difficulty);
@@ -83,6 +91,40 @@ public class QuestionServiceImpl implements QuestionService {
         queryWrapper.orderByDesc(Question::getUpdateTime).orderByDesc(Question::getId);
         List<Question> questions = questionMapper.selectList(queryWrapper);
         return buildQuestionVOs(questions);
+    }
+
+    private List<Long> resolveDirectoryFilterIds(Long directoryId, Long subjectId) {
+        TextbookDirectory targetDirectory = requireDirectoryForFilter(directoryId);
+        if (subjectId != null && !subjectId.equals(targetDirectory.getSubjectId())) {
+            throw new BusinessException("目录不属于当前学科", 400);
+        }
+
+        List<TextbookDirectory> directories = textbookDirectoryMapper.selectList(new LambdaQueryWrapper<TextbookDirectory>()
+                .eq(TextbookDirectory::getSubjectId, targetDirectory.getSubjectId()));
+        if (directories.isEmpty()) {
+            return List.of(targetDirectory.getId());
+        }
+
+        Map<Long, List<Long>> childrenMap = new HashMap<>();
+        for (TextbookDirectory directory : directories) {
+            Long parentId = directory.getParentId();
+            if (parentId == null || parentId <= 0) {
+                continue;
+            }
+            childrenMap.computeIfAbsent(parentId, key -> new ArrayList<>()).add(directory.getId());
+        }
+
+        List<Long> result = new ArrayList<>();
+        Deque<Long> stack = new ArrayDeque<>();
+        stack.push(targetDirectory.getId());
+        while (!stack.isEmpty()) {
+            Long currentId = stack.pop();
+            result.add(currentId);
+            for (Long childId : childrenMap.getOrDefault(currentId, Collections.emptyList())) {
+                stack.push(childId);
+            }
+        }
+        return result;
     }
 
     @Override
@@ -305,6 +347,17 @@ public class QuestionServiceImpl implements QuestionService {
         }
         if (!subjectId.equals(directory.getSubjectId())) {
             throw new BusinessException("题目目录必须与学科一致", 400);
+        }
+        return directory;
+    }
+
+    private TextbookDirectory requireDirectoryForFilter(Long directoryId) {
+        if (directoryId == null || directoryId <= 0) {
+            throw new BusinessException("目录筛选条件不合法", 400);
+        }
+        TextbookDirectory directory = textbookDirectoryMapper.selectById(directoryId);
+        if (directory == null || Integer.valueOf(1).equals(directory.getDeleted())) {
+            throw new BusinessException("目录不存在", 404);
         }
         return directory;
     }

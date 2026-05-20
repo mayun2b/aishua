@@ -30,7 +30,7 @@
 
         <label>
           <span>目录</span>
-          <select v-model="filters.directoryId">
+          <select v-model="filters.directoryId" @change="loadQuestions">
             <option value="">全部目录</option>
             <option
               v-for="directory in filterDirectoryOptions"
@@ -44,7 +44,7 @@
 
         <label>
           <span>题型</span>
-          <select v-model="filters.type">
+          <select v-model="filters.type" @change="loadQuestions">
             <option value="">全部题型</option>
             <option v-for="item in QUESTION_TYPES" :key="item.value" :value="String(item.value)">
               {{ item.label }}
@@ -54,7 +54,7 @@
 
         <label>
           <span>难度</span>
-          <select v-model="filters.difficulty">
+          <select v-model="filters.difficulty" @change="loadQuestions">
             <option value="">全部难度</option>
             <option v-for="item in DIFFICULTY_OPTIONS" :key="item.value" :value="String(item.value)">
               {{ item.label }}
@@ -64,7 +64,12 @@
 
         <label>
           <span>关键字</span>
-          <input v-model.trim="filters.keyword" type="text" placeholder="按题干、内容、答案搜索" />
+          <input
+            v-model.trim="filters.keyword"
+            type="text"
+            placeholder="按题干、内容、答案搜索"
+            @keyup.enter="loadQuestions"
+          />
         </label>
       </div>
 
@@ -593,6 +598,7 @@ const removeQuestion = async (question) => {
 const handleFilterSubjectChange = async () => {
   filters.directoryId = ''
   await loadFilterDirectories(filters.subjectId)
+  await loadQuestions()
 }
 
 const handleFormSubjectChange = async () => {
