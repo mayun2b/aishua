@@ -18,6 +18,14 @@ export default {
   listWrongQuestions(params) {
     return request.get('/practice/wrong-questions', { params })
   },
+  updateWrongQuestionMasterStatus(wrongQuestionId, masterStatus) {
+    return request.put(`/practice/wrong-questions/${wrongQuestionId}/master-status`, null, {
+      params: { masterStatus }
+    })
+  },
+  getWrongQuestionTrends(params) {
+    return request.get('/practice/wrong-questions/trend', { params })
+  },
   analyzeWrongQuestion(wrongQuestionId, payload) {
     return request.post(
       `/practice/wrong-questions/${wrongQuestionId}/ai-analysis`,

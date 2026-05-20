@@ -9,6 +9,7 @@ import AdminSubjectManagementView from '../modules/admin/views/AdminSubjectManag
 import AdminDirectoryManagementView from '../modules/admin/views/AdminDirectoryManagementView.vue'
 import AdminTagManagementView from '../modules/admin/views/AdminTagManagementView.vue'
 import AdminQuestionManagementView from '../modules/admin/views/AdminQuestionManagementView.vue'
+import AdminExamManagementView from '../modules/admin/views/AdminExamManagementView.vue'
 import SubjectCatalogView from '../modules/subject/views/SubjectCatalogView.vue'
 import MySubjectsView from '../modules/subject/views/MySubjectsView.vue'
 import PracticeView from '../modules/practice/views/PracticeView.vue'
@@ -139,6 +140,15 @@ const routes = [
     path: '/admin/questions',
     name: 'AdminQuestionManagement',
     component: AdminQuestionManagementView,
+    meta: {
+      requiresAuth: true,
+      requiresAdmin: true
+    }
+  },
+  {
+    path: '/admin/exams',
+    name: 'AdminExamManagement',
+    component: AdminExamManagementView,
     meta: {
       requiresAuth: true,
       requiresAdmin: true

@@ -43,6 +43,7 @@
             <option :value="1">顺序练习</option>
             <option :value="2">随机练习</option>
             <option :value="3">知识点练习</option>
+            <option :value="4">错题重练</option>
           </select>
         </label>
 
@@ -526,6 +527,8 @@ const resolveModeLabel = (mode) => {
       return '随机练习'
     case 3:
       return '知识点练习'
+    case 4:
+      return '错题重练'
     default:
       return '顺序练习'
   }
@@ -559,6 +562,14 @@ const initializeSessionState = () => {
   timeSpentMs.value = {}
 }
 
+const resolveRoutePracticeMode = () => {
+  const routeMode = Number(route.query.mode)
+  if ([1, 2, 3, 4].includes(routeMode)) {
+    return routeMode
+  }
+  return 1
+}
+
 const loadSubjects = async () => {
   loadingSubjects.value = true
   try {
@@ -571,6 +582,7 @@ const loadSubjects = async () => {
     } else if (subjects.value[0]) {
       selectedSubjectId.value = String(subjects.value[0].subjectId)
     }
+    practiceMode.value = resolveRoutePracticeMode()
   } catch (error) {
     showToast(error.message || '加载学科失败')
   } finally {
@@ -787,6 +799,15 @@ watch(
   (subjectId) => {
     if (!session.value && subjectId) {
       selectedSubjectId.value = String(subjectId)
+    }
+  }
+)
+
+watch(
+  () => route.query.mode,
+  (mode) => {
+    if (!session.value && mode != null) {
+      practiceMode.value = resolveRoutePracticeMode()
     }
   }
 )

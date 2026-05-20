@@ -107,7 +107,7 @@ export default {
     const goToExercise = () => {
       // 清除本地存储中的学科选择，强制用户重新选择学科
       localStorage.removeItem('selectedSubjectId');
-      router.push('/practice');
+      router.push('/subjects');
     };
 
     return {

@@ -34,6 +34,7 @@
         <router-link class="ghost" to="/admin/directories">目录树管理</router-link>
         <router-link class="ghost" to="/admin/tags">考点标签管理</router-link>
         <router-link class="ghost" to="/admin/questions">题库管理</router-link>
+        <router-link class="ghost" to="/admin/exams">试卷管理</router-link>
         <button @click="handleLogout">退出登录</button>
       </div>
     </section>

@@ -19,17 +19,11 @@ spring:
     time-zone: GMT+8
 
 ai:
-  zhipu:
-    embedding-api: https://open.bigmodel.cn/api/paas/v4/embeddings
+  qwen:
     chat-api: https://dashscope.aliyuncs.com/compatible-mode/v1/chat/completions
     api-key: sk-e61dc444fb6f4503965af827b50a4ab0
-    model: embedding-2
-    chat-model: qwen3.5-plus-2026-02-15
+    chat-model: qwen3.5-flash
     chat-max-tokens: 220
-  qwen:
-    api-url: https://dashscope.aliyuncs.com/api/v1/services/aigc/text-generation/generation
-    api-key: sk-e61dc444fb6f4503965af827b50a4ab0
-    model: qwen3.5-plus-2026-02-15
 
 mybatis-plus:
   configuration:
@@ -42,3 +36,20 @@ mybatis-plus:
       logic-not-delete-value: 0
       id-type: auto
   mapper-locations: classpath*:mapper/**/*.xml
+
+minio:
+  endpoint: http://localhost:9000
+  accesskey: minioadmin
+  secretkey: minioadmin
+  bucket-name: subject
+
+practice:
+  mastery:
+    # 样本量达到该阈值后，按正确率稳定分级
+    min-sample-count: 20
+    # 正确率阈值（百分比）
+    rate-level-1: 60
+    rate-level-2: 75
+    rate-level-3: 90
+    # 小样本阶段的最高等级限制（0-3）
+    warmup-level-cap: 2

@@ -4,6 +4,7 @@ import jakarta.validation.Valid;
 import org.springframework.web.bind.annotation.GetMapping;
 import org.springframework.web.bind.annotation.PathVariable;
 import org.springframework.web.bind.annotation.PostMapping;
+import org.springframework.web.bind.annotation.PutMapping;
 import org.springframework.web.bind.annotation.RequestBody;
 import org.springframework.web.bind.annotation.RequestMapping;
 import org.springframework.web.bind.annotation.RequestParam;
@@ -19,6 +20,7 @@ import zysy.iflytek.aishua.modules.practice.entity.vo.PracticeSessionDetailVO;
 import zysy.iflytek.aishua.modules.practice.entity.vo.PracticeSessionSummaryVO;
 import zysy.iflytek.aishua.modules.practice.entity.vo.PracticeStatsVO;
 import zysy.iflytek.aishua.modules.practice.entity.vo.PracticeStartVO;
+import zysy.iflytek.aishua.modules.practice.entity.vo.PracticeWrongTrendVO;
 import zysy.iflytek.aishua.modules.practice.entity.vo.PracticeWrongQuestionVO;
 import zysy.iflytek.aishua.modules.practice.service.PracticeService;
 import zysy.iflytek.aishua.modules.tag.entity.vo.ExamTagVO;
@@ -70,10 +72,31 @@ public class PracticeController {
 
     @GetMapping("/wrong-questions")
     public Result<List<PracticeWrongQuestionVO>> listWrongQuestions(
-            @RequestParam(required = false) Long subjectId
+            @RequestParam(required = false) Long subjectId,
+            @RequestParam(required = false) Long directoryId,
+            @RequestParam(required = false) Integer masterStatus
     ) {
         Long userId = UserContext.requireUserId();
-        return Result.success(practiceService.listWrongQuestions(userId, subjectId));
+        return Result.success(practiceService.listWrongQuestions(userId, subjectId, directoryId, masterStatus));
+    }
+
+    @PutMapping("/wrong-questions/{wrongQuestionId}/master-status")
+    public Result<PracticeWrongQuestionVO> updateWrongQuestionMasterStatus(
+            @PathVariable Long wrongQuestionId,
+            @RequestParam Integer masterStatus
+    ) {
+        Long userId = UserContext.requireUserId();
+        return Result.success(practiceService.updateWrongQuestionMasterStatus(userId, wrongQuestionId, masterStatus));
+    }
+
+    @GetMapping("/wrong-questions/trend")
+    public Result<List<PracticeWrongTrendVO>> getWrongQuestionTrends(
+            @RequestParam(required = false) Long subjectId,
+            @RequestParam(required = false) Long directoryId,
+            @RequestParam(required = false) Integer days
+    ) {
+        Long userId = UserContext.requireUserId();
+        return Result.success(practiceService.getWrongQuestionTrends(userId, subjectId, directoryId, days));
     }
 
     @GetMapping("/stats")

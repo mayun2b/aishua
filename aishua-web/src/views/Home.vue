@@ -298,7 +298,7 @@ const goToExercise = () => {
   const token = localStorage.getItem('token')
   const user = getStoredUser()
   if (token) {
-    router.push(user?.isAdmin === 1 ? '/admin' : '/dashboard')
+    router.push(user?.isAdmin === 1 ? '/admin' : '/subjects')
   } else {
     router.push('/login')
   }
@@ -307,7 +307,7 @@ const goToDashboard = () => {
   const token = localStorage.getItem('token')
   const user = getStoredUser()
   if (token) {
-    router.push(user?.isAdmin === 1 ? '/admin' : '/dashboard')
+    router.push(user?.isAdmin === 1 ? '/admin' : '/subjects')
   } else {
     router.push('/login')
   }

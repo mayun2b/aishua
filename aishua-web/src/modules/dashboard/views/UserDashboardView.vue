@@ -7,7 +7,7 @@
       </div>
 
       <div class="head-actions">
-        <router-link class="ghost" to="/practice">开始练习</router-link>
+        <router-link class="ghost" to="/subjects">开始练习</router-link>
         <router-link class="ghost" to="/practice-records">练习记录</router-link>
         <router-link class="ghost" to="/wrong-questions">错题记录</router-link>
         <router-link v-if="user?.isAdmin === 1" class="ghost" to="/admin">管理台</router-link>
@@ -114,6 +114,43 @@
 
         <section class="panel">
           <div class="panel-head">
+            <h2>知识点掌握度</h2>
+            <span>展示最近 30 条</span>
+          </div>
+
+          <div v-if="masteryItems.length" class="mastery-table-wrap">
+            <table class="mastery-table">
+              <thead>
+                <tr>
+                  <th>考点</th>
+                  <th>学科</th>
+                  <th>作答</th>
+                  <th>正确率</th>
+                  <th>掌握等级</th>
+                  <th>更新时间</th>
+                </tr>
+              </thead>
+              <tbody>
+                <tr v-for="item in masteryItems" :key="`${item.subjectId}-${item.tagId}`">
+                  <td>{{ item.tagName || '-' }}</td>
+                  <td>{{ item.subjectName || '-' }}</td>
+                  <td>{{ item.correctCount || 0 }} / {{ item.totalCount || 0 }}</td>
+                  <td>{{ formatRate(item.correctRate) }}</td>
+                  <td>
+                    <span :class="['level-chip', masteryClass(item.masteryLevel)]">
+                      {{ masteryLabel(item.masteryLevel) }}
+                    </span>
+                  </td>
+                  <td>{{ formatDateTime(item.updateTime) }}</td>
+                </tr>
+              </tbody>
+            </table>
+          </div>
+          <div v-else class="empty-state">暂无知识点掌握度数据</div>
+        </section>
+
+        <section class="panel">
+          <div class="panel-head">
             <h2>最近练习</h2>
             <router-link to="/practice-records">全部记录</router-link>
           </div>
@@ -183,6 +220,7 @@ const overview = computed(() => stats.value.overview || {})
 const trendItems = computed(() => stats.value.dailyTrends || [])
 const subjectItems = computed(() => (stats.value.subjectStats || []).slice(0, 6))
 const weakItems = computed(() => (stats.value.weakPoints || []).slice(0, 8))
+const masteryItems = computed(() => (stats.value.knowledgeMasteries || []).slice(0, 30))
 const recentSessions = computed(() => stats.value.recentSessions || [])
 const trendMax = computed(() => Math.max(...trendItems.value.map((item) => Number(item.doCount || 0)), 1))
 
@@ -216,6 +254,11 @@ const overviewItems = computed(() => [
     label: '练习场次',
     value: `${formatNumber(overview.value.finishedSessionCount)} 次`,
     meta: `累计用时 ${formatTime(overview.value.totalTimeCost)}`
+  },
+  {
+    label: '最近学习',
+    value: formatDate(overview.value.lastExerciseDate),
+    meta: `活跃 ${formatNumber(overview.value.activeDays)} 天`
   }
 ])
 
@@ -672,6 +715,11 @@ onMounted(loadStats)
 }
 
 .session-table-wrap {
+  margin-top: 14px;
+  overflow-x: auto;
+}
+
+.mastery-table-wrap {
   margin-top: 14px;
   overflow-x: auto;
 }

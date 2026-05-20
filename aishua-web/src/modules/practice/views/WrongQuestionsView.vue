@@ -26,11 +26,63 @@
             </option>
           </select>
         </label>
+
+        <label>
+          <span>目录</span>
+          <select v-model="filters.directoryId">
+            <option value="">全部目录</option>
+            <option v-for="directory in directoryOptions" :key="directory.directoryId" :value="String(directory.directoryId)">
+              {{ directory.directoryName }}
+            </option>
+          </select>
+        </label>
+
+        <label>
+          <span>掌握状态</span>
+          <select v-model="filters.masterStatus">
+            <option value="">全部状态</option>
+            <option value="0">未掌握</option>
+            <option value="1">已掌握</option>
+          </select>
+        </label>
       </div>
 
       <div class="filter-actions">
         <button type="button" class="ghost" @click="resetFilters">重置</button>
-        <button type="button" @click="loadWrongQuestions">查询</button>
+        <button type="button" @click="applyFilters">查询</button>
+      </div>
+    </section>
+
+    <section class="table-card">
+      <div class="table-head">
+        <h2>错题变化趋势</h2>
+        <div class="trend-actions">
+          <button
+            v-for="option in trendDayOptions"
+            :key="option"
+            type="button"
+            :class="['ghost', selectedTrendDays === option ? 'active-trend-button' : '']"
+            @click="changeTrendDays(option)"
+          >
+            近 {{ option }} 天
+          </button>
+        </div>
+      </div>
+
+      <div v-if="trendLoading" class="empty-state">正在加载趋势数据...</div>
+      <div v-else-if="!wrongTrendItems.length" class="empty-state">暂无趋势数据。</div>
+      <div v-else class="trend-chart">
+        <div
+          v-for="(item, index) in wrongTrendItems"
+          :key="item.statDate || index"
+          class="trend-column"
+          :title="`${formatDate(item.statDate)}：错答 ${item.wrongAnswerCount || 0} 次，涉及 ${item.uniqueWrongQuestionCount || 0} 题`"
+        >
+          <div class="trend-track">
+            <span class="trend-fill" :style="{ height: trendBarHeight(item) }"></span>
+          </div>
+          <span class="trend-label">{{ trendDayLabel(index, item.statDate) }}</span>
+        </div>
       </div>
     </section>
 
@@ -48,9 +100,11 @@
             <tr>
               <th>题目</th>
               <th>学科</th>
+              <th>目录</th>
               <th>标签</th>
               <th>标准答案</th>
               <th>错误次数</th>
+              <th>掌握状态</th>
               <th>最近出错</th>
               <th>操作</th>
             </tr>
@@ -65,9 +119,15 @@
                 </div>
               </td>
               <td>{{ question.subjectName || '-' }}</td>
+              <td>{{ question.directoryName || '-' }}</td>
               <td>{{ question.tags || '-' }}</td>
               <td>{{ formatAnswerDisplay(question.correctAnswer) }}</td>
               <td>{{ question.wrongCount ?? 0 }}</td>
+              <td>
+                <span :class="['status-chip', question.masterStatus === 1 ? 'mastered' : 'pending']">
+                  {{ question.masterStatus === 1 ? '已掌握' : '未掌握' }}
+                </span>
+              </td>
               <td>{{ formatDateTime(question.lastWrongTime) }}</td>
               <td>
                 <div class="action-stack">
@@ -78,6 +138,21 @@
                   >
                     去练习
                   </router-link>
+                  <router-link
+                    v-if="question.subjectId"
+                    class="retry-link"
+                    :to="`/practice?subjectId=${question.subjectId}&mode=4`"
+                  >
+                    错题重练
+                  </router-link>
+                  <button
+                    type="button"
+                    class="status-toggle-button"
+                    :disabled="masterStatusLoadingId === question.wrongQuestionId"
+                    @click="toggleMasterStatus(question)"
+                  >
+                    {{ masterStatusLoadingId === question.wrongQuestionId ? '处理中...' : (question.masterStatus === 1 ? '取消掌握' : '标记掌握') }}
+                  </button>
                   <button
                     type="button"
                     class="ai-link"
@@ -216,6 +291,12 @@ const loading = ref(false)
 const subjects = ref([])
 const wrongQuestions = ref([])
 const { currentPage, pagedItems: pagedWrongQuestions, resetPage } = useClientPagination(wrongQuestions)
+const masterStatusLoadingId = ref(null)
+
+const trendDayOptions = [7, 30, 90]
+const selectedTrendDays = ref(30)
+const trendLoading = ref(false)
+const wrongTrendItems = ref([])
 
 const aiPanelVisible = ref(false)
 const aiAnalyzing = ref(false)
@@ -228,8 +309,28 @@ const aiMessages = ref([])
 const chatInput = ref('')
 
 const filters = reactive({
-  subjectId: ''
+  subjectId: '',
+  directoryId: '',
+  masterStatus: ''
 })
+
+const directoryOptions = computed(() => {
+  const directoryMap = new Map()
+  for (const item of wrongQuestions.value) {
+    if (!item?.directoryId) {
+      continue
+    }
+    if (!directoryMap.has(item.directoryId)) {
+      directoryMap.set(item.directoryId, {
+        directoryId: item.directoryId,
+        directoryName: item.directoryName || `目录 ${item.directoryId}`
+      })
+    }
+  }
+  return Array.from(directoryMap.values()).sort((left, right) => String(left.directoryName).localeCompare(String(right.directoryName), 'zh-CN'))
+})
+
+const trendMax = computed(() => Math.max(...wrongTrendItems.value.map((item) => Number(item.wrongAnswerCount || 0)), 1))
 
 const canInputMessage = computed(() => {
   return Boolean(aiSession.value && aiSession.value.status === 1)
@@ -271,7 +372,9 @@ const loadWrongQuestions = async () => {
   loading.value = true
   try {
     const response = await practiceApi.listWrongQuestions({
-      subjectId: filters.subjectId ? Number(filters.subjectId) : undefined
+      subjectId: filters.subjectId ? Number(filters.subjectId) : undefined,
+      directoryId: filters.directoryId ? Number(filters.directoryId) : undefined,
+      masterStatus: filters.masterStatus === '' ? undefined : Number(filters.masterStatus)
     })
     wrongQuestions.value = response.data || []
     resetPage()
@@ -284,7 +387,72 @@ const loadWrongQuestions = async () => {
 
 const resetFilters = async () => {
   filters.subjectId = resolveRouteSubjectId()
+  filters.directoryId = ''
+  filters.masterStatus = ''
+  selectedTrendDays.value = 30
   await loadWrongQuestions()
+  await loadWrongTrends()
+}
+
+const loadWrongTrends = async () => {
+  trendLoading.value = true
+  try {
+    const response = await practiceApi.getWrongQuestionTrends({
+      days: selectedTrendDays.value,
+      subjectId: filters.subjectId ? Number(filters.subjectId) : undefined,
+      directoryId: filters.directoryId ? Number(filters.directoryId) : undefined
+    })
+    wrongTrendItems.value = response.data || []
+  } catch (error) {
+    showToast(error.message || '加载错题趋势失败')
+    wrongTrendItems.value = []
+  } finally {
+    trendLoading.value = false
+  }
+}
+
+const applyFilters = async () => {
+  await loadWrongQuestions()
+  await loadWrongTrends()
+}
+
+const changeTrendDays = async (days) => {
+  if (selectedTrendDays.value === days) {
+    return
+  }
+  selectedTrendDays.value = days
+  await loadWrongTrends()
+}
+
+const toggleMasterStatus = async (question) => {
+  if (!question?.wrongQuestionId) {
+    return
+  }
+
+  const nextStatus = Number(question.masterStatus) === 1 ? 0 : 1
+  masterStatusLoadingId.value = question.wrongQuestionId
+  try {
+    const response = await practiceApi.updateWrongQuestionMasterStatus(question.wrongQuestionId, nextStatus)
+    const updated = response.data || {}
+    wrongQuestions.value = wrongQuestions.value.map((item) => {
+      if (item.wrongQuestionId !== question.wrongQuestionId) {
+        return item
+      }
+      return {
+        ...item,
+        masterStatus: updated.masterStatus ?? nextStatus
+      }
+    })
+    await loadWrongTrends()
+    if (filters.masterStatus !== '') {
+      await loadWrongQuestions()
+    }
+    showToast(nextStatus === 1 ? '已标记为掌握' : '已取消掌握')
+  } catch (error) {
+    showToast(error.message || '更新掌握状态失败')
+  } finally {
+    masterStatusLoadingId.value = null
+  }
 }
 
 const openAiAssistant = async (question) => {
@@ -523,6 +691,30 @@ const formatDateTime = (value) => {
   return new Date(value).toLocaleString('zh-CN', { hour12: false })
 }
 
+const formatDate = (value) => {
+  if (!value) {
+    return '-'
+  }
+  return String(value).slice(0, 10)
+}
+
+const trendBarHeight = (item) => {
+  const count = Number(item?.wrongAnswerCount || 0)
+  if (count <= 0) {
+    return '0%'
+  }
+  return `${Math.max(8, Math.round((count / trendMax.value) * 100))}%`
+}
+
+const trendDayLabel = (index, value) => {
+  const total = wrongTrendItems.value.length
+  const step = Math.max(1, Math.ceil(total / 5))
+  if (total <= 10 || index === 0 || index === total - 1 || index % step === 0) {
+    return formatDate(value).slice(5)
+  }
+  return ''
+}
+
 const formatAnswerDisplay = (value) => {
   if (value == null || String(value).trim() === '') {
     return '暂无答案'
@@ -595,7 +787,15 @@ watch(
   () => route.query.subjectId,
   async () => {
     filters.subjectId = resolveRouteSubjectId()
-    await loadWrongQuestions()
+    filters.directoryId = ''
+    await applyFilters()
+  }
+)
+
+watch(
+  () => filters.subjectId,
+  () => {
+    filters.directoryId = ''
   }
 )
 
@@ -613,7 +813,7 @@ onMounted(() => {
 onMounted(async () => {
   filters.subjectId = resolveRouteSubjectId()
   await loadSubjects()
-  await loadWrongQuestions()
+  await applyFilters()
 })
 
 onBeforeUnmount(() => {
@@ -675,6 +875,12 @@ onBeforeUnmount(() => {
   flex-wrap: wrap;
 }
 
+.trend-actions {
+  display: flex;
+  gap: 8px;
+  flex-wrap: wrap;
+}
+
 .filter-card,
 .table-card {
   margin-top: 18px;
@@ -732,6 +938,51 @@ onBeforeUnmount(() => {
 .table-wrap {
   margin-top: 18px;
   overflow: auto;
+}
+
+.trend-chart {
+  height: 220px;
+  margin-top: 16px;
+  display: grid;
+  grid-auto-flow: column;
+  grid-auto-columns: minmax(12px, 1fr);
+  gap: 6px;
+  align-items: end;
+  overflow-x: auto;
+  padding-bottom: 4px;
+}
+
+.trend-column {
+  min-width: 0;
+  height: 100%;
+  display: grid;
+  grid-template-rows: 1fr 20px;
+  gap: 6px;
+}
+
+.trend-track {
+  position: relative;
+  height: 100%;
+  border-radius: 8px;
+  background: #e8edf4;
+  overflow: hidden;
+}
+
+.trend-fill {
+  position: absolute;
+  left: 0;
+  right: 0;
+  bottom: 0;
+  border-radius: 8px 8px 0 0;
+  background: #b42318;
+}
+
+.trend-label {
+  min-height: 20px;
+  color: #6c7a8d;
+  font-size: 11px;
+  text-align: center;
+  white-space: nowrap;
 }
 
 .ai-modal-overlay {
@@ -874,7 +1125,9 @@ th {
 button,
 .ghost,
 .practice-link,
-.ai-link {
+.ai-link,
+.retry-link,
+.status-toggle-button {
   border: 0;
   border-radius: 14px;
   padding: 12px 18px;
@@ -894,7 +1147,9 @@ button {
 }
 
 .practice-link,
-.ai-link {
+.ai-link,
+.retry-link,
+.status-toggle-button {
   display: inline-flex;
   align-items: center;
   background: #17324d;
@@ -906,6 +1161,39 @@ button {
 
 .ai-link {
   background: #0f7a43;
+}
+
+.retry-link {
+  background: #7a3e00;
+}
+
+.status-toggle-button {
+  background: #445f7d;
+}
+
+.status-chip {
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  min-width: 66px;
+  border-radius: 999px;
+  padding: 5px 10px;
+  font-size: 12px;
+}
+
+.status-chip.mastered {
+  background: #ddf5e9;
+  color: #0f7a43;
+}
+
+.status-chip.pending {
+  background: #fce7e7;
+  color: #b42318;
+}
+
+.active-trend-button {
+  background: #17324d;
+  color: #fff;
 }
 
 .panel-head,

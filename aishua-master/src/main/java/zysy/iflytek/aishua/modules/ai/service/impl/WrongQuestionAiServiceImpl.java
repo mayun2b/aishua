@@ -9,7 +9,7 @@ import org.springframework.stereotype.Service;
 import org.springframework.transaction.annotation.Transactional;
 import org.springframework.util.StringUtils;
 import zysy.iflytek.aishua.common.exception.BusinessException;
-import zysy.iflytek.aishua.config.properties.ZhipuAiProperties;
+import zysy.iflytek.aishua.config.properties.QwenAiProperties;
 import zysy.iflytek.aishua.modules.practice.entity.ExerciseRecord;
 import zysy.iflytek.aishua.modules.practice.entity.UserKnowledgeMastery;
 import zysy.iflytek.aishua.modules.practice.entity.WrongQuestion;
@@ -29,7 +29,7 @@ import zysy.iflytek.aishua.modules.ai.mapper.WrongQuestionAiChatMessageMapper;
 import zysy.iflytek.aishua.modules.ai.mapper.WrongQuestionAiChatSessionMapper;
 import zysy.iflytek.aishua.modules.practice.mapper.WrongQuestionMapper;
 import zysy.iflytek.aishua.modules.ai.service.WrongQuestionAiService;
-import zysy.iflytek.aishua.modules.ai.support.ZhipuChatClient;
+import zysy.iflytek.aishua.modules.ai.support.QwenChatClient;
 import zysy.iflytek.aishua.modules.question.entity.Question;
 import zysy.iflytek.aishua.modules.question.mapper.QuestionMapper;
 import zysy.iflytek.aishua.modules.tag.entity.ExamTag;
@@ -120,8 +120,8 @@ public class WrongQuestionAiServiceImpl implements WrongQuestionAiService {
     private final WrongQuestionAiAnalysisMapper wrongQuestionAiAnalysisMapper;
     private final WrongQuestionAiChatSessionMapper wrongQuestionAiChatSessionMapper;
     private final WrongQuestionAiChatMessageMapper wrongQuestionAiChatMessageMapper;
-    private final ZhipuChatClient zhipuChatClient;
-    private final ZhipuAiProperties zhipuAiProperties;
+    private final QwenChatClient qwenChatClient;
+    private final QwenAiProperties qwenAiProperties;
 
     public WrongQuestionAiServiceImpl(
             WrongQuestionMapper wrongQuestionMapper,
@@ -132,8 +132,8 @@ public class WrongQuestionAiServiceImpl implements WrongQuestionAiService {
             WrongQuestionAiAnalysisMapper wrongQuestionAiAnalysisMapper,
             WrongQuestionAiChatSessionMapper wrongQuestionAiChatSessionMapper,
             WrongQuestionAiChatMessageMapper wrongQuestionAiChatMessageMapper,
-            ZhipuChatClient zhipuChatClient,
-            ZhipuAiProperties zhipuAiProperties
+            QwenChatClient qwenChatClient,
+            QwenAiProperties qwenAiProperties
     ) {
         this.wrongQuestionMapper = wrongQuestionMapper;
         this.questionMapper = questionMapper;
@@ -143,8 +143,8 @@ public class WrongQuestionAiServiceImpl implements WrongQuestionAiService {
         this.wrongQuestionAiAnalysisMapper = wrongQuestionAiAnalysisMapper;
         this.wrongQuestionAiChatSessionMapper = wrongQuestionAiChatSessionMapper;
         this.wrongQuestionAiChatMessageMapper = wrongQuestionAiChatMessageMapper;
-        this.zhipuChatClient = zhipuChatClient;
-        this.zhipuAiProperties = zhipuAiProperties;
+        this.qwenChatClient = qwenChatClient;
+        this.qwenAiProperties = qwenAiProperties;
     }
 
     @Override
@@ -159,14 +159,14 @@ public class WrongQuestionAiServiceImpl implements WrongQuestionAiService {
         // Build immutable snapshot for reproducibility and troubleshooting.
         JSONObject contextSnapshot = buildContextSnapshot(userId, wrongQuestion, question);
         String userPrompt = buildAnalysisUserPrompt(contextSnapshot, requestDTO == null ? null : requestDTO.getExtraInstruction());
-        List<ZhipuChatClient.ChatMessage> messages = List.of(
-                new ZhipuChatClient.ChatMessage("system", ANALYSIS_SYSTEM_PROMPT),
-                new ZhipuChatClient.ChatMessage("user", userPrompt)
+        List<QwenChatClient.ChatMessage> messages = List.of(
+                new QwenChatClient.ChatMessage("system", ANALYSIS_SYSTEM_PROMPT),
+                new QwenChatClient.ChatMessage("user", userPrompt)
         );
 
         long beginMs = System.currentTimeMillis();
         try {
-            ZhipuChatClient.ChatResult chatResult = zhipuChatClient.chat(messages, true);
+            QwenChatClient.ChatResult chatResult = qwenChatClient.chat(messages, true);
             int latencyMs = (int) (System.currentTimeMillis() - beginMs);
             JSONObject resultJson = parseModelJson(chatResult.content());
 
@@ -328,13 +328,13 @@ public class WrongQuestionAiServiceImpl implements WrongQuestionAiService {
 
         // Build context with question facts, latest analysis and short history.
         JSONObject chatContext = buildChatContext(userId, wrongQuestion, question, session);
-        List<ZhipuChatClient.ChatMessage> messages = buildChatPromptMessages(chatContext, sessionId, content);
+        List<QwenChatClient.ChatMessage> messages = buildChatPromptMessages(chatContext, sessionId, content);
         int chatMaxTokens = resolveChatMaxTokens(content);
         int maxReplyChars = shouldAllowDetailedAnswer(content) ? MAX_CHAT_REPLY_DETAIL_CHARS : MAX_CHAT_REPLY_CHARS;
 
         long beginMs = System.currentTimeMillis();
         try {
-            ZhipuChatClient.ChatResult chatResult = zhipuChatClient.chat(messages, false, chatMaxTokens);
+            QwenChatClient.ChatResult chatResult = qwenChatClient.chat(messages, false, chatMaxTokens);
             int latencyMs = (int) (System.currentTimeMillis() - beginMs);
             String assistantContent = compactChatReply(chatResult.content(), maxReplyChars);
 
@@ -369,7 +369,7 @@ public class WrongQuestionAiServiceImpl implements WrongQuestionAiService {
             failedMessage.setLatencyMs((int) (System.currentTimeMillis() - beginMs));
             wrongQuestionAiChatMessageMapper.insert(failedMessage);
 
-            updateSessionAfterReply(session, new ZhipuChatClient.Usage(0, 0, 0), LocalDateTime.now(), false);
+            updateSessionAfterReply(session, new QwenChatClient.Usage(0, 0, 0), LocalDateTime.now(), false);
             throw exception;
         }
     }
@@ -586,15 +586,15 @@ public class WrongQuestionAiServiceImpl implements WrongQuestionAiService {
         }
     }
 
-    private List<ZhipuChatClient.ChatMessage> buildChatPromptMessages(
+    private List<QwenChatClient.ChatMessage> buildChatPromptMessages(
             JSONObject context,
             Long sessionId,
             String currentUserQuestion
     ) {
-        List<ZhipuChatClient.ChatMessage> messages = new ArrayList<>();
-        messages.add(new ZhipuChatClient.ChatMessage("system", CHAT_SYSTEM_PROMPT));
-        messages.add(new ZhipuChatClient.ChatMessage("system", CHAT_CONCISE_POLICY_PROMPT));
-        messages.add(new ZhipuChatClient.ChatMessage("system", "会话上下文：" + context.toJSONString()));
+        List<QwenChatClient.ChatMessage> messages = new ArrayList<>();
+        messages.add(new QwenChatClient.ChatMessage("system", CHAT_SYSTEM_PROMPT));
+        messages.add(new QwenChatClient.ChatMessage("system", CHAT_CONCISE_POLICY_PROMPT));
+        messages.add(new QwenChatClient.ChatMessage("system", "会话上下文：" + context.toJSONString()));
 
         // Replay a limited number of historical messages to control cost and context size.
         List<WrongQuestionAiChatMessage> historyMessages = wrongQuestionAiChatMessageMapper.selectList(
@@ -610,10 +610,10 @@ public class WrongQuestionAiServiceImpl implements WrongQuestionAiService {
             if (!StringUtils.hasText(role) || !StringUtils.hasText(history.getContentText())) {
                 continue;
             }
-            messages.add(new ZhipuChatClient.ChatMessage(role, compactText(history.getContentText(), MAX_HISTORY_MESSAGE_CHARS)));
+            messages.add(new QwenChatClient.ChatMessage(role, compactText(history.getContentText(), MAX_HISTORY_MESSAGE_CHARS)));
         }
 
-        messages.add(new ZhipuChatClient.ChatMessage("user", currentUserQuestion));
+        messages.add(new QwenChatClient.ChatMessage("user", currentUserQuestion));
         return messages;
     }
 
@@ -655,7 +655,7 @@ public class WrongQuestionAiServiceImpl implements WrongQuestionAiService {
 
     private void updateSessionAfterReply(
             WrongQuestionAiChatSession session,
-            ZhipuChatClient.Usage usage,
+            QwenChatClient.Usage usage,
             LocalDateTime now,
             boolean assistantSuccess
     ) {
@@ -876,7 +876,7 @@ public class WrongQuestionAiServiceImpl implements WrongQuestionAiService {
     }
 
     private int resolveChatMaxTokens(String currentUserQuestion) {
-        int configured = zhipuAiProperties.getChatMaxTokens() == null ? 220 : zhipuAiProperties.getChatMaxTokens();
+        int configured = qwenAiProperties.getChatMaxTokens() == null ? 220 : qwenAiProperties.getChatMaxTokens();
         int safeBase = Math.max(configured, 120);
         return shouldAllowDetailedAnswer(currentUserQuestion) ? Math.min(safeBase + 120, 480) : safeBase;
     }
@@ -921,17 +921,10 @@ public class WrongQuestionAiServiceImpl implements WrongQuestionAiService {
     }
 
     private String resolveChatModelName() {
-        if (StringUtils.hasText(zhipuAiProperties.getChatModel())) {
-            String model = zhipuAiProperties.getChatModel().trim();
-            if ("GLM-4.7-Flash".equalsIgnoreCase(model)) {
-                return "glm-4.7-flash";
-            }
-            if ("QWEN3.5-PLUS-2026-02-15".equalsIgnoreCase(model)) {
-                return "qwen3.5-plus-2026-02-15";
-            }
-            return model;
+        if (StringUtils.hasText(qwenAiProperties.getChatModel())) {
+            return qwenAiProperties.getChatModel().trim();
         }
-        return "qwen3.5-plus-2026-02-15";
+        return "qwen3.5-flash";
     }
 
     private boolean isSessionOngoing(Integer status) {

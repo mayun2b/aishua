@@ -9,7 +9,7 @@ export const navConfig = {
     },
     {
       name: '刷题练习',
-      action: 'goToExercise',
+      path: '/subjects',
       icon: 'exercise'
     },
     {
@@ -38,6 +38,11 @@ export const navConfig = {
       name: '题目管理',
       path: '/admin/questions',
       icon: 'questions'
+    },
+    {
+      name: '试卷管理',
+      path: '/admin/exams',
+      icon: 'exam'
     },
     {
       name: '学科管理',

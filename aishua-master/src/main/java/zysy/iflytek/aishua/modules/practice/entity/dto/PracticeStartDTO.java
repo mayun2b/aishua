@@ -13,7 +13,7 @@ public class PracticeStartDTO {
     private Long subjectId;
 
     @Min(value = 1, message = "练习模式不合法")
-    @Max(value = 3, message = "练习模式不合法")
+    @Max(value = 4, message = "练习模式不合法")
     private Integer practiceMode = 1;
 
     @Min(value = 1, message = "题目数量至少为 1")

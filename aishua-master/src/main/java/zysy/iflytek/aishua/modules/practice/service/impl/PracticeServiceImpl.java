@@ -5,6 +5,9 @@ import lombok.extern.slf4j.Slf4j;
 import org.springframework.stereotype.Service;
 import org.springframework.transaction.annotation.Transactional;
 import zysy.iflytek.aishua.common.exception.BusinessException;
+import zysy.iflytek.aishua.config.properties.PracticeMasteryProperties;
+import zysy.iflytek.aishua.modules.directory.entity.TextbookDirectory;
+import zysy.iflytek.aishua.modules.directory.mapper.TextbookDirectoryMapper;
 import zysy.iflytek.aishua.modules.practice.entity.DailyStats;
 import zysy.iflytek.aishua.modules.practice.entity.ExerciseRecord;
 import zysy.iflytek.aishua.modules.practice.entity.PracticeSession;
@@ -22,6 +25,7 @@ import zysy.iflytek.aishua.modules.practice.entity.vo.PracticeQuestionSheetVO;
 import zysy.iflytek.aishua.modules.practice.entity.vo.PracticeSessionDetailVO;
 import zysy.iflytek.aishua.modules.practice.entity.vo.PracticeSessionSummaryVO;
 import zysy.iflytek.aishua.modules.practice.entity.vo.PracticeStatsVO;
+import zysy.iflytek.aishua.modules.practice.entity.vo.PracticeWrongTrendVO;
 import zysy.iflytek.aishua.modules.practice.entity.vo.PracticeStartVO;
 import zysy.iflytek.aishua.modules.practice.entity.vo.PracticeBatchSubmitResultVO;
 import zysy.iflytek.aishua.modules.practice.entity.vo.PracticeWrongQuestionVO;
@@ -68,6 +72,11 @@ public class PracticeServiceImpl implements PracticeService {
     private static final BigDecimal ONE_HUNDRED = BigDecimal.valueOf(100);
     private static final int DEFAULT_QUESTION_COUNT = 10;
     private static final int MAX_QUESTION_COUNT = 50;
+    private static final int DEFAULT_MASTERY_MIN_SAMPLE_COUNT = 20;
+    private static final int DEFAULT_MASTERY_RATE_LEVEL_1 = 60;
+    private static final int DEFAULT_MASTERY_RATE_LEVEL_2 = 75;
+    private static final int DEFAULT_MASTERY_RATE_LEVEL_3 = 90;
+    private static final int DEFAULT_MASTERY_WARMUP_LEVEL_CAP = 2;
 
     private final PracticeSessionMapper practiceSessionMapper;
     private final ExerciseRecordMapper exerciseRecordMapper;
@@ -81,7 +90,9 @@ public class PracticeServiceImpl implements PracticeService {
     private final SubjectMapper subjectMapper;
     private final UserSubjectMapper userSubjectMapper;
     private final ExamTagMapper examTagMapper;
+    private final TextbookDirectoryMapper textbookDirectoryMapper;
     private final AnswerJudgeSupport answerJudgeSupport;
+    private final PracticeMasteryProperties practiceMasteryProperties;
 
     public PracticeServiceImpl(
             PracticeSessionMapper practiceSessionMapper,
@@ -96,7 +107,9 @@ public class PracticeServiceImpl implements PracticeService {
             SubjectMapper subjectMapper,
             UserSubjectMapper userSubjectMapper,
             ExamTagMapper examTagMapper,
-            AnswerJudgeSupport answerJudgeSupport
+            TextbookDirectoryMapper textbookDirectoryMapper,
+            AnswerJudgeSupport answerJudgeSupport,
+            PracticeMasteryProperties practiceMasteryProperties
     ) {
         this.practiceSessionMapper = practiceSessionMapper;
         this.exerciseRecordMapper = exerciseRecordMapper;
@@ -110,7 +123,9 @@ public class PracticeServiceImpl implements PracticeService {
         this.subjectMapper = subjectMapper;
         this.userSubjectMapper = userSubjectMapper;
         this.examTagMapper = examTagMapper;
+        this.textbookDirectoryMapper = textbookDirectoryMapper;
         this.answerJudgeSupport = answerJudgeSupport;
+        this.practiceMasteryProperties = practiceMasteryProperties;
     }
 
     @Override
@@ -124,9 +139,12 @@ public class PracticeServiceImpl implements PracticeService {
         List<Long> tagIds = practiceMode == PracticeModeConstants.KNOWLEDGE_POINT
                 ? normalizeTagIds(practiceStartDTO.getTagIds())
                 : List.of();
-        List<Question> selectedQuestions = selectSessionQuestions(subject.getId(), practiceMode, questionCount, tagIds);
+        List<Question> selectedQuestions = selectSessionQuestions(userId, subject.getId(), practiceMode, questionCount, tagIds);
         if (selectedQuestions.isEmpty() && practiceMode == PracticeModeConstants.KNOWLEDGE_POINT) {
             throw new BusinessException("所选知识点暂无可练习题目", 400);
+        }
+        if (selectedQuestions.isEmpty() && practiceMode == PracticeModeConstants.WRONG_RETRY) {
+            throw new BusinessException("当前学科暂无可重练错题", 400);
         }
         if (selectedQuestions.isEmpty()) {
             throw new BusinessException("当前学科暂无可练习题目", 400);
@@ -316,12 +334,18 @@ public class PracticeServiceImpl implements PracticeService {
     }
 
     @Override
-    public List<PracticeWrongQuestionVO> listWrongQuestions(Long userId, Long subjectId) {
+    public List<PracticeWrongQuestionVO> listWrongQuestions(Long userId, Long subjectId, Long directoryId, Integer masterStatus) {
         validateSubjectFilter(subjectId);
+        validateDirectoryFilter(directoryId, subjectId);
+        validateMasterStatusFilter(masterStatus);
 
         List<WrongQuestion> wrongQuestions = wrongQuestionMapper.selectList(new LambdaQueryWrapper<WrongQuestion>()
                 .eq(WrongQuestion::getUserId, userId)
                 .eq(subjectId != null, WrongQuestion::getSubjectId, subjectId)
+                .eq(directoryId != null, WrongQuestion::getDirectoryId, directoryId)
+                .eq(masterStatus != null, WrongQuestion::getMasterStatus, masterStatus)
+                .orderByAsc(WrongQuestion::getMasterStatus)
+                .orderByDesc(WrongQuestion::getWrongCount)
                 .orderByDesc(WrongQuestion::getLastWrongTime)
                 .orderByDesc(WrongQuestion::getId));
         if (wrongQuestions.isEmpty()) {
@@ -338,27 +362,102 @@ public class PracticeServiceImpl implements PracticeService {
                 .filter(id -> id != null && id > 0)
                 .distinct()
                 .toList());
+        Map<Long, TextbookDirectory> directoryMap = loadDirectoryMap(wrongQuestions.stream()
+                .map(WrongQuestion::getDirectoryId)
+                .filter(id -> id != null && id > 0)
+                .distinct()
+                .toList());
 
         List<PracticeWrongQuestionVO> result = new ArrayList<>();
         for (WrongQuestion wrongQuestion : wrongQuestions) {
-            Subject subject = subjectMap.get(wrongQuestion.getSubjectId());
-            Question question = questionMap.get(wrongQuestion.getQuestionId());
+            result.add(toWrongQuestionVO(wrongQuestion, subjectMap, questionMap, directoryMap));
+        }
+        return result;
+    }
 
-            PracticeWrongQuestionVO wrongQuestionVO = new PracticeWrongQuestionVO();
-            wrongQuestionVO.setWrongQuestionId(wrongQuestion.getId());
-            wrongQuestionVO.setSubjectId(wrongQuestion.getSubjectId());
-            wrongQuestionVO.setSubjectName(subject == null ? null : subject.getName());
-            wrongQuestionVO.setQuestionId(wrongQuestion.getQuestionId());
-            wrongQuestionVO.setQuestionTitle(question == null ? "题目已删除" : question.getTitle());
-            wrongQuestionVO.setQuestionType(question == null ? null : question.getType());
-            wrongQuestionVO.setDifficulty(question == null ? null : question.getDifficulty());
-            wrongQuestionVO.setCorrectAnswer(question == null ? null : question.getAnswer());
-            wrongQuestionVO.setAnalysis(question == null ? null : question.getAnalysis());
-            wrongQuestionVO.setTags(wrongQuestion.getTags());
-            wrongQuestionVO.setWrongCount(wrongQuestion.getWrongCount());
-            wrongQuestionVO.setMasterStatus(wrongQuestion.getMasterStatus());
-            wrongQuestionVO.setLastWrongTime(wrongQuestion.getLastWrongTime());
-            result.add(wrongQuestionVO);
+    @Override
+    @Transactional
+    public PracticeWrongQuestionVO updateWrongQuestionMasterStatus(Long userId, Long wrongQuestionId, Integer masterStatus) {
+        int normalizedMasterStatus = normalizeMasterStatus(masterStatus);
+        WrongQuestion wrongQuestion = requireWrongQuestion(userId, wrongQuestionId);
+
+        wrongQuestion.setMasterStatus(normalizedMasterStatus);
+        wrongQuestionMapper.updateById(wrongQuestion);
+
+        Map<Long, Subject> subjectMap = loadSubjectMap(wrongQuestion.getSubjectId() == null ? List.of() : List.of(wrongQuestion.getSubjectId()));
+        Map<Long, Question> questionMap = loadQuestionMap(wrongQuestion.getQuestionId() == null ? List.of() : List.of(wrongQuestion.getQuestionId()));
+        Map<Long, TextbookDirectory> directoryMap = loadDirectoryMap(wrongQuestion.getDirectoryId() == null ? List.of() : List.of(wrongQuestion.getDirectoryId()));
+        return toWrongQuestionVO(wrongQuestion, subjectMap, questionMap, directoryMap);
+    }
+
+    @Override
+    public List<PracticeWrongTrendVO> getWrongQuestionTrends(Long userId, Long subjectId, Long directoryId, Integer days) {
+        validateSubjectFilter(subjectId);
+        validateDirectoryFilter(directoryId, subjectId);
+
+        int statsDays = normalizeStatsDays(days);
+        LocalDate today = LocalDate.now();
+        LocalDate startDate = today.minusDays(statsDays - 1L);
+
+        LambdaQueryWrapper<ExerciseRecord> queryWrapper = new LambdaQueryWrapper<ExerciseRecord>()
+                .eq(ExerciseRecord::getUserId, userId)
+                .eq(ExerciseRecord::getIsCorrect, 0)
+                .isNotNull(ExerciseRecord::getExerciseTime)
+                .ge(ExerciseRecord::getExerciseTime, startDate.atStartOfDay())
+                .orderByAsc(ExerciseRecord::getExerciseTime)
+                .orderByAsc(ExerciseRecord::getId);
+
+        if (subjectId != null) {
+            List<Long> sessionIds = listFilteredSessionIds(userId, subjectId);
+            if (sessionIds.isEmpty()) {
+                return buildEmptyWrongTrends(startDate, today);
+            }
+            queryWrapper.in(ExerciseRecord::getSessionRefId, sessionIds);
+        }
+
+        List<ExerciseRecord> wrongAnswerRecords = exerciseRecordMapper.selectList(queryWrapper);
+        if (wrongAnswerRecords.isEmpty()) {
+            return buildEmptyWrongTrends(startDate, today);
+        }
+
+        List<ExerciseRecord> filteredRecords = wrongAnswerRecords;
+        if (directoryId != null) {
+            Map<Long, Question> questionMap = loadQuestionMap(wrongAnswerRecords.stream()
+                    .map(ExerciseRecord::getQuestionId)
+                    .filter(id -> id != null && id > 0)
+                    .distinct()
+                    .toList());
+            filteredRecords = wrongAnswerRecords.stream()
+                    .filter(record -> {
+                        Question question = questionMap.get(record.getQuestionId());
+                        return question != null && directoryId.equals(question.getDirectoryId());
+                    })
+                    .toList();
+            if (filteredRecords.isEmpty()) {
+                return buildEmptyWrongTrends(startDate, today);
+            }
+        }
+
+        Map<LocalDate, Integer> wrongAnswerCountMap = new LinkedHashMap<>();
+        Map<LocalDate, Set<Long>> uniqueQuestionMap = new LinkedHashMap<>();
+        for (ExerciseRecord record : filteredRecords) {
+            if (record.getExerciseTime() == null) {
+                continue;
+            }
+            LocalDate statDate = record.getExerciseTime().toLocalDate();
+            wrongAnswerCountMap.merge(statDate, 1, Integer::sum);
+            uniqueQuestionMap.computeIfAbsent(statDate, key -> new HashSet<>()).add(record.getQuestionId());
+        }
+
+        List<PracticeWrongTrendVO> result = new ArrayList<>();
+        LocalDate cursor = startDate;
+        while (!cursor.isAfter(today)) {
+            PracticeWrongTrendVO trendVO = new PracticeWrongTrendVO();
+            trendVO.setStatDate(cursor);
+            trendVO.setWrongAnswerCount(wrongAnswerCountMap.getOrDefault(cursor, 0));
+            trendVO.setUniqueWrongQuestionCount(uniqueQuestionMap.getOrDefault(cursor, Collections.emptySet()).size());
+            result.add(trendVO);
+            cursor = cursor.plusDays(1);
         }
         return result;
     }
@@ -836,9 +935,12 @@ public class PracticeServiceImpl implements PracticeService {
         return practiceSession;
     }
 
-    private List<Question> selectSessionQuestions(Long subjectId, int practiceMode, int questionCount, List<Long> tagIds) {
+    private List<Question> selectSessionQuestions(Long userId, Long subjectId, int practiceMode, int questionCount, List<Long> tagIds) {
         if (practiceMode == PracticeModeConstants.KNOWLEDGE_POINT) {
             return selectTaggedQuestions(subjectId, tagIds, questionCount);
+        }
+        if (practiceMode == PracticeModeConstants.WRONG_RETRY) {
+            return selectWrongRetryQuestions(userId, subjectId, questionCount);
         }
 
         List<Question> questions = questionMapper.selectList(new LambdaQueryWrapper<Question>()
@@ -855,6 +957,38 @@ public class PracticeServiceImpl implements PracticeService {
 
         int limit = Math.min(selectedQuestions.size(), questionCount);
         return new ArrayList<>(selectedQuestions.subList(0, limit));
+    }
+
+    private List<Question> selectWrongRetryQuestions(Long userId, Long subjectId, int questionCount) {
+        List<WrongQuestion> wrongQuestions = wrongQuestionMapper.selectList(new LambdaQueryWrapper<WrongQuestion>()
+                .eq(WrongQuestion::getUserId, userId)
+                .eq(WrongQuestion::getSubjectId, subjectId)
+                .orderByAsc(WrongQuestion::getMasterStatus)
+                .orderByDesc(WrongQuestion::getWrongCount)
+                .orderByDesc(WrongQuestion::getLastWrongTime)
+                .orderByDesc(WrongQuestion::getId));
+        if (wrongQuestions.isEmpty()) {
+            return Collections.emptyList();
+        }
+
+        Map<Long, Question> questionMap = loadQuestionMap(wrongQuestions.stream()
+                .map(WrongQuestion::getQuestionId)
+                .filter(id -> id != null && id > 0)
+                .distinct()
+                .toList());
+
+        List<Question> selected = new ArrayList<>();
+        for (WrongQuestion wrongQuestion : wrongQuestions) {
+            Question question = questionMap.get(wrongQuestion.getQuestionId());
+            if (question == null || Integer.valueOf(1).equals(question.getDeleted())) {
+                continue;
+            }
+            selected.add(question);
+            if (selected.size() >= questionCount) {
+                break;
+            }
+        }
+        return selected;
     }
 
     private List<Question> selectTaggedQuestions(Long subjectId, List<Long> tagIds, int questionCount) {
@@ -989,6 +1123,15 @@ public class PracticeServiceImpl implements PracticeService {
                 .collect(Collectors.toMap(Subject::getId, Function.identity(), (left, right) -> left));
     }
 
+    private Map<Long, TextbookDirectory> loadDirectoryMap(List<Long> directoryIds) {
+        if (directoryIds.isEmpty()) {
+            return Map.of();
+        }
+        return textbookDirectoryMapper.selectBatchIds(directoryIds).stream()
+                .filter(directory -> directory != null)
+                .collect(Collectors.toMap(TextbookDirectory::getId, Function.identity(), (left, right) -> left));
+    }
+
     private Map<Long, ExamTag> loadTagMap(List<Long> tagIds) {
         if (tagIds.isEmpty()) {
             return Map.of();
@@ -1008,6 +1151,35 @@ public class PracticeServiceImpl implements PracticeService {
         tagVO.setCreateTime(tag.getCreateTime());
         tagVO.setUpdateTime(tag.getUpdateTime());
         return tagVO;
+    }
+
+    private PracticeWrongQuestionVO toWrongQuestionVO(
+            WrongQuestion wrongQuestion,
+            Map<Long, Subject> subjectMap,
+            Map<Long, Question> questionMap,
+            Map<Long, TextbookDirectory> directoryMap
+    ) {
+        Subject subject = subjectMap.get(wrongQuestion.getSubjectId());
+        Question question = questionMap.get(wrongQuestion.getQuestionId());
+        TextbookDirectory directory = directoryMap.get(wrongQuestion.getDirectoryId());
+
+        PracticeWrongQuestionVO wrongQuestionVO = new PracticeWrongQuestionVO();
+        wrongQuestionVO.setWrongQuestionId(wrongQuestion.getId());
+        wrongQuestionVO.setSubjectId(wrongQuestion.getSubjectId());
+        wrongQuestionVO.setSubjectName(subject == null ? null : subject.getName());
+        wrongQuestionVO.setDirectoryId(wrongQuestion.getDirectoryId());
+        wrongQuestionVO.setDirectoryName(directory == null ? null : directory.getName());
+        wrongQuestionVO.setQuestionId(wrongQuestion.getQuestionId());
+        wrongQuestionVO.setQuestionTitle(question == null ? "题目已删除" : question.getTitle());
+        wrongQuestionVO.setQuestionType(question == null ? null : question.getType());
+        wrongQuestionVO.setDifficulty(question == null ? null : question.getDifficulty());
+        wrongQuestionVO.setCorrectAnswer(question == null ? null : question.getAnswer());
+        wrongQuestionVO.setAnalysis(question == null ? null : question.getAnalysis());
+        wrongQuestionVO.setTags(wrongQuestion.getTags());
+        wrongQuestionVO.setWrongCount(wrongQuestion.getWrongCount());
+        wrongQuestionVO.setMasterStatus(wrongQuestion.getMasterStatus());
+        wrongQuestionVO.setLastWrongTime(wrongQuestion.getLastWrongTime());
+        return wrongQuestionVO;
     }
 
     private Map<Long, PracticeAnswerItemDTO> toAnswerMap(List<PracticeAnswerItemDTO> answers) {
@@ -1046,6 +1218,67 @@ public class PracticeServiceImpl implements PracticeService {
         if (subjectId <= 0) {
             throw new BusinessException("学科筛选条件不合法", 400);
         }
+    }
+
+    private void validateDirectoryFilter(Long directoryId, Long subjectId) {
+        if (directoryId == null) {
+            return;
+        }
+        if (directoryId <= 0) {
+            throw new BusinessException("目录筛选条件不合法", 400);
+        }
+
+        TextbookDirectory directory = textbookDirectoryMapper.selectById(directoryId);
+        if (directory == null || Integer.valueOf(1).equals(directory.getDeleted())) {
+            throw new BusinessException("目录不存在", 404);
+        }
+        if (subjectId != null && !subjectId.equals(directory.getSubjectId())) {
+            throw new BusinessException("目录不属于当前学科", 400);
+        }
+    }
+
+    private void validateMasterStatusFilter(Integer masterStatus) {
+        if (masterStatus == null) {
+            return;
+        }
+        if (masterStatus != 0 && masterStatus != 1) {
+            throw new BusinessException("掌握状态筛选条件不合法", 400);
+        }
+    }
+
+    private int normalizeMasterStatus(Integer masterStatus) {
+        if (masterStatus == null || (masterStatus != 0 && masterStatus != 1)) {
+            throw new BusinessException("掌握状态仅支持 0 或 1", 400);
+        }
+        return masterStatus;
+    }
+
+    private WrongQuestion requireWrongQuestion(Long userId, Long wrongQuestionId) {
+        if (wrongQuestionId == null || wrongQuestionId <= 0) {
+            throw new BusinessException("错题记录ID不合法", 400);
+        }
+        WrongQuestion wrongQuestion = wrongQuestionMapper.selectOne(new LambdaQueryWrapper<WrongQuestion>()
+                .eq(WrongQuestion::getId, wrongQuestionId)
+                .eq(WrongQuestion::getUserId, userId)
+                .last("LIMIT 1"));
+        if (wrongQuestion == null) {
+            throw new BusinessException("错题记录不存在或无访问权限", 404);
+        }
+        return wrongQuestion;
+    }
+
+    private List<PracticeWrongTrendVO> buildEmptyWrongTrends(LocalDate startDate, LocalDate endDate) {
+        List<PracticeWrongTrendVO> result = new ArrayList<>();
+        LocalDate cursor = startDate;
+        while (!cursor.isAfter(endDate)) {
+            PracticeWrongTrendVO trendVO = new PracticeWrongTrendVO();
+            trendVO.setStatDate(cursor);
+            trendVO.setWrongAnswerCount(0);
+            trendVO.setUniqueWrongQuestionCount(0);
+            result.add(trendVO);
+            cursor = cursor.plusDays(1);
+        }
+        return result;
     }
 
     private void updateQuestionStats(Question question, boolean isCorrect) {
@@ -1244,8 +1477,9 @@ public class PracticeServiceImpl implements PracticeService {
         int mode = practiceMode == null ? PracticeModeConstants.SEQUENTIAL : practiceMode;
         if (mode != PracticeModeConstants.SEQUENTIAL
                 && mode != PracticeModeConstants.RANDOM
-                && mode != PracticeModeConstants.KNOWLEDGE_POINT) {
-            throw new BusinessException("当前仅支持顺序练习、随机练习和知识点练习", 400);
+                && mode != PracticeModeConstants.KNOWLEDGE_POINT
+                && mode != PracticeModeConstants.WRONG_RETRY) {
+            throw new BusinessException("当前仅支持顺序练习、随机练习、知识点练习和错题重练", 400);
         }
         return mode;
     }
@@ -1279,8 +1513,8 @@ public class PracticeServiceImpl implements PracticeService {
         if (days == null) {
             return 30;
         }
-        if (days < 7 || days > 90) {
-            throw new BusinessException("统计天数范围应为 7 到 90", 400);
+        if (days != 7 && days != 30 && days != 90) {
+            throw new BusinessException("统计天数仅支持 7、30、90", 400);
         }
         return days;
     }
@@ -1301,17 +1535,73 @@ public class PracticeServiceImpl implements PracticeService {
 
     private int resolveMasteryLevel(BigDecimal correctRate, Integer totalCount) {
         int answeredCount = defaultNumber(totalCount);
+        if (answeredCount <= 0) {
+            return 0;
+        }
+
         BigDecimal rate = defaultDecimal(correctRate);
-        if (answeredCount >= 10 && rate.compareTo(BigDecimal.valueOf(90)) >= 0) {
+        int minSampleCount = resolveConfiguredMinSampleCount();
+        int level1Rate = resolveConfiguredRateLevel1();
+        int level2Rate = resolveConfiguredRateLevel2(level1Rate);
+        int level3Rate = resolveConfiguredRateLevel3(level2Rate);
+        int warmupLevelCap = resolveConfiguredWarmupLevelCap();
+
+        if (answeredCount < minSampleCount) {
+            // Warm-up stage: avoid overestimating mastery from too few samples.
+            return Math.min(resolveMasteryLevelByRate(rate, level1Rate, level2Rate, level3Rate), warmupLevelCap);
+        }
+
+        // Stable stage: classify by accuracy only.
+        return resolveMasteryLevelByRate(rate, level1Rate, level2Rate, level3Rate);
+    }
+
+    private int resolveMasteryLevelByRate(BigDecimal rate, int level1Rate, int level2Rate, int level3Rate) {
+        if (rate.compareTo(BigDecimal.valueOf(level3Rate)) >= 0) {
             return 3;
         }
-        if (answeredCount >= 5 && rate.compareTo(BigDecimal.valueOf(75)) >= 0) {
+        if (rate.compareTo(BigDecimal.valueOf(level2Rate)) >= 0) {
             return 2;
         }
-        if (answeredCount >= 1 && rate.compareTo(BigDecimal.valueOf(50)) >= 0) {
+        if (rate.compareTo(BigDecimal.valueOf(level1Rate)) >= 0) {
             return 1;
         }
         return 0;
+    }
+
+    private int resolveConfiguredMinSampleCount() {
+        Integer configured = practiceMasteryProperties.getMinSampleCount();
+        return configured == null || configured < 1 ? DEFAULT_MASTERY_MIN_SAMPLE_COUNT : configured;
+    }
+
+    private int resolveConfiguredRateLevel1() {
+        return clampRate(practiceMasteryProperties.getRateLevel1(), DEFAULT_MASTERY_RATE_LEVEL_1);
+    }
+
+    private int resolveConfiguredRateLevel2(int level1Rate) {
+        int level2Rate = clampRate(practiceMasteryProperties.getRateLevel2(), DEFAULT_MASTERY_RATE_LEVEL_2);
+        return Math.max(level1Rate, level2Rate);
+    }
+
+    private int resolveConfiguredRateLevel3(int level2Rate) {
+        int level3Rate = clampRate(practiceMasteryProperties.getRateLevel3(), DEFAULT_MASTERY_RATE_LEVEL_3);
+        return Math.max(level2Rate, level3Rate);
+    }
+
+    private int resolveConfiguredWarmupLevelCap() {
+        Integer configured = practiceMasteryProperties.getWarmupLevelCap();
+        int warmupLevelCap = configured == null ? DEFAULT_MASTERY_WARMUP_LEVEL_CAP : configured;
+        if (warmupLevelCap < 0) {
+            return 0;
+        }
+        return Math.min(warmupLevelCap, 3);
+    }
+
+    private int clampRate(Integer configured, int defaultValue) {
+        int rate = configured == null ? defaultValue : configured;
+        if (rate < 0) {
+            return 0;
+        }
+        return Math.min(rate, 100);
     }
 
     private BigDecimal calculateRate(Integer correctCount, Integer totalCount) {

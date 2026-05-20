@@ -12,6 +12,10 @@ public class PracticeWrongQuestionVO {
 
     private String subjectName;
 
+    private Long directoryId;
+
+    private String directoryName;
+
     private Long questionId;
 
     private String questionTitle;

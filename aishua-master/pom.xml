@@ -12,7 +12,7 @@
     </parent>
 
     <groupId>zysy.iflytek</groupId>
-    <artifactId>aishuai</artifactId>
+    <artifactId>aishua</artifactId>
     <version>0.0.1-SNAPSHOT</version>
     <name>aishuai</name>
     <description>AI-powered practice platform</description>
@@ -110,6 +110,14 @@
             <groupId>com.h2database</groupId>
             <artifactId>h2</artifactId>
             <scope>test</scope>
+        </dependency>
+
+
+<!--        minio-->
+        <dependency>
+            <groupId>io.minio</groupId>
+            <artifactId>minio</artifactId>
+            <version>9.0.0</version>
         </dependency>
     </dependencies>
 

@@ -8,26 +8,27 @@ import org.springframework.http.HttpEntity;
 import org.springframework.http.HttpHeaders;
 import org.springframework.http.MediaType;
 import org.springframework.http.ResponseEntity;
-
 import org.springframework.stereotype.Component;
 import org.springframework.util.StringUtils;
 import org.springframework.web.client.HttpStatusCodeException;
 import org.springframework.web.client.RestTemplate;
 import zysy.iflytek.aishua.common.exception.BusinessException;
-import zysy.iflytek.aishua.config.properties.ZhipuAiProperties;
+import zysy.iflytek.aishua.config.properties.QwenAiProperties;
 
 import java.util.ArrayList;
 import java.util.List;
 
 @Slf4j
 @Component
-public class ZhipuChatClient {
-    private final RestTemplate restTemplate;
-    private final ZhipuAiProperties zhipuAiProperties;
+public class QwenChatClient {
+    private static final String DEFAULT_CHAT_MODEL = "qwen3.5-flash";
 
-    public ZhipuChatClient(RestTemplate restTemplate, ZhipuAiProperties zhipuAiProperties) {
+    private final RestTemplate restTemplate;
+    private final QwenAiProperties qwenAiProperties;
+
+    public QwenChatClient(RestTemplate restTemplate, QwenAiProperties qwenAiProperties) {
         this.restTemplate = restTemplate;
-        this.zhipuAiProperties = zhipuAiProperties;
+        this.qwenAiProperties = qwenAiProperties;
     }
 
     public ChatResult chat(List<ChatMessage> messages, boolean jsonResponse) {
@@ -35,11 +36,11 @@ public class ZhipuChatClient {
     }
 
     public ChatResult chat(List<ChatMessage> messages, boolean jsonResponse, Integer maxTokens) {
-        String apiKey = zhipuAiProperties.getApiKey();
+        String apiKey = qwenAiProperties.getApiKey();
         if (!StringUtils.hasText(apiKey)) {
             throw new BusinessException("AI 服务未配置 API Key", 500);
         }
-        if (!StringUtils.hasText(zhipuAiProperties.getChatApi())) {
+        if (!StringUtils.hasText(qwenAiProperties.getChatApi())) {
             throw new BusinessException("AI 服务未配置聊天接口地址", 500);
         }
 
@@ -86,8 +87,7 @@ public class ZhipuChatClient {
         HttpEntity<String> entity = new HttpEntity<>(payload.toJSONString(), headers);
 
         try {
-            // Use unified OpenAPI style endpoint.
-            ResponseEntity<String> response = restTemplate.postForEntity(zhipuAiProperties.getChatApi(), entity, String.class);
+            ResponseEntity<String> response = restTemplate.postForEntity(qwenAiProperties.getChatApi(), entity, String.class);
             if (!response.getStatusCode().is2xxSuccessful() || !StringUtils.hasText(response.getBody())) {
                 throw new BusinessException("AI 服务响应异常", 502);
             }
@@ -98,31 +98,23 @@ public class ZhipuChatClient {
             return new ChatResult(content, usage, response.getBody());
         } catch (HttpStatusCodeException exception) {
             String providerMessage = extractProviderErrorMessage(exception.getResponseBodyAsString());
-            log.warn("调用AI聊天接口失败: status={}, providerMessage={}",
+            log.warn("调用 AI 聊天接口失败: status={}, providerMessage={}",
                     exception.getStatusCode().value(), providerMessage);
             throw new BusinessException("调用 AI 服务失败: " + providerMessage, 502);
         } catch (BusinessException exception) {
             throw exception;
         } catch (Exception exception) {
-            log.error("调用AI聊天接口失败", exception);
+            log.error("调用 AI 聊天接口失败", exception);
             throw new BusinessException("调用 AI 服务失败，请稍后重试", 502);
         }
     }
 
     private String resolveChatModel() {
-        String configured = zhipuAiProperties.getChatModel();
+        String configured = qwenAiProperties.getChatModel();
         if (StringUtils.hasText(configured)) {
-            String model = configured.trim();
-            // Map display name to provider model id.
-            if ("GLM-4.7-Flash".equalsIgnoreCase(model)) {
-                return "glm-4.7-flash";
-            }
-            if ("QWEN3.5-PLUS-2026-02-15".equalsIgnoreCase(model)) {
-                return "qwen3.5-plus-2026-02-15";
-            }
-            return model;
+            return configured.trim();
         }
-        return "qwen3.5-plus-2026-02-15";
+        return DEFAULT_CHAT_MODEL;
     }
 
     private String extractAssistantContent(JSONObject root) {
@@ -182,7 +174,6 @@ public class ZhipuChatClient {
                 return body;
             }
 
-            // Compatible with nested error and flat message formats.
             JSONObject error = root.getJSONObject("error");
             if (error != null && StringUtils.hasText(error.getString("message"))) {
                 return error.getString("message");
@@ -205,5 +196,3 @@ public class ZhipuChatClient {
     public record ChatResult(String content, Usage usage, String rawResponse) {
     }
 }
-
-
