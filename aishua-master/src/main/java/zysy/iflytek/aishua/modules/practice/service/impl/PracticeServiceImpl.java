@@ -218,6 +218,56 @@ public class PracticeServiceImpl implements PracticeService {
     }
 
     @Override
+    @Transactional
+    public void savePracticeDraft(Long userId, Long sessionId, PracticeBatchSubmitDTO practiceBatchSubmitDTO) {
+        PracticeSession practiceSession = requireSession(userId, sessionId);
+        if (!isSessionOngoing(practiceSession)) {
+            throw new BusinessException("当前练习已结束，无法继续保存草稿", 400);
+        }
+
+        List<ExerciseRecord> sessionRecords = listSessionRecords(practiceSession.getId());
+        if (sessionRecords.isEmpty()) {
+            throw new BusinessException("当前练习会话没有题目数据", 404);
+        }
+
+        Map<Long, ExerciseRecord> recordMap = sessionRecords.stream()
+                .collect(Collectors.toMap(ExerciseRecord::getQuestionId, Function.identity(), (left, right) -> left));
+        Map<Long, PracticeAnswerItemDTO> answerMap = toAnswerMap(practiceBatchSubmitDTO.getAnswers());
+        LocalDateTime draftTime = LocalDateTime.now();
+
+        for (Map.Entry<Long, PracticeAnswerItemDTO> entry : answerMap.entrySet()) {
+            ExerciseRecord record = recordMap.get(entry.getKey());
+            if (record == null) {
+                throw new BusinessException("存在不属于当前会话的题目", 400);
+            }
+
+            PracticeAnswerItemDTO answerItem = entry.getValue();
+            String submittedAnswer = normalizeSubmittedAnswer(answerItem.getUserAnswer());
+            int timeCost = normalizeTimeCost(answerItem.getTimeCost());
+
+            record.setUserAnswer(submittedAnswer.isEmpty() ? null : submittedAnswer);
+            // Draft save must never keep judged state.
+            record.setIsCorrect(null);
+            record.setTimeCost(timeCost);
+            record.setExerciseTime(record.getUserAnswer() == null ? null : draftTime);
+            exerciseRecordMapper.updateById(record);
+        }
+
+        List<ExerciseRecord> latestRecords = listSessionRecords(practiceSession.getId());
+        int answeredCount = (int) latestRecords.stream()
+                .filter(record -> record.getUserAnswer() != null && !record.getUserAnswer().trim().isEmpty())
+                .count();
+        int totalTimeCost = latestRecords.stream()
+                .map(ExerciseRecord::getTimeCost)
+                .mapToInt(this::defaultNumber)
+                .sum();
+
+        practiceSession.setAnsweredCount(answeredCount);
+        practiceSession.setTotalTimeCost(totalTimeCost);
+        practiceSessionMapper.updateById(practiceSession);
+    }
+
+    @Override
     public List<PracticeSessionSummaryVO> listPracticeSessions(Long userId, Long subjectId) {
         validateSubjectFilter(subjectId);
 
@@ -279,7 +329,7 @@ public class PracticeServiceImpl implements PracticeService {
 
         LambdaQueryWrapper<ExerciseRecord> queryWrapper = new LambdaQueryWrapper<ExerciseRecord>()
                 .eq(ExerciseRecord::getUserId, userId)
-                .isNotNull(ExerciseRecord::getUserAnswer)
+                .isNotNull(ExerciseRecord::getIsCorrect)
                 .orderByDesc(ExerciseRecord::getExerciseTime)
                 .orderByDesc(ExerciseRecord::getId);
         if (subjectId != null) {
@@ -522,9 +572,6 @@ public class PracticeServiceImpl implements PracticeService {
         List<ExerciseRecord> sessionRecords = listSessionRecords(practiceSession.getId());
         if (sessionRecords.isEmpty()) {
             throw new BusinessException("当前练习没有题目可提交", 400);
-        }
-        if (sessionRecords.stream().anyMatch(record -> record.getUserAnswer() != null)) {
-            throw new BusinessException("当前练习已提交，请勿重复提交", 400);
         }
 
         Map<Long, PracticeAnswerItemDTO> answerMap = toAnswerMap(practiceBatchSubmitDTO.getAnswers());

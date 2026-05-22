@@ -5,54 +5,76 @@ export const navConfig = {
     {
       name: '学习中心',
       path: '/dashboard',
-      icon: 'dashboard'
+      icon: 'dashboard',
+      activeRouteNames: ['UserDashboard']
     },
     {
       name: '刷题练习',
-      path: '/subjects',
-      icon: 'exercise'
+      path: '/practice',
+      icon: 'exercise',
+      activeRouteNames: ['Practice', 'PracticeSession']
     },
     {
-      name: '模拟考试',
-      path: '/exercise/exam',
-      icon: 'exam'
-    },
-    {
-      name: '考试记录',
+      name: '练习记录',
       path: '/practice-records',
-      icon: 'records'
+      icon: 'records',
+      activeRouteNames: ['PracticeRecords', 'PracticeRecordDetail']
     },
     {
       name: '错题本',
       path: '/wrong-questions',
-      icon: 'wrong'
+      icon: 'wrong',
+      activeRouteNames: ['WrongQuestions']
     },
     {
-      name: '学习统计',
-      path: '/dashboard',
-      icon: 'stats'
+      name: '模拟考试',
+      path: '/exercise/exam',
+      icon: 'exam',
+      activeRouteNames: ['ExamCenter', 'ExamSession']
+    },
+    {
+      name: '考试记录',
+      path: '/exercise/exam/records',
+      icon: 'stats',
+      activeRouteNames: ['ExamRecords', 'ExamRecordDetail']
     }
   ],
   adminMenu: [
     {
+      name: '管理台',
+      path: '/admin',
+      icon: 'dashboard',
+      activeRouteNames: ['AdminDashboard']
+    },
+    {
       name: '题目管理',
       path: '/admin/questions',
-      icon: 'questions'
+      icon: 'questions',
+      activeRouteNames: ['AdminQuestionManagement']
     },
     {
       name: '试卷管理',
       path: '/admin/exams',
-      icon: 'exam'
+      icon: 'exam',
+      activeRouteNames: ['AdminExamManagement', 'AdminExamQuestionConfig']
     },
     {
       name: '学科管理',
       path: '/admin/subjects',
-      icon: 'subjects'
+      icon: 'subjects',
+      activeRouteNames: ['AdminSubjectManagement']
     },
     {
-      name: '用户管理',
-      path: '/user-management',
-      icon: 'users'
+      name: '目录管理',
+      path: '/admin/directories',
+      icon: 'subjects',
+      activeRouteNames: ['AdminDirectoryManagement']
+    },
+    {
+      name: '标签管理',
+      path: '/admin/tags',
+      icon: 'stats',
+      activeRouteNames: ['AdminTagManagement']
     }
   ]
 };

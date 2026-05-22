@@ -7,8 +7,10 @@
       </div>
 
       <div class="head-actions">
-        <router-link class="ghost" to="/subjects">开始练习</router-link>
+        <router-link class="ghost" to="/my-subjects">开始练习</router-link>
         <router-link class="ghost" to="/practice-records">练习记录</router-link>
+        <router-link class="ghost" to="/exercise/exam">模拟考试</router-link>
+        <router-link class="ghost" to="/exercise/exam/records">考试记录</router-link>
         <router-link class="ghost" to="/wrong-questions">错题记录</router-link>
         <router-link v-if="user?.isAdmin === 1" class="ghost" to="/admin">管理台</router-link>
         <button type="button" @click="handleLogout">退出登录</button>

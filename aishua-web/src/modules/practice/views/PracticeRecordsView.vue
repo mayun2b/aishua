@@ -83,8 +83,8 @@
                 </span>
               </td>
               <td>
-                <router-link class="detail-link" :to="`/practice-records/${session.sessionId}`">
-                  查看作答
+                <router-link class="detail-link" :to="resolveSessionActionLink(session)">
+                  {{ resolveSessionActionLabel(session) }}
                 </router-link>
               </td>
             </tr>
@@ -175,6 +175,19 @@ const formatRate = (value) => {
     return '0%'
   }
   return `${value}%`
+}
+
+const isFinishedSession = (session) => Number(session?.status) === 2
+
+const resolveSessionActionLink = (session) => {
+  if (isFinishedSession(session)) {
+    return `/practice-records/${session.sessionId}`
+  }
+  return `/practice/session/${session.sessionId}`
+}
+
+const resolveSessionActionLabel = (session) => {
+  return isFinishedSession(session) ? '查看作答' : '继续练习'
 }
 
 watch(

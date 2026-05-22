@@ -64,6 +64,9 @@ export default {
   getQuestions(sessionId) {
     return request.get(`/practice/${sessionId}/questions`)
   },
+  saveDraft(sessionId, payload) {
+    return request.put(`/practice/${sessionId}/draft`, payload)
+  },
   submitAll(sessionId, payload) {
     return request.post(`/practice/${sessionId}/submit-all`, payload)
   }

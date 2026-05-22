@@ -234,158 +234,6 @@
       </section>
     </div>
 
-    <div v-if="questionModalVisible" class="modal-mask" @click.self="closeQuestionModal">
-      <section class="modal-card large-card">
-        <div class="form-head">
-          <h2>配置试卷题目：{{ selectedPaper?.paperName }}</h2>
-          <button type="button" class="ghost small" @click="closeQuestionModal">关闭</button>
-        </div>
-
-        <p class="field-tip">左侧题库已按试卷学科自动过滤：{{ selectedPaper?.subjectName || '-' }}</p>
-
-        <div class="config-grid">
-          <section class="config-panel">
-            <div class="table-head">
-              <h3>题库候选题</h3>
-              <span>{{ questionBankTotal }} 道</span>
-            </div>
-            <div class="mini-filters">
-              <select v-model="questionBankFilters.volumeId" @change="onVolumeFilterChange">
-                <option value="">选择册</option>
-                <option v-for="volume in volumeOptions" :key="volume.id" :value="String(volume.id)">
-                  {{ volume.name }}
-                </option>
-              </select>
-              <select v-model="questionBankFilters.directoryId" @change="onDirectoryFilterChange">
-                <option value="">选择知识点（目录）</option>
-                <option v-for="directory in filteredDirectoryOptions" :key="directory.id" :value="String(directory.id)">
-                  {{ directory.label }}
-                </option>
-              </select>
-              <select v-model="questionBankFilters.tagId" @change="onTagFilterChange">
-                <option value="">选择考点（标签）</option>
-                <option v-for="tag in tagOptions" :key="tag.tagId" :value="String(tag.tagId)">
-                  {{ tag.tagName }}（{{ tag.questionCount }}）
-                </option>
-              </select>
-              <input
-                v-model.trim="questionBankFilters.keyword"
-                type="text"
-                placeholder="题目关键字"
-                @keyup.enter="searchQuestionBank"
-              />
-              <select v-model="questionBankFilters.type" @change="onSimpleFilterChange">
-                <option value="">题型</option>
-                <option value="1">单选</option>
-                <option value="2">多选</option>
-                <option value="3">判断</option>
-                <option value="4">填空</option>
-                <option value="5">简答</option>
-              </select>
-              <select v-model="questionBankFilters.difficulty" @change="onSimpleFilterChange">
-                <option value="">难度</option>
-                <option value="1">简单</option>
-                <option value="2">中等</option>
-                <option value="3">困难</option>
-              </select>
-              <button type="button" class="ghost small" @click="searchQuestionBank">按知识点/考点选题</button>
-              <button type="button" class="ghost small" @click="resetQuestionFilters">重置筛选</button>
-            </div>
-            <div v-if="loadingQuestionBank" class="empty-state small-empty">加载题库中...</div>
-            <div v-else-if="!questionBank.length" class="empty-state small-empty">暂无可选题目</div>
-            <div v-else class="table-wrap">
-              <table>
-                <thead>
-                  <tr>
-                    <th>ID</th>
-                    <th>题干</th>
-                    <th>题型/难度</th>
-                    <th>操作</th>
-                  </tr>
-                </thead>
-                <tbody>
-                  <tr v-for="question in questionBank" :key="question.id">
-                    <td>{{ question.id }}</td>
-                    <td>{{ question.title }}</td>
-                    <td>{{ resolveTypeLabel(question.type) }} / {{ resolveDifficultyLabel(question.difficulty) }}</td>
-                    <td>
-                      <button
-                        type="button"
-                        class="ghost small"
-                        :disabled="isQuestionSelected(question.id)"
-                        @click="addQuestionToPaper(question)"
-                      >
-                        {{ isQuestionSelected(question.id) ? '已加入' : '加入' }}
-                      </button>
-                    </td>
-                  </tr>
-                </tbody>
-              </table>
-            </div>
-            <BasePagination
-              v-if="!loadingQuestionBank && questionBankTotal > 0"
-              v-model="questionBankPage"
-              :total="questionBankTotal"
-              :page-size="questionBankPageSize"
-            />
-          </section>
-
-          <section class="config-panel">
-            <div class="table-head">
-              <h3>已选题目</h3>
-              <span>{{ editablePaperQuestions.length }} 道</span>
-            </div>
-            <div v-if="!editablePaperQuestions.length" class="empty-state small-empty">当前试卷未配置题目</div>
-            <div v-else class="table-wrap">
-              <table>
-                <thead>
-                  <tr>
-                    <th>ID</th>
-                    <th>题干</th>
-                    <th>排序</th>
-                    <th>分值</th>
-                    <th>操作</th>
-                  </tr>
-                </thead>
-                <tbody>
-                  <tr v-for="item in sortedEditableQuestions" :key="item.questionId">
-                    <td>{{ item.questionId }}</td>
-                    <td>{{ item.title }}</td>
-                    <td>
-                      <input
-                        v-model.number="item.sort"
-                        type="number"
-                        min="1"
-                        class="mini-number"
-                      />
-                    </td>
-                    <td>
-                      <input
-                        v-model.number="item.score"
-                        type="number"
-                        min="1"
-                        class="mini-number"
-                      />
-                    </td>
-                    <td>
-                      <button type="button" class="danger small" @click="removeQuestionFromPaper(item.questionId)">移除</button>
-                    </td>
-                  </tr>
-                </tbody>
-              </table>
-            </div>
-          </section>
-        </div>
-
-        <div class="form-actions">
-          <button type="button" class="ghost" @click="loadCurrentPaperQuestions">重新加载当前配置</button>
-          <button type="button" :disabled="submittingQuestions" @click="submitQuestionConfig">
-            {{ submittingQuestions ? '保存中...' : '保存题目配置' }}
-          </button>
-        </div>
-      </section>
-    </div>
-
     <div v-if="recordModalVisible" class="modal-mask" @click.self="closeRecordModal">
       <section class="modal-card large-card">
         <div class="form-head">
@@ -437,26 +285,15 @@
 </template>
 
 <script setup>
-import { computed, onMounted, reactive, ref, watch } from 'vue'
+import { onMounted, reactive, ref } from 'vue'
+import { useRouter } from 'vue-router'
 import { showToast } from 'vant'
 import BasePagination from '@/components/BasePagination.vue'
 import useClientPagination from '@/composables/useClientPagination'
 import examApi from '../api/exam'
 import subjectApi from '../api/subject'
 
-const QUESTION_TYPE_MAP = {
-  1: '单选',
-  2: '多选',
-  3: '判断',
-  4: '填空',
-  5: '简答'
-}
-
-const DIFFICULTY_MAP = {
-  1: '简单',
-  2: '中等',
-  3: '困难'
-}
+const router = useRouter()
 
 const subjects = ref([])
 
@@ -491,37 +328,6 @@ const paperForm = reactive({
   duration: 120,
   totalScore: 100,
   status: 1
-})
-
-const questionModalVisible = ref(false)
-const submittingQuestions = ref(false)
-const selectedPaper = ref(null)
-const loadingQuestionBank = ref(false)
-const volumeOptions = ref([])
-const directoryOptions = ref([])
-const tagOptions = ref([])
-const questionBankFilters = reactive({
-  volumeId: '',
-  directoryId: '',
-  tagId: '',
-  keyword: '',
-  type: '',
-  difficulty: ''
-})
-const questionBank = ref([])
-const questionBankPage = ref(1)
-const questionBankPageSize = 10
-const questionBankTotal = ref(0)
-const editablePaperQuestions = ref([])
-const sortedEditableQuestions = computed(() => {
-  return [...editablePaperQuestions.value].sort((left, right) => {
-    const sortLeft = Number(left.sort || 0)
-    const sortRight = Number(right.sort || 0)
-    if (sortLeft !== sortRight) {
-      return sortLeft - sortRight
-    }
-    return Number(left.questionId || 0) - Number(right.questionId || 0)
-  })
 })
 
 const recordModalVisible = ref(false)
@@ -706,311 +512,21 @@ const removePaper = async (paper) => {
   }
 }
 
-const loadCurrentPaperQuestions = async () => {
-  if (!selectedPaper.value) {
-    return
-  }
-  const response = await examApi.getPaperQuestions(selectedPaper.value.id)
-  editablePaperQuestions.value = (response.data || []).map((item) => ({
-    questionId: item.questionId,
-    title: item.title,
-    type: item.type,
-    difficulty: item.difficulty,
-    sort: item.sort,
-    score: item.score
-  }))
-}
-
-const flattenDirectoryTree = (nodes, level = 0, volumeId = null, output = []) => {
-  if (!Array.isArray(nodes)) {
-    return output
-  }
-  for (const node of nodes) {
-    const currentVolumeId = volumeId ?? node.id
-    output.push({
-      id: node.id,
-      label: `${'　'.repeat(level)}${node.name}`,
-      volumeId: currentVolumeId
-    })
-    flattenDirectoryTree(node.children || [], level + 1, currentVolumeId, output)
-  }
-  return output
-}
-
-const getDirectoryOptionsByVolume = (volumeId) => {
-  if (!volumeId) {
-    return directoryOptions.value
-  }
-  return directoryOptions.value.filter((item) => String(item.volumeId) === String(volumeId))
-}
-
-const filteredDirectoryOptions = computed(() => {
-  return getDirectoryOptionsByVolume(questionBankFilters.volumeId)
-})
-
-const loadKnowledgeMeta = async () => {
-  if (!selectedPaper.value) {
-    return
-  }
-  const directoryResponse = await examApi.getPaperDirectories(selectedPaper.value.id)
-  const directoryTree = directoryResponse.data || []
-  volumeOptions.value = directoryTree.map((node) => ({
-    id: node.id,
-    name: node.name
-  }))
-  directoryOptions.value = flattenDirectoryTree(directoryTree)
-  if (!directoryOptions.value.length || !volumeOptions.value.length) {
-    questionBankFilters.volumeId = ''
-    questionBankFilters.directoryId = ''
-    questionBankFilters.tagId = ''
-    tagOptions.value = []
-    return
-  }
-
-  const currentVolumeId = questionBankFilters.volumeId
-    && volumeOptions.value.some((item) => String(item.id) === questionBankFilters.volumeId)
-    ? questionBankFilters.volumeId
-    : String(volumeOptions.value[0].id)
-  questionBankFilters.volumeId = currentVolumeId
-
-  const scopedDirectoryOptions = getDirectoryOptionsByVolume(currentVolumeId)
-  const currentDirectoryId = questionBankFilters.directoryId
-    && scopedDirectoryOptions.some((item) => String(item.id) === questionBankFilters.directoryId)
-    ? questionBankFilters.directoryId
-    : (scopedDirectoryOptions.length ? String(scopedDirectoryOptions[0].id) : '')
-  questionBankFilters.directoryId = currentDirectoryId
-  questionBankFilters.tagId = ''
-  if (!currentDirectoryId) {
-    tagOptions.value = []
-    return
-  }
-  await loadDirectoryTags(Number(currentDirectoryId))
-}
-
-const loadDirectoryTags = async (directoryId) => {
-  if (!selectedPaper.value || !directoryId) {
-    tagOptions.value = []
-    return
-  }
-  const response = await examApi.getPaperDirectoryTags(selectedPaper.value.id, directoryId)
-  tagOptions.value = response.data || []
-}
-
-// 筛选动作统一收口，避免目录/标签/题型/难度各自重复写查询逻辑。
-const refreshQuestionBankByFilters = async ({ reloadTags = false } = {}) => {
-  if (!selectedPaper.value) {
-    return
-  }
-  if (reloadTags) {
-    const nextDirectoryId = questionBankFilters.directoryId ? Number(questionBankFilters.directoryId) : null
-    questionBankFilters.tagId = ''
-    await loadDirectoryTags(nextDirectoryId)
-  }
-  await loadQuestionBank({ resetPage: true, silent: true })
-}
-
-const onVolumeFilterChange = async () => {
-  const scopedDirectoryOptions = getDirectoryOptionsByVolume(questionBankFilters.volumeId)
-  questionBankFilters.directoryId = scopedDirectoryOptions.length ? String(scopedDirectoryOptions[0].id) : ''
-  await refreshQuestionBankByFilters({ reloadTags: true })
-}
-
-const onDirectoryFilterChange = async () => {
-  await refreshQuestionBankByFilters({ reloadTags: true })
-}
-
-const onTagFilterChange = async () => {
-  await refreshQuestionBankByFilters()
-}
-
-const onSimpleFilterChange = async () => {
-  await refreshQuestionBankByFilters()
-}
-
-const loadQuestionBank = async ({ resetPage = false, silent = false } = {}) => {
-  if (!selectedPaper.value) {
-    return
-  }
-  if (resetPage) {
-    questionBankPage.value = 1
-  }
-  loadingQuestionBank.value = true
-  try {
-    const tagIdsParam = questionBankFilters.tagId || undefined
-    const response = await examApi.getAvailablePaperQuestions(selectedPaper.value.id, {
-      directoryId: questionBankFilters.directoryId
-        ? Number(questionBankFilters.directoryId)
-        : undefined,
-      tagIds: tagIdsParam,
-      type: questionBankFilters.type ? Number(questionBankFilters.type) : undefined,
-      difficulty: questionBankFilters.difficulty ? Number(questionBankFilters.difficulty) : undefined,
-      keyword: questionBankFilters.keyword || undefined,
-      page: questionBankPage.value,
-      pageSize: questionBankPageSize
-    })
-    const payload = response.data || {}
-    questionBank.value = payload.records || []
-    questionBankTotal.value = Number(payload.total || 0)
-    questionBankPage.value = Number(payload.page || questionBankPage.value)
-    if (!silent && !questionBank.value.length) {
-      showToast('当前筛选条件下暂无题目')
-    }
-  } catch (error) {
-    showToast(error.message || '加载题库失败')
-  } finally {
-    loadingQuestionBank.value = false
-  }
-}
-
-const searchQuestionBank = async () => {
-  await loadQuestionBank({ resetPage: true })
-}
-
-const resetQuestionFilters = async () => {
-  questionBankFilters.volumeId = volumeOptions.value.length ? String(volumeOptions.value[0].id) : ''
-  const scopedDirectoryOptions = getDirectoryOptionsByVolume(questionBankFilters.volumeId)
-  questionBankFilters.directoryId = scopedDirectoryOptions.length ? String(scopedDirectoryOptions[0].id) : ''
-  questionBankFilters.tagId = ''
-  questionBankFilters.keyword = ''
-  questionBankFilters.type = ''
-  questionBankFilters.difficulty = ''
-  await loadDirectoryTags(questionBankFilters.directoryId ? Number(questionBankFilters.directoryId) : null)
-  await loadQuestionBank({ resetPage: true, silent: true })
-}
-
-const nextSortValue = () => {
-  if (!editablePaperQuestions.value.length) {
-    return 1
-  }
-  return Math.max(...editablePaperQuestions.value.map((item) => Number(item.sort || 0)), 0) + 1
-}
-
-const isQuestionSelected = (questionId) => {
-  return editablePaperQuestions.value.some((item) => item.questionId === questionId)
-}
-
-const addQuestionToPaper = (question) => {
-  if (isQuestionSelected(question.id)) {
-    showToast('题目已在试卷中')
-    return
-  }
-
-  // 选入题目时允许教师即时设定分值，避免后续批量回改。
-  const rawScore = window.prompt('请输入该题分值（正整数）', '5')
-  if (rawScore === null) {
-    return
-  }
-  const score = Number(rawScore)
-  if (!Number.isInteger(score) || score <= 0) {
-    showToast('分值必须是大于 0 的整数')
-    return
-  }
-
-  editablePaperQuestions.value.push({
-    questionId: question.id,
-    title: question.title,
-    type: question.type,
-    difficulty: question.difficulty,
-    sort: nextSortValue(),
-    score
-  })
-}
-
-const removeQuestionFromPaper = (questionId) => {
-  editablePaperQuestions.value = editablePaperQuestions.value.filter((item) => item.questionId !== questionId)
-}
-
-const buildQuestionPayload = () => {
-  if (!editablePaperQuestions.value.length) {
-    throw new Error('请至少选择一道题')
-  }
-
-  const seen = new Set()
-  return editablePaperQuestions.value.map((item) => ({
-      questionId: item.questionId,
-      sort: Number(item.sort),
-      score: Number(item.score)
-    })).map((item) => {
-      if (!Number.isInteger(item.questionId) || item.questionId <= 0) {
-        throw new Error('存在无效题目ID')
-      }
-      if (!Number.isInteger(item.sort) || item.sort <= 0) {
-        throw new Error('排序必须是正整数')
-      }
-      if (!Number.isInteger(item.score) || item.score <= 0) {
-        throw new Error('分值必须是正整数')
-      }
-      if (seen.has(item.questionId)) {
-        throw new Error('题目存在重复，请检查')
-      }
-      seen.add(item.questionId)
-      return item
-    })
-}
-
 const openQuestionConfig = async (paper) => {
-  selectedPaper.value = paper
-  questionModalVisible.value = true
-  questionBankPage.value = 1
-  questionBankTotal.value = 0
-  questionBankFilters.volumeId = ''
-  questionBankFilters.directoryId = ''
-  questionBankFilters.tagId = ''
-  questionBankFilters.keyword = ''
-  questionBankFilters.type = ''
-  questionBankFilters.difficulty = ''
-  try {
-    await Promise.all([loadCurrentPaperQuestions(), loadKnowledgeMeta()])
-    await loadQuestionBank({ resetPage: true, silent: true })
-  } catch (error) {
-    showToast(error.message || '加载配题数据失败')
-  }
-}
-
-const closeQuestionModal = () => {
-  questionModalVisible.value = false
-  selectedPaper.value = null
-  volumeOptions.value = []
-  directoryOptions.value = []
-  tagOptions.value = []
-  questionBank.value = []
-  questionBankPage.value = 1
-  questionBankTotal.value = 0
-  editablePaperQuestions.value = []
-}
-
-const submitQuestionConfig = async () => {
-  if (!selectedPaper.value) {
+  const paperId = Number(paper?.id)
+  if (!Number.isInteger(paperId) || paperId <= 0) {
+    showToast('试卷ID无效，无法进入配题页')
     return
   }
-  let normalized
-  try {
-    normalized = buildQuestionPayload()
-  } catch (error) {
-    showToast(error.message || '题目配置校验失败')
-    return
-  }
-
-  submittingQuestions.value = true
-  try {
-    const response = await examApi.updatePaperQuestions(selectedPaper.value.id, {
-      questions: normalized
-    })
-    editablePaperQuestions.value = (response.data || []).map((item) => ({
-      questionId: item.questionId,
-      title: item.title,
-      type: item.type,
-      difficulty: item.difficulty,
-      sort: item.sort,
-      score: item.score
-    }))
-    showToast('题目配置保存成功')
-    await loadPapers()
-  } catch (error) {
-    showToast(error.message || '题目配置保存失败')
-  } finally {
-    submittingQuestions.value = false
-  }
+  await router.push({
+    name: 'AdminExamQuestionConfig',
+    params: { paperId: String(paperId) },
+    query: {
+      paperName: paper.paperName || '',
+      subjectName: paper.subjectName || '',
+      subjectId: paper.subjectId ? String(paper.subjectId) : ''
+    }
+  })
 }
 
 const openRecordDetail = async (record) => {
@@ -1048,21 +564,6 @@ const formatDateTime = (value) => {
   }
   return date.toLocaleString('zh-CN')
 }
-
-const resolveTypeLabel = (type) => {
-  return QUESTION_TYPE_MAP[type] || `类型${type || '-'}`
-}
-
-const resolveDifficultyLabel = (difficulty) => {
-  return DIFFICULTY_MAP[difficulty] || `难度${difficulty || '-'}`
-}
-
-watch(questionBankPage, async (nextPage, previousPage) => {
-  if (!questionModalVisible.value || nextPage === previousPage) {
-    return
-  }
-  await loadQuestionBank()
-})
 
 onMounted(async () => {
   await loadSubjects()
@@ -1159,6 +660,12 @@ button {
 .table-head span {
   color: #6e7d92;
   font-size: 14px;
+}
+
+.table-head-actions {
+  display: flex;
+  align-items: center;
+  gap: 8px;
 }
 
 .filter-grid {
@@ -1306,7 +813,7 @@ th {
 
 .config-grid {
   display: grid;
-  grid-template-columns: 1fr 1fr;
+  grid-template-columns: minmax(0, 1.3fr) minmax(0, 1fr);
   gap: 12px;
   margin-top: 10px;
 }
@@ -1316,6 +823,10 @@ th {
   border-radius: 14px;
   padding: 12px;
   background: #fbfdff;
+}
+
+.selected-panel {
+  background: #f8fbff;
 }
 
 .mini-filters {
@@ -1328,6 +839,101 @@ th {
 .mini-number {
   width: 88px;
   min-width: 88px;
+}
+
+.selected-list {
+  margin-top: 6px;
+  max-height: 460px;
+  overflow: auto;
+  padding-right: 4px;
+  display: grid;
+  gap: 10px;
+}
+
+.selected-item {
+  border: 1px solid #dfe8f3;
+  border-radius: 12px;
+  padding: 10px 12px;
+  background: #fff;
+}
+
+.selected-item-head {
+  display: flex;
+  justify-content: space-between;
+  align-items: flex-start;
+  gap: 10px;
+}
+
+.selected-item-tags {
+  display: flex;
+  gap: 6px;
+  flex-wrap: wrap;
+  align-items: center;
+}
+
+.order-chip {
+  border-radius: 999px;
+  padding: 4px 10px;
+  font-size: 12px;
+  color: #fff;
+  background: #29496b;
+  font-weight: 600;
+}
+
+.selected-item-tags .meta-chip {
+  background: #edf3fc;
+  color: #415a78;
+  padding: 4px 10px;
+}
+
+.score-editor {
+  display: flex;
+  align-items: center;
+  gap: 6px;
+}
+
+.score-editor span {
+  color: #5f6e83;
+  font-size: 12px;
+}
+
+.score-input {
+  width: 72px;
+  min-width: 72px;
+  text-align: center;
+}
+
+.selected-item-title {
+  margin-top: 8px;
+  color: #1f3148;
+  line-height: 1.5;
+  word-break: break-word;
+  overflow: hidden;
+  display: -webkit-box;
+  -webkit-line-clamp: 2;
+  -webkit-box-orient: vertical;
+}
+
+.selected-item-foot {
+  margin-top: 9px;
+  border-top: 1px dashed #e5edf6;
+  padding-top: 9px;
+  display: flex;
+  justify-content: space-between;
+  align-items: center;
+  gap: 8px;
+  flex-wrap: wrap;
+}
+
+.question-id {
+  color: #6e7d92;
+  font-size: 13px;
+}
+
+.selected-actions {
+  display: flex;
+  gap: 6px;
+  flex-wrap: wrap;
 }
 
 .sub-table {
@@ -1370,6 +976,15 @@ th {
 
   .mini-filters {
     grid-template-columns: 1fr;
+  }
+
+  .selected-item-head {
+    flex-direction: column;
+    align-items: stretch;
+  }
+
+  .score-editor {
+    justify-content: space-between;
   }
 }
 </style>

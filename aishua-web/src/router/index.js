@@ -10,12 +10,18 @@ import AdminDirectoryManagementView from '../modules/admin/views/AdminDirectoryM
 import AdminTagManagementView from '../modules/admin/views/AdminTagManagementView.vue'
 import AdminQuestionManagementView from '../modules/admin/views/AdminQuestionManagementView.vue'
 import AdminExamManagementView from '../modules/admin/views/AdminExamManagementView.vue'
+import AdminExamQuestionConfigView from '../modules/admin/views/AdminExamQuestionConfigView.vue'
 import SubjectCatalogView from '../modules/subject/views/SubjectCatalogView.vue'
 import MySubjectsView from '../modules/subject/views/MySubjectsView.vue'
 import PracticeView from '../modules/practice/views/PracticeView.vue'
+import PracticeSessionView from '../modules/practice/views/PracticeSessionView.vue'
 import PracticeRecordsView from '../modules/practice/views/PracticeRecordsView.vue'
 import PracticeRecordDetailView from '../modules/practice/views/PracticeRecordDetailView.vue'
 import WrongQuestionsView from '../modules/practice/views/WrongQuestionsView.vue'
+import ExamCenterView from '../modules/exam/views/ExamCenterView.vue'
+import ExamSessionView from '../modules/exam/views/ExamSessionView.vue'
+import ExamRecordListView from '../modules/exam/views/ExamRecordListView.vue'
+import ExamRecordDetailView from '../modules/exam/views/ExamRecordDetailView.vue'
 
 const routes = [
   {
@@ -77,6 +83,14 @@ const routes = [
     }
   },
   {
+    path: '/practice/session/:sessionId',
+    name: 'PracticeSession',
+    component: PracticeSessionView,
+    meta: {
+      requiresAuth: true
+    }
+  },
+  {
     path: '/practice-records',
     name: 'PracticeRecords',
     component: PracticeRecordsView,
@@ -96,6 +110,38 @@ const routes = [
     path: '/wrong-questions',
     name: 'WrongQuestions',
     component: WrongQuestionsView,
+    meta: {
+      requiresAuth: true
+    }
+  },
+  {
+    path: '/exercise/exam',
+    name: 'ExamCenter',
+    component: ExamCenterView,
+    meta: {
+      requiresAuth: true
+    }
+  },
+  {
+    path: '/exercise/exam/session/:recordId',
+    name: 'ExamSession',
+    component: ExamSessionView,
+    meta: {
+      requiresAuth: true
+    }
+  },
+  {
+    path: '/exercise/exam/records',
+    name: 'ExamRecords',
+    component: ExamRecordListView,
+    meta: {
+      requiresAuth: true
+    }
+  },
+  {
+    path: '/exercise/exam/records/:recordId',
+    name: 'ExamRecordDetail',
+    component: ExamRecordDetailView,
     meta: {
       requiresAuth: true
     }
@@ -149,6 +195,15 @@ const routes = [
     path: '/admin/exams',
     name: 'AdminExamManagement',
     component: AdminExamManagementView,
+    meta: {
+      requiresAuth: true,
+      requiresAdmin: true
+    }
+  },
+  {
+    path: '/admin/exams/:paperId/questions',
+    name: 'AdminExamQuestionConfig',
+    component: AdminExamQuestionConfigView,
     meta: {
       requiresAuth: true,
       requiresAdmin: true

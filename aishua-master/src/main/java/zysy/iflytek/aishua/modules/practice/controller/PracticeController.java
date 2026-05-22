@@ -123,4 +123,14 @@ public class PracticeController {
         Long userId = UserContext.requireUserId();
         return Result.success(practiceService.submitPractice(userId, sessionId, practiceBatchSubmitDTO));
     }
+
+    @PutMapping("/{sessionId}/draft")
+    public Result<Boolean> savePracticeDraft(
+            @PathVariable Long sessionId,
+            @Valid @RequestBody PracticeBatchSubmitDTO practiceBatchSubmitDTO
+    ) {
+        Long userId = UserContext.requireUserId();
+        practiceService.savePracticeDraft(userId, sessionId, practiceBatchSubmitDTO);
+        return Result.success(true);
+    }
 }

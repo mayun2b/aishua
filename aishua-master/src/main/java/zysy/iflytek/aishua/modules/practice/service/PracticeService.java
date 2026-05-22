@@ -20,6 +20,8 @@ public interface PracticeService {
 
     PracticeQuestionSheetVO getPracticeQuestions(Long userId, Long sessionId);
 
+    void savePracticeDraft(Long userId, Long sessionId, PracticeBatchSubmitDTO practiceBatchSubmitDTO);
+
     PracticeBatchSubmitResultVO submitPractice(Long userId, Long sessionId, PracticeBatchSubmitDTO practiceBatchSubmitDTO);
 
     List<PracticeSessionSummaryVO> listPracticeSessions(Long userId, Long subjectId);

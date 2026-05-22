@@ -1,6 +1,5 @@
 <template>
   <div class="default-layout">
-    <!-- 只有在非首页时显示导航栏 -->
     <header v-if="!isHomePage" class="app-header">
       <div class="logo">
         <svg width="32" height="32" viewBox="0 0 24 24" fill="none" xmlns="http://www.w3.org/2000/svg">
@@ -10,45 +9,35 @@
         </svg>
         <span>爱刷题系统</span>
       </div>
-      
+
       <nav class="nav-menu">
-        <!-- 用户功能区 -->
         <div class="nav-section">
-          <template v-for="item in navConfig.userMenu" :key="item.name">
-            <router-link 
-              v-if="item.path" 
-              :to="item.path" 
-              class="nav-link"
-            >
-              <div v-html="iconMap[item.icon]"></div>
-              <span>{{ item.name }}</span>
-            </router-link>
-            
-            <button 
-              v-else-if="item.action" 
-              @click="item.action === 'goToExercise' && goToExercise()" 
-              class="nav-button"
-            >
-              <div v-html="iconMap[item.icon]"></div>
-              <span>{{ item.name }}</span>
-            </button>
-          </template>
+          <router-link
+            v-for="item in navConfig.userMenu"
+            :key="item.name"
+            :to="item.path"
+            class="nav-link"
+            :class="{ 'is-active': isActiveMenu(item) }"
+          >
+            <div v-html="iconMap[item.icon]"></div>
+            <span>{{ item.name }}</span>
+          </router-link>
         </div>
-        
-        <!-- 管理员功能区 -->
+
         <div v-if="isAdmin" class="nav-section admin-section">
-          <template v-for="item in navConfig.adminMenu" :key="item.name">
-            <router-link 
-              :to="item.path" 
-              class="nav-link"
-            >
-              <div v-html="iconMap[item.icon]"></div>
-              <span>{{ item.name }}</span>
-            </router-link>
-          </template>
+          <router-link
+            v-for="item in navConfig.adminMenu"
+            :key="item.name"
+            :to="item.path"
+            class="nav-link"
+            :class="{ 'is-active': isActiveMenu(item) }"
+          >
+            <div v-html="iconMap[item.icon]"></div>
+            <span>{{ item.name }}</span>
+          </router-link>
         </div>
-        <!-- 可以在这里添加更多导航项 -->
       </nav>
+
       <div class="user-info">
         <div class="user-avatar">
           <svg width="32" height="32" viewBox="0 0 24 24" fill="none" xmlns="http://www.w3.org/2000/svg">
@@ -58,9 +47,9 @@
         </div>
         <div class="user-details">
           <span class="user-name">{{ username }}</span>
-          <span class="user-role" v-if="isAdmin">管理员</span>
+          <span v-if="isAdmin" class="user-role">管理员</span>
         </div>
-        <button @click="handleLogout" class="logout-btn">
+        <button class="logout-btn" @click="handleLogout">
           <svg width="16" height="16" viewBox="0 0 24 24" fill="none" xmlns="http://www.w3.org/2000/svg">
             <path d="M9 21H5a2 2 0 0 1-2-2V5a2 2 0 0 1 2-2h4" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"/>
             <polyline points="16 17 21 12 16 7" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"/>
@@ -70,6 +59,7 @@
         </button>
       </div>
     </header>
+
     <main :class="['main-content', { 'home-content': isHomePage }]">
       <router-view />
     </main>
@@ -77,8 +67,8 @@
 </template>
 
 <script>
-import { ref, onMounted, computed } from 'vue';
-import { useRouter } from 'vue-router';
+import { computed, onMounted, ref } from 'vue';
+import { useRoute, useRouter } from 'vue-router';
 import { logout } from '../modules/auth/api/auth';
 import { navConfig, iconMap } from '../config/navConfig';
 
@@ -87,6 +77,7 @@ export default {
   setup() {
     const username = ref('');
     const isAdmin = ref(false);
+    const route = useRoute();
     const router = useRouter();
 
     onMounted(() => {
@@ -94,28 +85,27 @@ export default {
       isAdmin.value = localStorage.getItem('isAdmin') === 'true';
     });
 
-    // 判断当前是否在首页
-    const isHomePage = computed(() => {
-      return router.currentRoute.value.path === '/';
-    });
+    const isHomePage = computed(() => route.path === '/');
+
+    const isActiveMenu = (item) => {
+      const currentRouteName = route.name ? String(route.name) : '';
+      if (Array.isArray(item.activeRouteNames) && item.activeRouteNames.length) {
+        return item.activeRouteNames.includes(currentRouteName);
+      }
+      return route.path === item.path;
+    };
 
     const handleLogout = () => {
       logout();
       router.push('/login');
     };
 
-    const goToExercise = () => {
-      // 清除本地存储中的学科选择，强制用户重新选择学科
-      localStorage.removeItem('selectedSubjectId');
-      router.push('/subjects');
-    };
-
     return {
       username,
       isAdmin,
       isHomePage,
+      isActiveMenu,
       handleLogout,
-      goToExercise,
       navConfig,
       iconMap
     };
@@ -159,8 +149,6 @@ export default {
   transform: translateY(-2px);
 }
 
-
-
 .nav-menu {
   display: flex;
   align-items: center;
@@ -178,8 +166,7 @@ export default {
   padding-left: 2rem;
 }
 
-.nav-link,
-.nav-button {
+.nav-link {
   display: flex;
   align-items: center;
   gap: 8px;
@@ -197,8 +184,7 @@ export default {
   font-size: 1rem;
 }
 
-.nav-link::before,
-.nav-button::before {
+.nav-link::before {
   content: '';
   position: absolute;
   top: 0;
@@ -210,14 +196,12 @@ export default {
 }
 
 .nav-link:hover::before,
-.nav-link.router-link-active::before,
-.nav-button:hover::before {
+.nav-link.is-active::before {
   left: 0;
 }
 
 .nav-link:hover,
-.nav-link.router-link-active,
-.nav-button:hover {
+.nav-link.is-active {
   background: rgba(255, 255, 255, 0.2);
   transform: translateY(-2px);
   box-shadow: 0 4px 12px rgba(0, 0, 0, 0.15);
@@ -305,30 +289,28 @@ export default {
   .app-header {
     padding: 0 1.5rem;
   }
-  
+
   .nav-menu {
     gap: 1rem;
   }
-  
+
   .nav-section {
     gap: 0.75rem;
   }
-  
+
   .admin-section {
     border-left: none;
     padding-left: 0;
   }
-  
-  .nav-link,
-  .nav-button {
+
+  .nav-link {
     padding: 0.5rem 1rem;
   }
-  
-  .nav-link span,
-  .nav-button span {
+
+  .nav-link span {
     display: none;
   }
-  
+
   .user-details {
     display: none;
   }
@@ -338,11 +320,11 @@ export default {
   .app-header {
     padding: 0 1rem;
   }
-  
+
   .logo span {
     display: none;
   }
-  
+
   .main-content {
     padding: 1rem;
   }
