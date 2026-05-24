@@ -43,6 +43,7 @@ import java.util.HashMap;
 import java.util.List;
 import java.util.Map;
 import java.util.UUID;
+import java.util.function.Consumer;
 
 @Slf4j
 @Service
@@ -222,24 +223,9 @@ public class WrongQuestionAiServiceImpl implements WrongQuestionAiService {
     @Override
     public WrongQuestionAiChatSessionVO getLatestChatSession(Long userId, Long wrongQuestionId) {
         requireWrongQuestion(userId, wrongQuestionId);
-        WrongQuestionAiChatMessage latestUserMessage = wrongQuestionAiChatMessageMapper.selectOne(
-                new LambdaQueryWrapper<WrongQuestionAiChatMessage>()
-                        .eq(WrongQuestionAiChatMessage::getRole, ROLE_USER)
-                        .inSql(
-                                WrongQuestionAiChatMessage::getSessionId,
-                                "SELECT id FROM wrong_question_ai_chat_session WHERE user_id = " + userId
-                                        + " AND wrong_question_id = " + wrongQuestionId + " AND deleted = 0"
-                        )
-                        .orderByDesc(WrongQuestionAiChatMessage::getCreateTime)
-                        .orderByDesc(WrongQuestionAiChatMessage::getId)
-                        .last("LIMIT 1")
-        );
-        if (latestUserMessage == null || latestUserMessage.getSessionId() == null) {
-            throw new BusinessException("当前错题暂无历史会话", 404);
-        }
-        WrongQuestionAiChatSession session = wrongQuestionAiChatSessionMapper.selectById(latestUserMessage.getSessionId());
+        WrongQuestionAiChatSession session = findLatestAssistantSession(userId, wrongQuestionId);
         if (session == null) {
-            throw new BusinessException("当前错题暂无历史会话", 404);
+            throw new BusinessException("当前错题暂无助手记录", 404);
         }
         return toSessionVO(session);
     }
@@ -267,6 +253,24 @@ public class WrongQuestionAiServiceImpl implements WrongQuestionAiService {
             analysisId = latest == null ? null : latest.getId();
         }
 
+        WrongQuestionAiChatSession existing = findLatestAssistantSession(userId, wrongQuestionId);
+        if (existing != null) {
+            boolean shouldUpdate = false;
+            if (!isSessionOngoing(existing.getStatus())) {
+                existing.setStatus(SESSION_STATUS_ONGOING);
+                shouldUpdate = true;
+            }
+            if (analysisId != null && !analysisId.equals(existing.getAnalysisId())) {
+                existing.setAnalysisId(analysisId);
+                shouldUpdate = true;
+            }
+            if (shouldUpdate) {
+                existing.setLastMessageAt(LocalDateTime.now());
+                wrongQuestionAiChatSessionMapper.updateById(existing);
+            }
+            return toSessionVO(existing);
+        }
+
         WrongQuestionAiChatSession session = new WrongQuestionAiChatSession();
         session.setSessionCode(newCode());
         session.setUserId(userId);
@@ -286,11 +290,15 @@ public class WrongQuestionAiServiceImpl implements WrongQuestionAiService {
 
     @Override
     public List<WrongQuestionAiChatMessageVO> listChatMessages(Long userId, Long wrongQuestionId, Long sessionId) {
-        requireSession(userId, wrongQuestionId, sessionId);
+        requireWrongQuestion(userId, wrongQuestionId);
         List<WrongQuestionAiChatMessage> messages = wrongQuestionAiChatMessageMapper.selectList(
                 new LambdaQueryWrapper<WrongQuestionAiChatMessage>()
-                        .eq(WrongQuestionAiChatMessage::getSessionId, sessionId)
-                        .orderByAsc(WrongQuestionAiChatMessage::getSeqNo)
+                        .inSql(
+                                WrongQuestionAiChatMessage::getSessionId,
+                                "SELECT id FROM wrong_question_ai_chat_session WHERE user_id = " + userId
+                                        + " AND wrong_question_id = " + wrongQuestionId + " AND deleted = 0"
+                        )
+                        .orderByAsc(WrongQuestionAiChatMessage::getCreateTime)
                         .orderByAsc(WrongQuestionAiChatMessage::getId)
         );
         return messages.stream().map(this::toMessageVO).toList();
@@ -302,6 +310,27 @@ public class WrongQuestionAiServiceImpl implements WrongQuestionAiService {
             Long wrongQuestionId,
             Long sessionId,
             WrongQuestionAiSendMessageDTO requestDTO
+    ) {
+        return doSendChatMessage(userId, wrongQuestionId, sessionId, requestDTO, null);
+    }
+
+    @Override
+    public WrongQuestionAiChatMessageVO streamChatMessage(
+            Long userId,
+            Long wrongQuestionId,
+            Long sessionId,
+            WrongQuestionAiSendMessageDTO requestDTO,
+            Consumer<String> chunkConsumer
+    ) {
+        return doSendChatMessage(userId, wrongQuestionId, sessionId, requestDTO, chunkConsumer);
+    }
+
+    private WrongQuestionAiChatMessageVO doSendChatMessage(
+            Long userId,
+            Long wrongQuestionId,
+            Long sessionId,
+            WrongQuestionAiSendMessageDTO requestDTO,
+            Consumer<String> chunkConsumer
     ) {
         WrongQuestionAiChatSession session = requireSession(userId, wrongQuestionId, sessionId);
         if (!isSessionOngoing(session.getStatus())) {
@@ -328,13 +357,15 @@ public class WrongQuestionAiServiceImpl implements WrongQuestionAiService {
 
         // Build context with question facts, latest analysis and short history.
         JSONObject chatContext = buildChatContext(userId, wrongQuestion, question, session);
-        List<QwenChatClient.ChatMessage> messages = buildChatPromptMessages(chatContext, sessionId, content);
+        List<QwenChatClient.ChatMessage> messages = buildChatPromptMessages(chatContext, userId, wrongQuestionId, content);
         int chatMaxTokens = resolveChatMaxTokens(content);
         int maxReplyChars = shouldAllowDetailedAnswer(content) ? MAX_CHAT_REPLY_DETAIL_CHARS : MAX_CHAT_REPLY_CHARS;
 
         long beginMs = System.currentTimeMillis();
         try {
-            QwenChatClient.ChatResult chatResult = qwenChatClient.chat(messages, false, chatMaxTokens);
+            QwenChatClient.ChatResult chatResult = chunkConsumer == null
+                    ? qwenChatClient.chat(messages, false, chatMaxTokens)
+                    : qwenChatClient.chatStream(messages, false, chatMaxTokens, chunkConsumer);
             int latencyMs = (int) (System.currentTimeMillis() - beginMs);
             String assistantContent = compactChatReply(chatResult.content(), maxReplyChars);
 
@@ -373,7 +404,6 @@ public class WrongQuestionAiServiceImpl implements WrongQuestionAiService {
             throw exception;
         }
     }
-
     @Override
     @Transactional
     public WrongQuestionAiChatSessionVO closeChatSession(Long userId, Long wrongQuestionId, Long sessionId) {
@@ -588,23 +618,32 @@ public class WrongQuestionAiServiceImpl implements WrongQuestionAiService {
 
     private List<QwenChatClient.ChatMessage> buildChatPromptMessages(
             JSONObject context,
-            Long sessionId,
+            Long userId,
+            Long wrongQuestionId,
             String currentUserQuestion
     ) {
         List<QwenChatClient.ChatMessage> messages = new ArrayList<>();
         messages.add(new QwenChatClient.ChatMessage("system", CHAT_SYSTEM_PROMPT));
         messages.add(new QwenChatClient.ChatMessage("system", CHAT_CONCISE_POLICY_PROMPT));
-        messages.add(new QwenChatClient.ChatMessage("system", "会话上下文：" + context.toJSONString()));
+        messages.add(new QwenChatClient.ChatMessage("system", "题目上下文：" + context.toJSONString()));
 
-        // Replay a limited number of historical messages to control cost and context size.
+        // Replay recent successful messages for the same wrong question across sessions.
         List<WrongQuestionAiChatMessage> historyMessages = wrongQuestionAiChatMessageMapper.selectList(
                 new LambdaQueryWrapper<WrongQuestionAiChatMessage>()
-                        .eq(WrongQuestionAiChatMessage::getSessionId, sessionId)
+                        .inSql(
+                                WrongQuestionAiChatMessage::getSessionId,
+                                "SELECT id FROM wrong_question_ai_chat_session WHERE user_id = " + userId
+                                        + " AND wrong_question_id = " + wrongQuestionId + " AND deleted = 0"
+                        )
                         .eq(WrongQuestionAiChatMessage::getStatus, RECORD_STATUS_SUCCESS)
-                        .orderByDesc(WrongQuestionAiChatMessage::getSeqNo)
+                        .orderByDesc(WrongQuestionAiChatMessage::getCreateTime)
+                        .orderByDesc(WrongQuestionAiChatMessage::getId)
                         .last("LIMIT " + MAX_CONTEXT_MESSAGES)
         );
-        historyMessages.sort(Comparator.comparing(WrongQuestionAiChatMessage::getSeqNo));
+        historyMessages.sort(
+                Comparator.comparing(WrongQuestionAiChatMessage::getCreateTime)
+                        .thenComparing(WrongQuestionAiChatMessage::getId)
+        );
         for (WrongQuestionAiChatMessage history : historyMessages) {
             String role = mapRoleToOpenAiRole(history.getRole());
             if (!StringUtils.hasText(role) || !StringUtils.hasText(history.getContentText())) {
@@ -710,6 +749,17 @@ public class WrongQuestionAiServiceImpl implements WrongQuestionAiService {
             throw new BusinessException("会话不存在或无访问权限", 404);
         }
         return session;
+    }
+
+    private WrongQuestionAiChatSession findLatestAssistantSession(Long userId, Long wrongQuestionId) {
+        return wrongQuestionAiChatSessionMapper.selectOne(
+                new LambdaQueryWrapper<WrongQuestionAiChatSession>()
+                        .eq(WrongQuestionAiChatSession::getUserId, userId)
+                        .eq(WrongQuestionAiChatSession::getWrongQuestionId, wrongQuestionId)
+                        .orderByDesc(WrongQuestionAiChatSession::getLastMessageAt)
+                        .orderByDesc(WrongQuestionAiChatSession::getId)
+                        .last("LIMIT 1")
+        );
     }
 
     private int nextSeqNo(Long sessionId) {

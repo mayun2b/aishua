@@ -146,6 +146,62 @@
               </button>
             </div>
 
+            <div v-if="!isSubmitted" :class="['assistant-card', { collapsed: !assistantPanelVisible }]">
+              <div class="assistant-head">
+                <h2>AI 做题辅助助手</h2>
+                <div class="assistant-actions">
+                  <button type="button" class="secondary-button" @click="assistantPanelVisible = !assistantPanelVisible">
+                    {{ assistantPanelVisible ? '收起' : '展开' }}
+                  </button>
+                  <button
+                    v-if="assistantPanelVisible && assistantSession?.status === 1"
+                    type="button"
+                    class="secondary-button"
+                    :disabled="assistantSending"
+                    @click="closePracticeAssistantSession"
+                  >
+                    结束会话
+                  </button>
+                </div>
+              </div>
+
+              <template v-if="assistantPanelVisible">
+                <div v-if="assistantLoading" class="assistant-empty">正在加载辅助会话...</div>
+                <div v-else class="assistant-body">
+                  <div v-if="!assistantMessages.length" class="assistant-empty">
+                    当前还没有消息，开始提问吧。
+                  </div>
+                  <div ref="assistantMessagesContainer" v-else class="assistant-messages">
+                    <article
+                      v-for="message in assistantMessages"
+                      :key="message.messageId"
+                      :class="['assistant-message', message.roleName === 'user' ? 'user' : 'assistant']"
+                    >
+                      <p class="role">{{ message.roleName === 'user' ? '你' : 'AI' }}</p>
+                      <p class="content">
+                        {{ resolveAssistantMessageDisplayText(message) }}
+                      </p>
+                    </article>
+                  </div>
+                </div>
+
+                <div class="assistant-input-row">
+                  <textarea
+                    v-model="assistantInput"
+                    rows="2"
+                    maxlength="1000"
+                    :disabled="assistantSending || assistantLoading"
+                    placeholder="例如：这一步为什么错了？"
+                    @keydown.enter.exact.prevent="sendPracticeAssistantMessage"
+                  ></textarea>
+                  <button type="button" :disabled="!canSendAssistantMessage" @click="sendPracticeAssistantMessage">
+                    {{ assistantSending ? '发送中...' : '发送' }}
+                  </button>
+                </div>
+                <p class="assistant-tip">提示：AI 辅导仅供学习参考。</p>
+              </template>
+            </div>
+
             <div v-if="currentResult" class="analysis-card">
               <div class="section-head compact">
                 <h2>当前题判分</h2>
@@ -205,12 +261,13 @@
           <router-link class="ghost" :to="`/practice-records/${sessionId}`">查看本次记录</router-link>
         </div>
       </section>
+
     </template>
   </div>
 </template>
 
 <script setup>
-import { computed, onBeforeUnmount, onMounted, ref } from 'vue'
+import { computed, nextTick, onBeforeUnmount, onMounted, ref, watch } from 'vue'
 import { useRoute, useRouter } from 'vue-router'
 import { showToast } from 'vant'
 import practiceApi from '../api/practice'
@@ -219,6 +276,8 @@ const route = useRoute()
 const router = useRouter()
 
 const AUTO_SAVE_INTERVAL_MS = 30000
+const ASSISTANT_TYPEWRITER_INTERVAL_MS = 20
+const ASSISTANT_TYPEWRITER_CHARS_PER_TICK = 2
 let autoSaveTimer = null
 
 const loadingInitial = ref(false)
@@ -239,6 +298,18 @@ const currentIndex = ref(0)
 const currentQuestionEnteredAt = ref(0)
 const answers = ref({})
 const timeSpentMs = ref({})
+const assistantLoading = ref(false)
+const assistantSending = ref(false)
+const assistantSession = ref(null)
+const assistantMessages = ref([])
+const assistantInput = ref('')
+const assistantPanelVisible = ref(true)
+const assistantMessagesContainer = ref(null)
+let assistantLoadVersion = 0
+let assistantLocalMessageSeed = 0
+let assistantScrollFrame = 0
+let assistantStreamAbortController = null
+let activeAssistantTypewriter = null
 
 const sessionId = computed(() => Number(route.params.sessionId || 0))
 const questions = computed(() => questionSheet.value?.questions || [])
@@ -266,6 +337,18 @@ const answeredCount = computed(() => questions.value.filter((question) => isAnsw
 const unansweredCount = computed(() => Math.max(questions.value.length - answeredCount.value, 0))
 const canSubmitAll = computed(() => questions.value.length > 0 && unansweredCount.value === 0 && !isSubmitted.value)
 const progressText = computed(() => `${answeredCount.value} / ${questions.value.length}`)
+const canSendAssistantMessage = computed(() => {
+  if (isSubmitted.value) {
+    return false
+  }
+  if (!currentQuestion.value?.questionId) {
+    return false
+  }
+  if (assistantLoading.value || assistantSending.value) {
+    return false
+  }
+  return assistantInput.value.trim().length > 0
+})
 
 const draftStatusText = computed(() => {
   if (isSubmitted.value) {
@@ -706,6 +789,527 @@ const buildTimeCost = (questionId) => {
   return Math.max(Math.round(ms / 1000), 0)
 }
 
+const isNotFoundError = (error) => {
+  const status = Number(error?.response?.status ?? error?.status ?? 0)
+  if (status === 404) {
+    return true
+  }
+
+  // The backend may return HTTP 200 with business code 404.
+  const businessCode = Number(error?.response?.data?.code ?? error?.code ?? 0)
+  if (businessCode === 404) {
+    return true
+  }
+
+  const message = String(error?.message || '')
+  return message.includes('暂无助手会话') || message.includes('当前题目暂无助手会话')
+}
+
+const resolveRequestErrorMessage = (error, fallback) => {
+  if (error?.code === 'ECONNABORTED') {
+    return 'AI 响应超时，请稍后重试'
+  }
+  return error?.message || fallback
+}
+
+const normalizeMathLikeText = (text) => {
+  if (!text) {
+    return ''
+  }
+
+  return String(text)
+    .replace(/\$\$([\s\S]*?)\$\$/g, '$1')
+    .replace(/\$([^$\n]+)\$/g, '$1')
+    .replace(/\\vec\s*\{\s*([^{}]+)\s*\}/g, '向量$1')
+    .replace(/\\overrightarrow\s*\{\s*([^{}]+)\s*\}/g, '向量$1')
+    .replace(/\\frac\s*\{\s*([^{}]+)\s*\}\s*\{\s*([^{}]+)\s*\}/g, '$1/$2')
+    .replace(/\\times/g, '×')
+    .replace(/\\cdot/g, '·')
+    .replace(/\\div/g, '÷')
+    .replace(/\\leq?/g, '≤')
+    .replace(/\\geq?/g, '≥')
+    .replace(/\\neq/g, '≠')
+    .replace(/\\pm/g, '±')
+    .replace(/\\angle\s*/g, '角')
+    .replace(/\\triangle\s*/g, '三角形')
+    .replace(/[{}]/g, '')
+    .replace(/`/g, '')
+    .replace(/\\/g, '')
+}
+
+const resolveAssistantMessageDisplayText = (message) => {
+  const rawContent = message?.content == null ? '' : String(message.content)
+  if (rawContent) {
+    if (message?.roleName === 'assistant') {
+      return normalizeMathLikeText(rawContent)
+    }
+    return rawContent
+  }
+  if (message?.status === 2) {
+    return message.errorMessage || 'AI 回复失败'
+  }
+  return '...'
+}
+
+const isAbortError = (error) => {
+  if (!error) {
+    return false
+  }
+  if (error.name === 'AbortError') {
+    return true
+  }
+  const message = String(error.message || '').toLowerCase()
+  return message.includes('aborted') || message.includes('aborterror')
+}
+
+const clearAssistantScrollFrame = () => {
+  if (!assistantScrollFrame) {
+    return
+  }
+  window.cancelAnimationFrame(assistantScrollFrame)
+  assistantScrollFrame = 0
+}
+
+const scrollAssistantMessagesToBottom = () => {
+  const container = assistantMessagesContainer.value
+  if (!container) {
+    return
+  }
+  container.scrollTop = container.scrollHeight
+}
+
+const queueAssistantMessagesScrollToBottom = () => {
+  if (!assistantPanelVisible.value) {
+    return
+  }
+  if (assistantScrollFrame) {
+    return
+  }
+  assistantScrollFrame = window.requestAnimationFrame(() => {
+    assistantScrollFrame = 0
+    scrollAssistantMessagesToBottom()
+  })
+}
+
+const abortAssistantStream = () => {
+  if (!assistantStreamAbortController) {
+    return
+  }
+  assistantStreamAbortController.abort()
+  assistantStreamAbortController = null
+}
+
+const resetAssistantTypewriter = () => {
+  if (!activeAssistantTypewriter) {
+    return
+  }
+  activeAssistantTypewriter.cancel()
+  activeAssistantTypewriter = null
+}
+
+const createAssistantTypewriter = (messageId) => {
+  let renderedContent = ''
+  let pendingContent = ''
+  let timerId = null
+  let finishPromise = null
+  let finishResolve = null
+  let destroyed = false
+
+  const stopTimer = () => {
+    if (!timerId) {
+      return
+    }
+    clearInterval(timerId)
+    timerId = null
+  }
+
+  const settleIfDone = () => {
+    if (pendingContent.length || !finishResolve) {
+      return
+    }
+    const resolve = finishResolve
+    finishResolve = null
+    finishPromise = null
+    resolve(renderedContent)
+  }
+
+  const flushNext = () => {
+    if (destroyed) {
+      stopTimer()
+      return
+    }
+
+    if (!pendingContent.length) {
+      stopTimer()
+      settleIfDone()
+      return
+    }
+
+    const appendChunk = pendingContent.slice(0, ASSISTANT_TYPEWRITER_CHARS_PER_TICK)
+    pendingContent = pendingContent.slice(appendChunk.length)
+    renderedContent += appendChunk
+    patchAssistantMessageById(messageId, { content: renderedContent })
+    queueAssistantMessagesScrollToBottom()
+
+    if (!pendingContent.length) {
+      stopTimer()
+      settleIfDone()
+    }
+  }
+
+  const ensureTimer = () => {
+    if (timerId) {
+      return
+    }
+    timerId = window.setInterval(flushNext, ASSISTANT_TYPEWRITER_INTERVAL_MS)
+  }
+
+  return {
+    pushDelta(delta) {
+      if (destroyed || !delta) {
+        return
+      }
+      pendingContent += delta
+      ensureTimer()
+      flushNext()
+    },
+    finish(finalContent = '') {
+      if (destroyed) {
+        return Promise.resolve(renderedContent)
+      }
+
+      if (finalContent) {
+        if (finalContent.length > renderedContent.length) {
+          pendingContent += finalContent.slice(renderedContent.length)
+        } else if (finalContent !== renderedContent) {
+          renderedContent = finalContent
+          patchAssistantMessageById(messageId, { content: renderedContent })
+          queueAssistantMessagesScrollToBottom()
+        }
+      }
+
+      if (!pendingContent.length) {
+        patchAssistantMessageById(messageId, { content: renderedContent })
+        queueAssistantMessagesScrollToBottom()
+        return Promise.resolve(renderedContent)
+      }
+
+      ensureTimer()
+      if (!finishPromise) {
+        finishPromise = new Promise((resolve) => {
+          finishResolve = resolve
+        })
+      }
+      return finishPromise
+    },
+    cancel() {
+      destroyed = true
+      pendingContent = ''
+      stopTimer()
+      if (finishResolve) {
+        const resolve = finishResolve
+        finishResolve = null
+        finishPromise = null
+        resolve(renderedContent)
+      }
+    }
+  }
+}
+
+const createLocalAssistantMessageId = (prefix) => {
+  assistantLocalMessageSeed += 1
+  return `${prefix}-${Date.now()}-${assistantLocalMessageSeed}`
+}
+
+const resetAssistantState = () => {
+  abortAssistantStream()
+  resetAssistantTypewriter()
+  clearAssistantScrollFrame()
+  assistantLoading.value = false
+  assistantSending.value = false
+  assistantSession.value = null
+  assistantMessages.value = []
+  assistantInput.value = ''
+}
+
+const patchAssistantMessageById = (messageId, patch) => {
+  assistantMessages.value = assistantMessages.value.map((message) => {
+    if (String(message.messageId) !== String(messageId)) {
+      return message
+    }
+    return {
+      ...message,
+      ...patch
+    }
+  })
+}
+
+const removeAssistantMessagesByIds = (messageIds) => {
+  if (!Array.isArray(messageIds) || !messageIds.length) {
+    return
+  }
+  const idSet = new Set(messageIds.map((id) => String(id)))
+  assistantMessages.value = assistantMessages.value.filter(
+    (message) => !idSet.has(String(message.messageId))
+  )
+}
+
+const loadPracticeAssistantMessages = async (questionId, assistantSessionId, loadVersion) => {
+  try {
+    const response = await practiceApi.listPracticeQuestionAiMessages(
+      sessionId.value,
+      questionId,
+      assistantSessionId
+    )
+    if (loadVersion !== assistantLoadVersion) {
+      return
+    }
+    assistantMessages.value = response.data || []
+    void nextTick(() => {
+      queueAssistantMessagesScrollToBottom()
+    })
+  } catch (error) {
+    if (loadVersion !== assistantLoadVersion) {
+      return
+    }
+    if (isNotFoundError(error)) {
+      assistantMessages.value = []
+      return
+    }
+    showToast(resolveRequestErrorMessage(error, '加载辅助消息失败'))
+  }
+}
+
+const loadPracticeAssistantSession = async () => {
+  const questionId = currentQuestion.value?.questionId
+  if (!sessionId.value || !questionId || isSubmitted.value) {
+    resetAssistantState()
+    return
+  }
+
+  assistantLoadVersion += 1
+  const loadVersion = assistantLoadVersion
+  assistantLoading.value = true
+  assistantSession.value = null
+  assistantMessages.value = []
+  assistantInput.value = ''
+  try {
+    const response = await practiceApi.getLatestPracticeQuestionAiSession(sessionId.value, questionId)
+    if (loadVersion !== assistantLoadVersion) {
+      return
+    }
+    assistantSession.value = response.data || null
+    if (assistantSession.value?.sessionId) {
+      await loadPracticeAssistantMessages(questionId, assistantSession.value.sessionId, loadVersion)
+    }
+  } catch (error) {
+    if (loadVersion !== assistantLoadVersion) {
+      return
+    }
+    if (isNotFoundError(error)) {
+      assistantSession.value = null
+      assistantMessages.value = []
+      return
+    }
+    showToast(resolveRequestErrorMessage(error, '加载辅助会话失败'))
+  } finally {
+    if (loadVersion === assistantLoadVersion) {
+      assistantLoading.value = false
+    }
+  }
+}
+
+const ensurePracticeAssistantSession = async (questionId) => {
+  if (
+    assistantSession.value?.sessionId &&
+    assistantSession.value?.status === 1 &&
+    Number(assistantSession.value?.questionId) === Number(questionId)
+  ) {
+    return true
+  }
+
+  try {
+    const previousSessionId = assistantSession.value?.sessionId
+    const response = await practiceApi.createPracticeQuestionAiSession(
+      sessionId.value,
+      questionId,
+      { triggerSource: 1 }
+    )
+    const nextSession = response.data || null
+    assistantSession.value = nextSession
+    if (!nextSession?.sessionId) {
+      assistantMessages.value = []
+      return false
+    }
+
+    if (!previousSessionId) {
+      return true
+    }
+    if (String(previousSessionId) !== String(nextSession.sessionId)) {
+      assistantMessages.value = []
+    }
+    return Boolean(assistantSession.value?.sessionId)
+  } catch (error) {
+    showToast(resolveRequestErrorMessage(error, '创建辅助会话失败'))
+    return false
+  }
+}
+
+const sendPracticeAssistantMessage = async () => {
+  if (!canSendAssistantMessage.value || assistantSending.value) {
+    return
+  }
+
+  const question = currentQuestion.value
+  const questionId = question?.questionId
+  const content = assistantInput.value.trim()
+  if (!sessionId.value || !questionId || !content) {
+    return
+  }
+
+  assistantSending.value = true
+  const streamController = new AbortController()
+  assistantStreamAbortController = streamController
+  const requestTime = new Date().toISOString()
+  const baseSeq = assistantMessages.value.length
+    ? Number(assistantMessages.value[assistantMessages.value.length - 1]?.seqNo || assistantMessages.value.length)
+    : 0
+
+  const userLocalMessage = {
+    messageId: createLocalAssistantMessageId('local-practice-user'),
+    sessionId: assistantSession.value?.sessionId || null,
+    seqNo: baseSeq + 1,
+    role: 2,
+    roleName: 'user',
+    content,
+    status: 1,
+    errorMessage: '',
+    promptTokens: 0,
+    completionTokens: 0,
+    totalTokens: 0,
+    latencyMs: 0,
+    createTime: requestTime
+  }
+  const assistantLocalMessage = {
+    messageId: createLocalAssistantMessageId('local-practice-assistant'),
+    sessionId: assistantSession.value?.sessionId || null,
+    seqNo: baseSeq + 2,
+    role: 3,
+    roleName: 'assistant',
+    content: '',
+    status: 1,
+    errorMessage: '',
+    promptTokens: 0,
+    completionTokens: 0,
+    totalTokens: 0,
+    latencyMs: 0,
+    createTime: requestTime
+  }
+
+  try {
+    const sessionReady = await ensurePracticeAssistantSession(questionId)
+    if (!sessionReady) {
+      return
+    }
+
+    const assistantSessionId = assistantSession.value.sessionId
+    userLocalMessage.sessionId = assistantSessionId
+    assistantLocalMessage.sessionId = assistantSessionId
+    assistantMessages.value = [...assistantMessages.value, userLocalMessage, assistantLocalMessage]
+    assistantInput.value = ''
+    queueAssistantMessagesScrollToBottom()
+
+    let streamedContent = ''
+    const typewriter = createAssistantTypewriter(assistantLocalMessage.messageId)
+    activeAssistantTypewriter = typewriter
+    const finalMessage = await practiceApi.sendPracticeQuestionAiMessageStream(
+      sessionId.value,
+      questionId,
+      assistantSessionId,
+      {
+        content,
+        draftAnswer: buildUserAnswer(question),
+        timeCost: buildTimeCost(questionId)
+      },
+      {
+        signal: streamController.signal,
+        onChunk(delta) {
+          if (!delta) {
+            return
+          }
+          streamedContent += delta
+          typewriter.pushDelta(delta)
+        }
+      }
+    )
+
+    const finalContent = finalMessage?.content || streamedContent || assistantLocalMessage.content || ''
+    await typewriter.finish(finalContent)
+
+    if (finalMessage) {
+      const stableMessageId = finalMessage.messageId ?? assistantLocalMessage.messageId
+      patchAssistantMessageById(assistantLocalMessage.messageId, {
+        messageId: stableMessageId,
+        sessionId: finalMessage.sessionId ?? assistantLocalMessage.sessionId,
+        seqNo: finalMessage.seqNo ?? assistantLocalMessage.seqNo,
+        role: finalMessage.role ?? assistantLocalMessage.role,
+        roleName: finalMessage.roleName || assistantLocalMessage.roleName,
+        content: finalContent,
+        status: finalMessage.status ?? assistantLocalMessage.status,
+        errorMessage: finalMessage.errorMessage || '',
+        promptTokens: finalMessage.promptTokens ?? assistantLocalMessage.promptTokens,
+        completionTokens: finalMessage.completionTokens ?? assistantLocalMessage.completionTokens,
+        totalTokens: finalMessage.totalTokens ?? assistantLocalMessage.totalTokens,
+        latencyMs: finalMessage.latencyMs ?? assistantLocalMessage.latencyMs,
+        createTime: finalMessage.createTime || assistantLocalMessage.createTime
+      })
+      assistantLocalMessage.messageId = stableMessageId
+    }
+  } catch (error) {
+    if (isAbortError(error) || streamController.signal.aborted) {
+      return
+    }
+    removeAssistantMessagesByIds([userLocalMessage.messageId, assistantLocalMessage.messageId])
+    if (Number(currentQuestion.value?.questionId) === Number(questionId)) {
+      assistantInput.value = content
+    }
+    showToast(resolveRequestErrorMessage(error, '发送消息失败'))
+  } finally {
+    if (assistantStreamAbortController === streamController) {
+      assistantStreamAbortController = null
+    }
+    resetAssistantTypewriter()
+    assistantSending.value = false
+  }
+}
+
+const closePracticeAssistantSession = async () => {
+  if (!assistantSession.value) {
+    return
+  }
+  const questionId = currentQuestion.value?.questionId
+  if (!sessionId.value || !questionId || !assistantSession.value?.sessionId) {
+    assistantSession.value = {
+      ...assistantSession.value,
+      status: 2
+    }
+    return
+  }
+  try {
+    const response = await practiceApi.closePracticeQuestionAiSession(
+      sessionId.value,
+      questionId,
+      assistantSession.value.sessionId
+    )
+    assistantSession.value = response.data || {
+      ...assistantSession.value,
+      status: 2
+    }
+  } catch (error) {
+    showToast(resolveRequestErrorMessage(error, '结束辅助会话失败'))
+  }
+}
+
 const buildDraftPayload = () => {
   return {
     answers: questions.value.map((question) => ({
@@ -821,6 +1425,8 @@ const goToConfig = () => {
 }
 
 const reloadPage = () => {
+  assistantLoadVersion += 1
+  resetAssistantState()
   answers.value = {}
   timeSpentMs.value = {}
   currentIndex.value = 0
@@ -829,6 +1435,31 @@ const reloadPage = () => {
   draftSavedAt.value = ''
   void loadPage()
 }
+
+watch(
+  () => [currentQuestion.value?.questionId, isSubmitted.value],
+  ([questionId, submitted]) => {
+    if (submitted || !questionId) {
+      assistantLoadVersion += 1
+      resetAssistantState()
+      return
+    }
+    void loadPracticeAssistantSession()
+  },
+  { immediate: true }
+)
+
+watch(
+  () => assistantPanelVisible.value,
+  (visible) => {
+    if (!visible) {
+      return
+    }
+    void nextTick(() => {
+      queueAssistantMessagesScrollToBottom()
+    })
+  }
+)
 
 onMounted(async () => {
   await loadPage()
@@ -844,6 +1475,9 @@ onBeforeUnmount(() => {
   window.removeEventListener('pagehide', handlePageHide)
   stopAutoSaveTimer()
   syncCurrentQuestionTime()
+  clearAssistantScrollFrame()
+  assistantLoadVersion += 1
+  resetAssistantState()
   void saveDraft({ silent: true, force: true })
 })
 </script>
@@ -1139,6 +1773,121 @@ onBeforeUnmount(() => {
   margin-top: 22px;
 }
 
+.assistant-card {
+  position: fixed;
+  right: 24px;
+  bottom: 24px;
+  z-index: 70;
+  width: min(460px, calc(100vw - 48px));
+  margin-top: 0;
+  padding: 16px;
+  border-radius: 20px;
+  border: 1px solid #d7e2ee;
+  background: rgba(244, 248, 255, 0.96);
+  box-shadow: 0 18px 36px rgba(31, 55, 82, 0.2);
+  backdrop-filter: blur(4px);
+}
+
+.assistant-card.collapsed {
+  width: auto;
+  min-width: 240px;
+}
+
+.assistant-head {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 12px;
+  flex-wrap: wrap;
+}
+
+.assistant-head h2 {
+  margin: 0;
+  color: #17324d;
+  font-size: 18px;
+}
+
+.assistant-actions {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+}
+
+.assistant-empty {
+  margin-top: 12px;
+  padding: 14px 16px;
+  border-radius: 12px;
+  background: #fff;
+  color: #637487;
+}
+
+.assistant-body {
+  margin-top: 12px;
+}
+
+.assistant-messages {
+  max-height: min(280px, 34vh);
+  overflow: auto;
+  display: grid;
+  gap: 10px;
+  padding-right: 4px;
+}
+
+.assistant-message {
+  border-radius: 12px;
+  padding: 10px 12px;
+  line-height: 1.6;
+}
+
+.assistant-message.user {
+  background: #e8f0ff;
+}
+
+.assistant-message.assistant {
+  background: #fff;
+  border: 1px solid #d7e1ed;
+}
+
+.assistant-message .role {
+  margin: 0;
+  font-size: 12px;
+  font-weight: 700;
+  color: #526173;
+}
+
+.assistant-message .content {
+  margin: 6px 0 0;
+  color: #17324d;
+  white-space: pre-wrap;
+  word-break: break-word;
+}
+
+.assistant-input-row {
+  margin-top: 12px;
+  display: grid;
+  grid-template-columns: minmax(0, 1fr) auto;
+  gap: 10px;
+  align-items: end;
+}
+
+.assistant-input-row textarea {
+  width: 100%;
+  min-height: 70px;
+  padding: 10px 12px;
+  border: 1px solid #cad7e3;
+  border-radius: 12px;
+  font-size: 14px;
+  box-sizing: border-box;
+  resize: vertical;
+  background: #fff;
+}
+
+.assistant-tip {
+  margin: 10px 0 0;
+  color: #6c7a8d;
+  font-size: 12px;
+}
+
 .analysis-card {
   margin-top: 24px;
   padding: 20px;
@@ -1214,6 +1963,16 @@ button:disabled {
   .question-nav {
     grid-template-columns: repeat(5, minmax(0, 1fr));
   }
+
+  .assistant-input-row {
+    grid-template-columns: 1fr;
+  }
+
+  .assistant-card {
+    right: 14px;
+    bottom: 14px;
+    width: min(420px, calc(100vw - 28px));
+  }
 }
 
 @media (max-width: 768px) {
@@ -1236,6 +1995,27 @@ button:disabled {
 
   .question-nav {
     grid-template-columns: repeat(4, minmax(0, 1fr));
+  }
+
+  .assistant-card {
+    left: 10px;
+    right: 10px;
+    bottom: 10px;
+    width: auto;
+    max-height: 72vh;
+    border-radius: 16px;
+  }
+
+  .assistant-card.collapsed {
+    min-width: 0;
+  }
+
+  .assistant-head h2 {
+    font-size: 16px;
+  }
+
+  .assistant-messages {
+    max-height: min(260px, 32vh);
   }
 }
 </style>

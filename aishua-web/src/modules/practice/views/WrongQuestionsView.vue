@@ -235,13 +235,11 @@
             <div class="chat-card">
               <div class="chat-head">
                 <h3>继续追问</h3>
-                <button v-if="aiSession?.status === 1" type="button" class="ghost" @click="closeAiSession">结束会话</button>
-                <button v-else type="button" class="ghost" @click="createAiSession">新建会话</button>
               </div>
 
-              <div v-if="chatLoading" class="empty-state">正在加载会话...</div>
+              <div v-if="chatLoading" class="empty-state">正在加载追问记录...</div>
               <div v-else class="chat-body">
-                <div v-if="!aiMessages.length" class="empty-state">当前会话还没有消息，开始提问吧。</div>
+                <div v-if="!aiMessages.length" class="empty-state">当前题目还没有消息，开始提问吧。</div>
                 <div v-else class="message-list">
                   <div
                     v-for="message in aiMessages"
@@ -333,7 +331,7 @@ const directoryOptions = computed(() => {
 const trendMax = computed(() => Math.max(...wrongTrendItems.value.map((item) => Number(item.wrongAnswerCount || 0)), 1))
 
 const canInputMessage = computed(() => {
-  return Boolean(aiSession.value && aiSession.value.status === 1)
+  return Boolean(activeWrongQuestion.value?.wrongQuestionId) && !chatLoading.value
 })
 
 const canSendMessage = computed(() => {
@@ -458,13 +456,11 @@ const toggleMasterStatus = async (question) => {
 const openAiAssistant = async (question) => {
   activeWrongQuestion.value = question
   aiPanelVisible.value = true
+  aiSession.value = null
   aiMessages.value = []
   chatInput.value = ''
   await analyzeCurrentWrongQuestion({ preferLatest: true })
-  const loadedLatestSession = await tryLoadLatestAiSession()
-  if (!loadedLatestSession) {
-    createAiSession()
-  }
+  await tryLoadLatestAiSession()
 }
 
 const tryLoadLatestAnalysis = async () => {
@@ -527,7 +523,7 @@ const tryLoadLatestAiSession = async () => {
     return true
   } catch (error) {
     if (error.response?.data?.code !== 404) {
-      showToast(resolveErrorMessage(error, '加载历史会话失败'))
+      showToast(resolveErrorMessage(error, '加载历史追问记录失败'))
     }
     aiSession.value = null
     aiMessages.value = []
@@ -537,23 +533,11 @@ const tryLoadLatestAiSession = async () => {
   }
 }
 
-const createAiSession = async () => {
-  aiSession.value = {
-    sessionId: null,
-    status: 1,
-    wrongQuestionId: activeWrongQuestion.value?.wrongQuestionId || null,
-    analysisId: aiAnalysis.value?.analysisId || null,
-    roundCount: 0
-  }
-  aiMessages.value = []
-  chatInput.value = ''
-}
-
 const ensureAiSessionCreated = async () => {
   if (!activeWrongQuestion.value?.wrongQuestionId) {
     return false
   }
-  if (aiSession.value?.sessionId) {
+  if (aiSession.value?.sessionId && Number(aiSession.value?.status) === 1) {
     return true
   }
   try {
@@ -563,7 +547,7 @@ const ensureAiSessionCreated = async () => {
     aiSession.value = response.data || null
     return Boolean(aiSession.value?.sessionId)
   } catch (error) {
-    showToast(resolveErrorMessage(error, '创建会话失败'))
+    showToast(resolveErrorMessage(error, '初始化追问记录失败'))
     return false
   }
 }
@@ -580,50 +564,115 @@ const loadAiMessages = async () => {
     )
     aiMessages.value = response.data || []
   } catch (error) {
-    showToast(resolveErrorMessage(error, '加载会话消息失败'))
+    showToast(resolveErrorMessage(error, '加载追问消息失败'))
   }
+}
+
+const updateAiMessageById = (messageId, patch) => {
+  aiMessages.value = aiMessages.value.map((message) => {
+    if (String(message.messageId) !== String(messageId)) {
+      return message
+    }
+    return {
+      ...message,
+      ...patch
+    }
+  })
 }
 
 const sendAiMessage = async () => {
   if (!canSendMessage.value || sendingMessage.value) {
     return
   }
+  const questionId = activeWrongQuestion.value?.wrongQuestionId
+  const content = chatInput.value.trim()
+  if (!questionId || !content) {
+    return
+  }
+
   sendingMessage.value = true
+  const requestTime = new Date().toISOString()
+  const baseSeq = aiMessages.value.length ? Number(aiMessages.value[aiMessages.value.length - 1]?.seqNo || aiMessages.value.length) : 0
+  const userLocalMessage = {
+    messageId: `local-user-${Date.now()}`,
+    sessionId: aiSession.value?.sessionId || null,
+    seqNo: baseSeq + 1,
+    role: 2,
+    roleName: 'user',
+    content,
+    status: 1,
+    errorMessage: '',
+    promptTokens: 0,
+    completionTokens: 0,
+    totalTokens: 0,
+    latencyMs: 0,
+    createTime: requestTime
+  }
+  const assistantLocalMessage = {
+    messageId: `local-assistant-${Date.now()}`,
+    sessionId: aiSession.value?.sessionId || null,
+    seqNo: baseSeq + 2,
+    role: 3,
+    roleName: 'assistant',
+    content: '',
+    status: 1,
+    errorMessage: '',
+    promptTokens: 0,
+    completionTokens: 0,
+    totalTokens: 0,
+    latencyMs: 0,
+    createTime: requestTime
+  }
+
   try {
     const sessionReady = await ensureAiSessionCreated()
     if (!sessionReady) {
       return
     }
-    await practiceApi.sendWrongQuestionAiMessage(
-      activeWrongQuestion.value.wrongQuestionId,
-      aiSession.value.sessionId,
-      { content: chatInput.value.trim() }
-    )
+
+    userLocalMessage.sessionId = aiSession.value.sessionId
+    assistantLocalMessage.sessionId = aiSession.value.sessionId
+    aiMessages.value = [...aiMessages.value, userLocalMessage, assistantLocalMessage]
     chatInput.value = ''
-    await loadAiMessages()
+
+    let streamedContent = ''
+    const finalMessage = await practiceApi.sendWrongQuestionAiMessageStream(
+      questionId,
+      aiSession.value.sessionId,
+      { content },
+      {
+        onChunk(delta) {
+          streamedContent += delta || ''
+          updateAiMessageById(assistantLocalMessage.messageId, { content: streamedContent })
+        }
+      }
+    )
+
+    if (finalMessage) {
+      const stableMessageId = finalMessage.messageId ?? assistantLocalMessage.messageId
+      updateAiMessageById(assistantLocalMessage.messageId, {
+        messageId: stableMessageId,
+        sessionId: finalMessage.sessionId ?? assistantLocalMessage.sessionId,
+        seqNo: finalMessage.seqNo ?? assistantLocalMessage.seqNo,
+        role: finalMessage.role ?? assistantLocalMessage.role,
+        roleName: finalMessage.roleName || assistantLocalMessage.roleName,
+        content: finalMessage.content || streamedContent || assistantLocalMessage.content,
+        status: finalMessage.status ?? assistantLocalMessage.status,
+        errorMessage: finalMessage.errorMessage || '',
+        promptTokens: finalMessage.promptTokens ?? assistantLocalMessage.promptTokens,
+        completionTokens: finalMessage.completionTokens ?? assistantLocalMessage.completionTokens,
+        totalTokens: finalMessage.totalTokens ?? assistantLocalMessage.totalTokens,
+        latencyMs: finalMessage.latencyMs ?? assistantLocalMessage.latencyMs,
+        createTime: finalMessage.createTime || assistantLocalMessage.createTime
+      })
+      assistantLocalMessage.messageId = stableMessageId
+    }
   } catch (error) {
+    aiMessages.value = aiMessages.value.filter((message) => message.messageId !== userLocalMessage.messageId && message.messageId !== assistantLocalMessage.messageId)
+    chatInput.value = content
     showToast(resolveErrorMessage(error, '发送失败'))
   } finally {
     sendingMessage.value = false
-  }
-}
-
-const closeAiSession = async () => {
-  if (!aiSession.value) {
-    return
-  }
-  if (!activeWrongQuestion.value?.wrongQuestionId || !aiSession.value?.sessionId) {
-    aiSession.value = { ...aiSession.value, status: 2 }
-    return
-  }
-  try {
-    const response = await practiceApi.closeWrongQuestionAiSession(
-      activeWrongQuestion.value.wrongQuestionId,
-      aiSession.value.sessionId
-    )
-    aiSession.value = response.data || { ...aiSession.value, status: 2 }
-  } catch (error) {
-    showToast(resolveErrorMessage(error, '关闭会话失败'))
   }
 }
 

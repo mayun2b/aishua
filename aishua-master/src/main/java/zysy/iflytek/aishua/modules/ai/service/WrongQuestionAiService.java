@@ -8,6 +8,7 @@ import zysy.iflytek.aishua.modules.ai.entity.vo.WrongQuestionAiChatMessageVO;
 import zysy.iflytek.aishua.modules.ai.entity.vo.WrongQuestionAiChatSessionVO;
 
 import java.util.List;
+import java.util.function.Consumer;
 
 public interface WrongQuestionAiService {
     WrongQuestionAiAnalysisVO analyzeWrongQuestion(Long userId, Long wrongQuestionId, WrongQuestionAiAnalysisRequestDTO requestDTO);
@@ -21,6 +22,14 @@ public interface WrongQuestionAiService {
     List<WrongQuestionAiChatMessageVO> listChatMessages(Long userId, Long wrongQuestionId, Long sessionId);
 
     WrongQuestionAiChatMessageVO sendChatMessage(Long userId, Long wrongQuestionId, Long sessionId, WrongQuestionAiSendMessageDTO requestDTO);
+
+    WrongQuestionAiChatMessageVO streamChatMessage(
+            Long userId,
+            Long wrongQuestionId,
+            Long sessionId,
+            WrongQuestionAiSendMessageDTO requestDTO,
+            Consumer<String> chunkConsumer
+    );
 
     WrongQuestionAiChatSessionVO closeChatSession(Long userId, Long wrongQuestionId, Long sessionId);
 }
