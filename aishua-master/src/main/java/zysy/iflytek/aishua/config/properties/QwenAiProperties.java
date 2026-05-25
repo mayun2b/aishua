@@ -19,7 +19,7 @@ public class QwenAiProperties {
     /**
      * Qwen chat model name.
      */
-    private String chatModel = "qwen3.5-flash";
+    private String chatModel = "qwen3.6-plus";
 
     /**
      * Maximum tokens for each chat reply.

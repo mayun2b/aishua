@@ -7,12 +7,12 @@ import lombok.Data;
 
 @Data
 public class PracticeAnswerItemDTO {
-    @NotNull(message = "题目不能为空")
+    @NotNull(message = "questionId is required")
     private Long questionId;
 
     private String userAnswer;
 
-    @Min(value = 0, message = "耗时不能小于 0")
-    @Max(value = 7200, message = "耗时不能超过 7200 秒")
+    @Min(value = 0, message = "timeCost must be >= 0")
+    @Max(value = 7200, message = "timeCost must be <= 7200")
     private Integer timeCost = 0;
 }

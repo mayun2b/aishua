@@ -31,6 +31,8 @@ public class PracticeSession {
 
     private Integer totalTimeCost;
 
+    private Integer draftVersion;
+
     private Integer status;
 
     private LocalDateTime startedAt;

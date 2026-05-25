@@ -204,7 +204,7 @@
 
             <div v-if="currentResult" class="analysis-card">
               <div class="section-head compact">
-                <h2>当前题判分</h2>
+                <h2>当前题判定</h2>
                 <span :class="['result-badge', Number(currentResult.isCorrect) === 1 ? 'success' : 'danger']">
                   {{ Number(currentResult.isCorrect) === 1 ? '回答正确' : '回答错误' }}
                 </span>
@@ -239,7 +239,7 @@
 
         <div class="result-grid">
           <div class="result-item">
-            <span>总题数</span>
+              <span>总题数</span>
             <strong>{{ summaryResult.questionCount }}</strong>
           </div>
           <div class="result-item">
@@ -251,7 +251,7 @@
             <strong>{{ summaryResult.wrongCount }}</strong>
           </div>
           <div class="result-item">
-            <span>正确率</span>
+              <span>正确率</span>
             <strong>{{ summaryResult.correctRate }}%</strong>
           </div>
         </div>
@@ -286,18 +286,19 @@ const submitting = ref(false)
 const savingDraft = ref(false)
 const hasDraftChanges = ref(false)
 const draftSavedAt = ref('')
+const draftVersion = ref(0)
 const loadError = ref('')
 
 const session = ref(null)
 const questionSheet = ref(null)
 const submitResult = ref(null)
-const draftRecords = ref([])
 const judgedRecords = ref([])
 
 const currentIndex = ref(0)
 const currentQuestionEnteredAt = ref(0)
 const answers = ref({})
 const timeSpentMs = ref({})
+const draftDirtyQuestionIds = new Set()
 const assistantLoading = ref(false)
 const assistantSending = ref(false)
 const assistantSession = ref(null)
@@ -453,6 +454,27 @@ const resolveOptionLabel = (item, index) => {
   return String.fromCharCode(65 + index)
 }
 
+const normalizeChoiceOptionValue = (rawValue, fallbackLabel) => {
+  const normalized = normalizeOptionField(rawValue)
+  if (!normalized) {
+    return ''
+  }
+  const normalizedFallbackLabel = normalizeOptionField(fallbackLabel).toUpperCase()
+  if (!normalizedFallbackLabel) {
+    return normalized
+  }
+  if (normalized.toUpperCase() === normalizedFallbackLabel) {
+    return normalizedFallbackLabel
+  }
+
+  // Support raw option strings like "A. xxx" / "B) xxx" / "C - xxx".
+  const prefixedLabelMatch = normalized.toUpperCase().match(/^([A-Z])(?:[.．、,:：)）-]\s*|\s+)/)
+  if (prefixedLabelMatch?.[1] === normalizedFallbackLabel) {
+    return normalizedFallbackLabel
+  }
+  return normalized
+}
+
 const resolveOptionValue = (item, fallbackLabel) => {
   const candidates = [
     item?.value,
@@ -461,7 +483,7 @@ const resolveOptionValue = (item, fallbackLabel) => {
     typeof item === 'string' ? item : null
   ]
   for (const candidate of candidates) {
-    const normalized = normalizeOptionField(candidate)
+    const normalized = normalizeChoiceOptionValue(candidate, fallbackLabel)
     if (normalized) {
       return normalized
     }
@@ -490,9 +512,13 @@ const resolveOptionText = (item, label, value) => {
   return label
 }
 
-const markDraftChanged = () => {
-  if (!isSubmitted.value) {
-    hasDraftChanges.value = true
+const markDraftChanged = (questionId) => {
+  if (isSubmitted.value) {
+    return
+  }
+  hasDraftChanges.value = true
+  if (questionId) {
+    draftDirtyQuestionIds.add(Number(questionId))
   }
 }
 
@@ -512,7 +538,7 @@ const singleChoiceAnswer = computed({
       ...answers.value,
       [currentQuestion.value.questionId]: String(value)
     }
-    markDraftChanged()
+    markDraftChanged(currentQuestion.value.questionId)
   }
 })
 
@@ -532,7 +558,7 @@ const multiChoiceAnswer = computed({
       ...answers.value,
       [currentQuestion.value.questionId]: Array.isArray(value) ? [...value] : []
     }
-    markDraftChanged()
+    markDraftChanged(currentQuestion.value.questionId)
   }
 })
 
@@ -552,7 +578,7 @@ const textAnswer = computed({
       ...answers.value,
       [currentQuestion.value.questionId]: value == null ? '' : String(value)
     }
-    markDraftChanged()
+    markDraftChanged(currentQuestion.value.questionId)
   }
 })
 
@@ -682,35 +708,42 @@ const syncCurrentQuestionTime = () => {
       ...timeSpentMs.value,
       [questionId]: (timeSpentMs.value[questionId] || 0) + elapsedMs
     }
-    markDraftChanged()
+    if (isAnswered(questionId)) {
+      markDraftChanged(questionId)
+    }
   }
 
   currentQuestionEnteredAt.value = Date.now()
 }
 
-const prefillAnswersFromResults = (resultList) => {
-  if (!questions.value.length || !Array.isArray(resultList) || !resultList.length) {
+const applyDraftSnapshot = (draftSnapshot) => {
+  if (!questions.value.length || !draftSnapshot) {
     return
   }
 
   const nextAnswers = { ...answers.value }
   const nextTimeSpentMs = { ...timeSpentMs.value }
-  const resultMapByQuestion = Object.fromEntries(resultList.map((item) => [item.questionId, item]))
+  const draftAnswerMap = Object.fromEntries((draftSnapshot.answers || []).map((item) => [item.questionId, item]))
 
   questions.value.forEach((question) => {
-    const resultItem = resultMapByQuestion[question.questionId]
-    if (!resultItem) {
+    const draftItem = draftAnswerMap[question.questionId]
+    if (!draftItem) {
       return
     }
 
-    nextAnswers[question.questionId] = parseSavedAnswer(question, resultItem.userAnswer)
-    if (resultItem.timeCost != null) {
-      nextTimeSpentMs[question.questionId] = Math.max(Number(resultItem.timeCost), 0) * 1000
+    nextAnswers[question.questionId] = parseSavedAnswer(question, draftItem.userAnswer)
+    if (draftItem.timeCost != null) {
+      nextTimeSpentMs[question.questionId] = Math.max(Number(draftItem.timeCost), 0) * 1000
     }
   })
 
   answers.value = nextAnswers
   timeSpentMs.value = nextTimeSpentMs
+  draftVersion.value = Math.max(Number(draftSnapshot.version) || 0, 0)
+  const savedAt = Number(draftSnapshot.savedAt)
+  draftSavedAt.value = savedAt > 0
+    ? new Date(savedAt).toLocaleTimeString('zh-CN', { hour12: false })
+    : ''
 }
 
 const loadSessionDetail = async () => {
@@ -718,8 +751,8 @@ const loadSessionDetail = async () => {
   session.value = detailResponse.data || null
 
   const records = detailResponse.data?.records || []
-  draftRecords.value = records
   judgedRecords.value = records.filter((item) => item?.isCorrect === 0 || item?.isCorrect === 1)
+  draftVersion.value = Math.max(Number(detailResponse.data?.draftVersion) || 0, 0)
 }
 
 const loadQuestionSheet = async () => {
@@ -728,11 +761,18 @@ const loadQuestionSheet = async () => {
     const questionResponse = await practiceApi.getQuestions(sessionId.value)
     questionSheet.value = questionResponse.data || null
     currentIndex.value = 0
-    prefillAnswersFromResults(draftRecords.value)
     beginQuestionTimer()
   } finally {
     loadingSheet.value = false
   }
+}
+
+const loadDraftSnapshot = async () => {
+  if (!sessionId.value || isSubmitted.value) {
+    return
+  }
+  const draftResponse = await practiceApi.getDraft(sessionId.value)
+  applyDraftSnapshot(draftResponse.data || null)
 }
 
 const loadPage = async () => {
@@ -744,10 +784,17 @@ const loadPage = async () => {
   loadingInitial.value = true
   loadError.value = ''
   submitResult.value = null
+  answers.value = {}
+  timeSpentMs.value = {}
+  draftSavedAt.value = ''
+  draftVersion.value = 0
+  draftDirtyQuestionIds.clear()
   try {
     await loadSessionDetail()
     await loadQuestionSheet()
+    await loadDraftSnapshot()
     hasDraftChanges.value = false
+    draftDirtyQuestionIds.clear()
   } catch (error) {
     loadError.value = error.message || '加载练习会话失败'
     showToast(loadError.value)
@@ -805,7 +852,19 @@ const isNotFoundError = (error) => {
   return message.includes('暂无助手会话') || message.includes('当前题目暂无助手会话')
 }
 
+const isNetworkError = (error) => {
+  const code = String(error?.code || '')
+  if (code === 'ERR_NETWORK') {
+    return true
+  }
+  const message = String(error?.message || '').toLowerCase()
+  return message.includes('network error') || message.includes('failed to fetch')
+}
+
 const resolveRequestErrorMessage = (error, fallback) => {
+  if (isNetworkError(error)) {
+    return '网络连接异常，请检查后端服务是否可用'
+  }
   if (error?.code === 'ECONNABORTED') {
     return 'AI 响应超时，请稍后重试'
   }
@@ -826,9 +885,9 @@ const normalizeMathLikeText = (text) => {
     .replace(/\\times/g, '×')
     .replace(/\\cdot/g, '·')
     .replace(/\\div/g, '÷')
-    .replace(/\\leq?/g, '≤')
-    .replace(/\\geq?/g, '≥')
-    .replace(/\\neq/g, '≠')
+    .replace(/\\leq?/g, '<=')
+    .replace(/\\geq?/g, '>=')
+    .replace(/\\neq/g, '!=')
     .replace(/\\pm/g, '±')
     .replace(/\\angle\s*/g, '角')
     .replace(/\\triangle\s*/g, '三角形')
@@ -1076,6 +1135,11 @@ const loadPracticeAssistantMessages = async (questionId, assistantSessionId, loa
       assistantMessages.value = []
       return
     }
+    if (isNetworkError(error)) {
+      assistantSession.value = null
+      assistantMessages.value = []
+      return
+    }
     showToast(resolveRequestErrorMessage(error, '加载辅助消息失败'))
   }
 }
@@ -1107,6 +1171,11 @@ const loadPracticeAssistantSession = async () => {
       return
     }
     if (isNotFoundError(error)) {
+      assistantSession.value = null
+      assistantMessages.value = []
+      return
+    }
+    if (isNetworkError(error)) {
       assistantSession.value = null
       assistantMessages.value = []
       return
@@ -1150,6 +1219,11 @@ const ensurePracticeAssistantSession = async (questionId) => {
     }
     return Boolean(assistantSession.value?.sessionId)
   } catch (error) {
+    if (isNetworkError(error)) {
+      assistantSession.value = null
+      assistantMessages.value = []
+      return false
+    }
     showToast(resolveRequestErrorMessage(error, '创建辅助会话失败'))
     return false
   }
@@ -1306,45 +1380,88 @@ const closePracticeAssistantSession = async () => {
       status: 2
     }
   } catch (error) {
+    if (isNetworkError(error)) {
+      return
+    }
     showToast(resolveRequestErrorMessage(error, '结束辅助会话失败'))
   }
 }
 
-const buildDraftPayload = () => {
-  return {
-    answers: questions.value.map((question) => ({
-      questionId: question.questionId,
-      userAnswer: buildUserAnswer(question),
-      timeCost: buildTimeCost(question.questionId)
-    }))
+const isDraftConflictError = (error) => Number(error?.response?.data?.code) === 409
+
+const getDraftQuestionIdsToSave = ({ force = false } = {}) => {
+  const validQuestionIds = new Set(questions.value.map((question) => Number(question.questionId)).filter((questionId) => questionId > 0))
+  if (draftDirtyQuestionIds.size) {
+    return [...draftDirtyQuestionIds].filter((questionId) => validQuestionIds.has(Number(questionId)))
   }
+  if (!force) {
+    return []
+  }
+  const currentQuestionId = Number(currentQuestion.value?.questionId || 0)
+  return currentQuestionId > 0 && validQuestionIds.has(currentQuestionId) ? [currentQuestionId] : []
+}
+
+const buildDraftChanges = (questionIds) => {
+  return questionIds.map((questionId) => {
+    const question = questions.value.find((item) => Number(item.questionId) === Number(questionId))
+    return {
+      questionId: Number(questionId),
+      userAnswer: question ? buildUserAnswer(question) : '',
+      timeCost: buildTimeCost(Number(questionId))
+    }
+  })
 }
 
 const saveDraft = async ({ silent = true, force = false } = {}) => {
-  if (!sessionId.value || !session.value || isSubmitted.value || !questions.value.length) {
+  if (!sessionId.value || !session.value || isSubmitted.value || !questions.value.length || savingDraft.value) {
     return
   }
-  if (!force && !hasDraftChanges.value) {
+  syncCurrentQuestionTime()
+  if (!hasDraftChanges.value) {
+    return
+  }
+  const questionIds = getDraftQuestionIdsToSave({ force })
+  if (!questionIds.length) {
     return
   }
 
-  syncCurrentQuestionTime()
   savingDraft.value = true
   try {
-    await practiceApi.saveDraft(sessionId.value, buildDraftPayload())
+    const payload = {
+      baseVersion: draftVersion.value,
+      changes: buildDraftChanges(questionIds)
+    }
+    const response = await practiceApi.saveDraft(sessionId.value, payload)
+    const draftData = response.data || {}
     hasDraftChanges.value = false
-    draftSavedAt.value = new Date().toLocaleTimeString('zh-CN', { hour12: false })
+    draftDirtyQuestionIds.clear()
+    draftVersion.value = Math.max(Number(draftData.version) || draftVersion.value + 1, 0)
+    draftSavedAt.value = new Date(Number(draftData.savedAt) || Date.now()).toLocaleTimeString('zh-CN', { hour12: false })
 
     session.value = {
       ...session.value,
-      answeredCount: answeredCount.value,
-      totalTimeCost: questions.value
-        .map((question) => buildTimeCost(question.questionId))
-        .reduce((sum, seconds) => sum + seconds, 0)
+      answeredCount: Number(draftData.answeredCount) || answeredCount.value,
+      totalTimeCost: Number(draftData.totalTimeCost)
+        || questions.value.map((question) => buildTimeCost(question.questionId)).reduce((sum, seconds) => sum + seconds, 0)
     }
   } catch (error) {
+    if (isDraftConflictError(error)) {
+      try {
+        await loadDraftSnapshot()
+      } catch (refreshError) {
+        if (!silent) {
+          showToast(refreshError.message || '草稿刷新失败')
+        }
+      }
+      hasDraftChanges.value = false
+      draftDirtyQuestionIds.clear()
+      if (!silent) {
+        showToast('草稿版本冲突，已刷新最新草稿')
+      }
+      return
+    }
     if (!silent) {
-      showToast(error.message || '保存草稿失败')
+      showToast(resolveRequestErrorMessage(error, '保存草稿失败'))
     }
   } finally {
     savingDraft.value = false
@@ -1388,9 +1505,11 @@ const submitAllAnswers = async () => {
   }
 
   syncCurrentQuestionTime()
+  stopAutoSaveTimer()
   submitting.value = true
   try {
     const payload = {
+      baseVersion: draftVersion.value,
       answers: questions.value.map((question) => ({
         questionId: question.questionId,
         userAnswer: buildUserAnswer(question),
@@ -1411,10 +1530,26 @@ const submitAllAnswers = async () => {
     }
     currentQuestionEnteredAt.value = 0
     hasDraftChanges.value = false
-    stopAutoSaveTimer()
+    draftDirtyQuestionIds.clear()
+    draftVersion.value = Math.max(Number(draftVersion.value) + 1, 0)
     showToast('提交成功')
   } catch (error) {
-    showToast(error.message || '提交失败')
+    if (isDraftConflictError(error)) {
+      try {
+        await loadDraftSnapshot()
+      } catch (refreshError) {
+        showToast(refreshError.message || '草稿刷新失败')
+      }
+      hasDraftChanges.value = false
+      draftDirtyQuestionIds.clear()
+      startAutoSaveTimer()
+      showToast('草稿版本冲突，请确认最新答案后再提交')
+      return
+    }
+    if (!isSubmitted.value) {
+      startAutoSaveTimer()
+    }
+    showToast(resolveRequestErrorMessage(error, '提交失败'))
   } finally {
     submitting.value = false
   }
@@ -1433,6 +1568,8 @@ const reloadPage = () => {
   currentQuestionEnteredAt.value = 0
   hasDraftChanges.value = false
   draftSavedAt.value = ''
+  draftVersion.value = 0
+  draftDirtyQuestionIds.clear()
   void loadPage()
 }
 
@@ -2019,3 +2156,4 @@ button:disabled {
   }
 }
 </style>
+

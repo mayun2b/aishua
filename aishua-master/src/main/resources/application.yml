@@ -22,7 +22,7 @@ ai:
   qwen:
     chat-api: https://dashscope.aliyuncs.com/compatible-mode/v1/chat/completions
     api-key: sk-e61dc444fb6f4503965af827b50a4ab0
-    chat-model: qwen3.5-flash
+    chat-model: qwen3.6-plus
     chat-max-tokens: 220
 
 mybatis-plus:
@@ -53,3 +53,10 @@ practice:
     rate-level-3: 90
     # 小样本阶段的最高等级限制（0-3）
     warmup-level-cap: 2
+  draft:
+    # 草稿从 Redis 落库间隔（毫秒）
+    db-sync-interval-ms: 300000
+    # 启动后首次执行落库任务的延迟（毫秒）
+    db-sync-initial-delay-ms: 300000
+    # 单次落库最多处理的会话数
+    sync-batch-size: 50

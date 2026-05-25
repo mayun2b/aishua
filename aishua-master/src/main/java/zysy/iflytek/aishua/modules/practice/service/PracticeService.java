@@ -1,8 +1,10 @@
 package zysy.iflytek.aishua.modules.practice.service;
 
 import zysy.iflytek.aishua.modules.practice.entity.dto.PracticeBatchSubmitDTO;
+import zysy.iflytek.aishua.modules.practice.entity.dto.PracticeDraftSaveDTO;
 import zysy.iflytek.aishua.modules.practice.entity.dto.PracticeStartDTO;
 import zysy.iflytek.aishua.modules.practice.entity.vo.PracticeBatchSubmitResultVO;
+import zysy.iflytek.aishua.modules.practice.entity.vo.PracticeDraftSnapshotVO;
 import zysy.iflytek.aishua.modules.practice.entity.vo.PracticeExerciseRecordVO;
 import zysy.iflytek.aishua.modules.practice.entity.vo.PracticeQuestionSheetVO;
 import zysy.iflytek.aishua.modules.practice.entity.vo.PracticeSessionDetailVO;
@@ -20,7 +22,9 @@ public interface PracticeService {
 
     PracticeQuestionSheetVO getPracticeQuestions(Long userId, Long sessionId);
 
-    void savePracticeDraft(Long userId, Long sessionId, PracticeBatchSubmitDTO practiceBatchSubmitDTO);
+    PracticeDraftSnapshotVO getPracticeDraft(Long userId, Long sessionId);
+
+    PracticeDraftSnapshotVO savePracticeDraft(Long userId, Long sessionId, PracticeDraftSaveDTO practiceDraftSaveDTO);
 
     PracticeBatchSubmitResultVO submitPractice(Long userId, Long sessionId, PracticeBatchSubmitDTO practiceBatchSubmitDTO);
 

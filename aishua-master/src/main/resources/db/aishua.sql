@@ -1,4 +1,4 @@
-/*
+﻿/*
  Navicat Premium Dump SQL
 
  Source Server         : localhost_3306
@@ -318,6 +318,7 @@ CREATE TABLE `practice_session`  (
   `correct_count` int NULL DEFAULT 0 COMMENT '答对数',
   `wrong_count` int NULL DEFAULT 0 COMMENT '答错数',
   `total_time_cost` int NULL DEFAULT 0 COMMENT '总耗时（秒）',
+  `draft_version` int NULL DEFAULT 0 COMMENT '草稿版本',
   `status` tinyint NULL DEFAULT 1 COMMENT '状态：1-进行中，2-已完成',
   `started_at` datetime NULL DEFAULT CURRENT_TIMESTAMP COMMENT '开始时间',
   `ended_at` datetime NULL DEFAULT NULL COMMENT '结束时间',

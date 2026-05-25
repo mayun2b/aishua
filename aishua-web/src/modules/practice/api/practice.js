@@ -236,6 +236,9 @@ export default {
   getQuestions(sessionId) {
     return request.get(`/practice/${sessionId}/questions`)
   },
+  getDraft(sessionId) {
+    return request.get(`/practice/${sessionId}/draft`)
+  },
   saveDraft(sessionId, payload) {
     return request.put(`/practice/${sessionId}/draft`, payload)
   },

@@ -32,7 +32,7 @@ import java.util.function.Consumer;
 @Slf4j
 @Component
 public class QwenChatClient {
-    private static final String DEFAULT_CHAT_MODEL = "qwen3.5-flash";
+    private static final String DEFAULT_CHAT_MODEL = "qwen3.6-plus";
     private static final Duration STREAM_CONNECT_TIMEOUT = Duration.ofSeconds(8);
     private static final Duration STREAM_REQUEST_TIMEOUT = Duration.ofSeconds(80);
 

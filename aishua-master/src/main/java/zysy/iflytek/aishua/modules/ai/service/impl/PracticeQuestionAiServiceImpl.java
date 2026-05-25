@@ -712,7 +712,7 @@ public class PracticeQuestionAiServiceImpl implements PracticeQuestionAiService 
         if (StringUtils.hasText(qwenAiProperties.getChatModel())) {
             return qwenAiProperties.getChatModel().trim();
         }
-        return "qwen3.5-flash";
+        return "qwen3.6-plus";
     }
 
     private int resolveChatMaxTokens() {

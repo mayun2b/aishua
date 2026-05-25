@@ -974,7 +974,7 @@ public class WrongQuestionAiServiceImpl implements WrongQuestionAiService {
         if (StringUtils.hasText(qwenAiProperties.getChatModel())) {
             return qwenAiProperties.getChatModel().trim();
         }
-        return "qwen3.5-flash";
+        return "qwen3.6-plus";
     }
 
     private boolean isSessionOngoing(Integer status) {

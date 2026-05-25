@@ -8,6 +8,11 @@ import java.util.List;
 
 @Data
 public class PracticeBatchSubmitDTO {
+    /**
+     * Client-side draft base version for optimistic concurrency control.
+     */
+    private Integer baseVersion;
+
     @Valid
     private List<PracticeAnswerItemDTO> answers = new ArrayList<>();
 }

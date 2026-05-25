@@ -12,8 +12,10 @@ import org.springframework.web.bind.annotation.RestController;
 import zysy.iflytek.aishua.common.context.UserContext;
 import zysy.iflytek.aishua.common.result.Result;
 import zysy.iflytek.aishua.modules.practice.entity.dto.PracticeBatchSubmitDTO;
+import zysy.iflytek.aishua.modules.practice.entity.dto.PracticeDraftSaveDTO;
 import zysy.iflytek.aishua.modules.practice.entity.dto.PracticeStartDTO;
 import zysy.iflytek.aishua.modules.practice.entity.vo.PracticeBatchSubmitResultVO;
+import zysy.iflytek.aishua.modules.practice.entity.vo.PracticeDraftSnapshotVO;
 import zysy.iflytek.aishua.modules.practice.entity.vo.PracticeExerciseRecordVO;
 import zysy.iflytek.aishua.modules.practice.entity.vo.PracticeQuestionSheetVO;
 import zysy.iflytek.aishua.modules.practice.entity.vo.PracticeSessionDetailVO;
@@ -124,13 +126,20 @@ public class PracticeController {
         return Result.success(practiceService.submitPractice(userId, sessionId, practiceBatchSubmitDTO));
     }
 
-    @PutMapping("/{sessionId}/draft")
-    public Result<Boolean> savePracticeDraft(
-            @PathVariable Long sessionId,
-            @Valid @RequestBody PracticeBatchSubmitDTO practiceBatchSubmitDTO
+    @GetMapping("/{sessionId}/draft")
+    public Result<PracticeDraftSnapshotVO> getPracticeDraft(
+            @PathVariable Long sessionId
     ) {
         Long userId = UserContext.requireUserId();
-        practiceService.savePracticeDraft(userId, sessionId, practiceBatchSubmitDTO);
-        return Result.success(true);
+        return Result.success(practiceService.getPracticeDraft(userId, sessionId));
+    }
+
+    @PutMapping("/{sessionId}/draft")
+    public Result<PracticeDraftSnapshotVO> savePracticeDraft(
+            @PathVariable Long sessionId,
+            @Valid @RequestBody PracticeDraftSaveDTO practiceDraftSaveDTO
+    ) {
+        Long userId = UserContext.requireUserId();
+        return Result.success(practiceService.savePracticeDraft(userId, sessionId, practiceDraftSaveDTO));
     }
 }

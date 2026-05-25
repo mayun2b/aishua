@@ -1,9 +1,20 @@
 package zysy.iflytek.aishua.modules.practice.service.impl;
 
+import com.alibaba.fastjson2.JSON;
+import com.alibaba.fastjson2.JSONObject;
+import com.baomidou.mybatisplus.core.conditions.update.LambdaUpdateWrapper;
 import com.baomidou.mybatisplus.core.conditions.query.LambdaQueryWrapper;
 import lombok.extern.slf4j.Slf4j;
+import org.springframework.beans.factory.annotation.Value;
+import org.springframework.dao.DataAccessException;
+import org.springframework.data.redis.core.HashOperations;
+import org.springframework.data.redis.core.SetOperations;
+import org.springframework.data.redis.core.script.DefaultRedisScript;
+import org.springframework.scheduling.annotation.Scheduled;
+import org.springframework.data.redis.core.StringRedisTemplate;
 import org.springframework.stereotype.Service;
 import org.springframework.transaction.annotation.Transactional;
+import org.springframework.transaction.support.TransactionTemplate;
 import zysy.iflytek.aishua.common.exception.BusinessException;
 import zysy.iflytek.aishua.config.properties.PracticeMasteryProperties;
 import zysy.iflytek.aishua.modules.directory.entity.TextbookDirectory;
@@ -17,8 +28,11 @@ import zysy.iflytek.aishua.modules.practice.entity.UserSubjectStats;
 import zysy.iflytek.aishua.modules.practice.entity.WrongQuestion;
 import zysy.iflytek.aishua.modules.practice.entity.dto.PracticeAnswerItemDTO;
 import zysy.iflytek.aishua.modules.practice.entity.dto.PracticeBatchSubmitDTO;
+import zysy.iflytek.aishua.modules.practice.entity.dto.PracticeDraftSaveDTO;
 import zysy.iflytek.aishua.modules.practice.entity.dto.PracticeStartDTO;
 import zysy.iflytek.aishua.modules.practice.entity.vo.PracticeAnswerResultVO;
+import zysy.iflytek.aishua.modules.practice.entity.vo.PracticeDraftAnswerVO;
+import zysy.iflytek.aishua.modules.practice.entity.vo.PracticeDraftSnapshotVO;
 import zysy.iflytek.aishua.modules.practice.entity.vo.PracticeExerciseRecordVO;
 import zysy.iflytek.aishua.modules.practice.entity.vo.PracticeQuestionItemVO;
 import zysy.iflytek.aishua.modules.practice.entity.vo.PracticeQuestionSheetVO;
@@ -53,9 +67,13 @@ import zysy.iflytek.aishua.modules.tag.mapper.ExamTagMapper;
 
 import java.math.BigDecimal;
 import java.math.RoundingMode;
+import java.time.Duration;
+import java.time.Instant;
 import java.time.LocalDate;
 import java.time.LocalDateTime;
+import java.time.ZoneId;
 import java.util.ArrayList;
+import java.util.Comparator;
 import java.util.Collections;
 import java.util.HashSet;
 import java.util.LinkedHashMap;
@@ -77,6 +95,13 @@ public class PracticeServiceImpl implements PracticeService {
     private static final int DEFAULT_MASTERY_RATE_LEVEL_2 = 75;
     private static final int DEFAULT_MASTERY_RATE_LEVEL_3 = 90;
     private static final int DEFAULT_MASTERY_WARMUP_LEVEL_CAP = 2;
+    private static final int DRAFT_CACHE_TTL_DAYS = 7;
+    private static final Duration DRAFT_CACHE_TTL = Duration.ofDays(DRAFT_CACHE_TTL_DAYS);
+    private static final String DRAFT_REDIS_KEY_PREFIX = "practice:draft:v2:";
+    private static final String DRAFT_DIRTY_SESSION_SET_KEY = DRAFT_REDIS_KEY_PREFIX + "dirty_sessions";
+    private static final String DRAFT_SAVE_LOCK_REDIS_KEY_PREFIX = DRAFT_REDIS_KEY_PREFIX + "save_lock:";
+    private static final Duration DRAFT_SAVE_LOCK_TTL = Duration.ofSeconds(5);
+    private static final DefaultRedisScript<Long> RELEASE_DRAFT_SAVE_LOCK_SCRIPT = buildReleaseDraftSaveLockScript();
 
     private final PracticeSessionMapper practiceSessionMapper;
     private final ExerciseRecordMapper exerciseRecordMapper;
@@ -93,6 +118,11 @@ public class PracticeServiceImpl implements PracticeService {
     private final TextbookDirectoryMapper textbookDirectoryMapper;
     private final AnswerJudgeSupport answerJudgeSupport;
     private final PracticeMasteryProperties practiceMasteryProperties;
+    private final StringRedisTemplate stringRedisTemplate;
+    private final TransactionTemplate transactionTemplate;
+
+    @Value("${practice.draft.sync-batch-size:50}")
+    private int draftSyncBatchSize;
 
     public PracticeServiceImpl(
             PracticeSessionMapper practiceSessionMapper,
@@ -109,7 +139,9 @@ public class PracticeServiceImpl implements PracticeService {
             ExamTagMapper examTagMapper,
             TextbookDirectoryMapper textbookDirectoryMapper,
             AnswerJudgeSupport answerJudgeSupport,
-            PracticeMasteryProperties practiceMasteryProperties
+            PracticeMasteryProperties practiceMasteryProperties,
+            StringRedisTemplate stringRedisTemplate,
+            TransactionTemplate transactionTemplate
     ) {
         this.practiceSessionMapper = practiceSessionMapper;
         this.exerciseRecordMapper = exerciseRecordMapper;
@@ -126,6 +158,15 @@ public class PracticeServiceImpl implements PracticeService {
         this.textbookDirectoryMapper = textbookDirectoryMapper;
         this.answerJudgeSupport = answerJudgeSupport;
         this.practiceMasteryProperties = practiceMasteryProperties;
+        this.stringRedisTemplate = stringRedisTemplate;
+        this.transactionTemplate = transactionTemplate;
+    }
+
+    private static DefaultRedisScript<Long> buildReleaseDraftSaveLockScript() {
+        DefaultRedisScript<Long> script = new DefaultRedisScript<>();
+        script.setScriptText("if redis.call('get', KEYS[1]) == ARGV[1] then return redis.call('del', KEYS[1]) else return 0 end");
+        script.setResultType(Long.class);
+        return script;
     }
 
     @Override
@@ -160,6 +201,7 @@ public class PracticeServiceImpl implements PracticeService {
         practiceSession.setCorrectCount(0);
         practiceSession.setWrongCount(0);
         practiceSession.setTotalTimeCost(0);
+        practiceSession.setDraftVersion(0);
         practiceSession.setStatus(PracticeModeConstants.STATUS_ONGOING);
         practiceSession.setStartedAt(LocalDateTime.now());
         practiceSessionMapper.insert(practiceSession);
@@ -218,53 +260,112 @@ public class PracticeServiceImpl implements PracticeService {
     }
 
     @Override
-    @Transactional
-    public void savePracticeDraft(Long userId, Long sessionId, PracticeBatchSubmitDTO practiceBatchSubmitDTO) {
+    public PracticeDraftSnapshotVO getPracticeDraft(Long userId, Long sessionId) {
         PracticeSession practiceSession = requireSession(userId, sessionId);
-        if (!isSessionOngoing(practiceSession)) {
-            throw new BusinessException("当前练习已结束，无法继续保存草稿", 400);
-        }
-
         List<ExerciseRecord> sessionRecords = listSessionRecords(practiceSession.getId());
         if (sessionRecords.isEmpty()) {
             throw new BusinessException("当前练习会话没有题目数据", 404);
         }
 
-        Map<Long, ExerciseRecord> recordMap = sessionRecords.stream()
-                .collect(Collectors.toMap(ExerciseRecord::getQuestionId, Function.identity(), (left, right) -> left));
-        Map<Long, PracticeAnswerItemDTO> answerMap = toAnswerMap(practiceBatchSubmitDTO.getAnswers());
-        LocalDateTime draftTime = LocalDateTime.now();
-
-        for (Map.Entry<Long, PracticeAnswerItemDTO> entry : answerMap.entrySet()) {
-            ExerciseRecord record = recordMap.get(entry.getKey());
-            if (record == null) {
-                throw new BusinessException("存在不属于当前会话的题目", 400);
-            }
-
-            PracticeAnswerItemDTO answerItem = entry.getValue();
-            String submittedAnswer = normalizeSubmittedAnswer(answerItem.getUserAnswer());
-            int timeCost = normalizeTimeCost(answerItem.getTimeCost());
-
-            record.setUserAnswer(submittedAnswer.isEmpty() ? null : submittedAnswer);
-            // Draft save must never keep judged state.
-            record.setIsCorrect(null);
-            record.setTimeCost(timeCost);
-            record.setExerciseTime(record.getUserAnswer() == null ? null : draftTime);
-            exerciseRecordMapper.updateById(record);
+        if (!isSessionOngoing(practiceSession)) {
+            return buildDraftSnapshotFromRecords(practiceSession, sessionRecords);
         }
 
-        List<ExerciseRecord> latestRecords = listSessionRecords(practiceSession.getId());
-        int answeredCount = (int) latestRecords.stream()
-                .filter(record -> record.getUserAnswer() != null && !record.getUserAnswer().trim().isEmpty())
-                .count();
-        int totalTimeCost = latestRecords.stream()
-                .map(ExerciseRecord::getTimeCost)
-                .mapToInt(this::defaultNumber)
-                .sum();
+        PracticeDraftSnapshotVO cachedSnapshot = readDraftSnapshotFromRedis(userId, practiceSession.getId(), null);
+        if (cachedSnapshot != null) {
+            return cachedSnapshot;
+        }
 
-        practiceSession.setAnsweredCount(answeredCount);
-        practiceSession.setTotalTimeCost(totalTimeCost);
-        practiceSessionMapper.updateById(practiceSession);
+        PracticeDraftSnapshotVO fallbackSnapshot = buildDraftSnapshotFromRecords(practiceSession, sessionRecords);
+        if (isSessionOngoing(practiceSession)) {
+            try {
+                writeDraftSnapshotToRedis(userId, fallbackSnapshot);
+            } catch (RuntimeException exception) {
+                log.warn("Draft cache warm-up failed. sessionId={}", practiceSession.getId(), exception);
+            }
+        }
+        return fallbackSnapshot;
+    }
+
+    @Override
+    public PracticeDraftSnapshotVO savePracticeDraft(Long userId, Long sessionId, PracticeDraftSaveDTO practiceDraftSaveDTO) {
+        PracticeSession practiceSession = requireSession(userId, sessionId);
+        if (!isSessionOngoing(practiceSession)) {
+            throw new BusinessException("当前练习已结束，无法继续保存草稿", 400);
+        }
+
+        // Serialize draft writes per session to avoid lost updates under concurrent saves.
+        String lockToken = UUID.randomUUID().toString();
+        if (!tryAcquireDraftSaveLock(practiceSession.getId(), lockToken)) {
+            throw new BusinessException("草稿保存过于频繁，请稍后再试", 429);
+        }
+
+        try {
+            List<ExerciseRecord> sessionRecords = listSessionRecords(practiceSession.getId());
+            if (sessionRecords.isEmpty()) {
+                throw new BusinessException("当前练习会话没有题目数据", 404);
+            }
+
+            PracticeDraftSnapshotVO cachedSnapshot = readDraftSnapshotFromRedis(userId, practiceSession.getId(), null);
+            int currentVersion = cachedSnapshot == null
+                    ? defaultNumber(practiceSession.getDraftVersion())
+                    : defaultNumber(cachedSnapshot.getVersion());
+            int baseVersion = normalizeDraftVersion(practiceDraftSaveDTO.getBaseVersion());
+            if (baseVersion != currentVersion) {
+                throwDraftConflict(practiceSession.getId(), currentVersion);
+            }
+
+            Map<Long, ExerciseRecord> recordMap = sessionRecords.stream()
+                    .collect(Collectors.toMap(ExerciseRecord::getQuestionId, Function.identity(), (left, right) -> left));
+            Map<Long, PracticeAnswerItemDTO> changeMap = toAnswerMap(practiceDraftSaveDTO.getChanges());
+            for (Long questionId : changeMap.keySet()) {
+                if (!recordMap.containsKey(questionId)) {
+                    throw new BusinessException("存在不属于当前会话的题目", 400);
+                }
+            }
+
+            Map<Long, DraftAnswerState> mergedAnswers = loadDraftAnswerState(cachedSnapshot, sessionRecords);
+            long savedAt = System.currentTimeMillis();
+            for (Map.Entry<Long, PracticeAnswerItemDTO> entry : changeMap.entrySet()) {
+                PracticeAnswerItemDTO changeItem = entry.getValue();
+                String submittedAnswer = normalizeSubmittedAnswer(changeItem.getUserAnswer());
+                int timeCost = normalizeTimeCost(changeItem.getTimeCost());
+
+                if (submittedAnswer.isEmpty()) {
+                    mergedAnswers.remove(entry.getKey());
+                    continue;
+                }
+
+                DraftAnswerState answerState = mergedAnswers.computeIfAbsent(entry.getKey(), ignored -> new DraftAnswerState());
+                answerState.setQuestionId(entry.getKey());
+                answerState.setUserAnswer(submittedAnswer);
+                answerState.setTimeCost(timeCost);
+                answerState.setUpdatedAt(savedAt);
+            }
+
+            DraftStats draftStats = calculateDraftStats(mergedAnswers);
+            int nextVersion = currentVersion + 1;
+            PracticeDraftSnapshotVO snapshot = buildDraftSnapshot(
+                    practiceSession.getId(),
+                    nextVersion,
+                    draftStats.answeredCount(),
+                    draftStats.totalTimeCost(),
+                    savedAt,
+                    mergedAnswers
+            );
+
+            try {
+                writeDraftSnapshotToRedis(userId, snapshot);
+                markDraftSessionDirty(practiceSession.getId());
+            } catch (RuntimeException exception) {
+                log.warn("Draft cache write failed. sessionId={}", practiceSession.getId(), exception);
+                // Fallback path: if Redis is unavailable, persist the same snapshot to DB directly.
+                syncDraftSnapshotToDatabase(practiceSession, snapshot);
+            }
+            return snapshot;
+        } finally {
+            releaseDraftSaveLock(practiceSession.getId(), lockToken);
+        }
     }
 
     @Override
@@ -298,7 +399,8 @@ public class PracticeServiceImpl implements PracticeService {
     public PracticeSessionDetailVO getPracticeSessionDetail(Long userId, Long sessionId) {
         PracticeSession session = requireSession(userId, sessionId);
         Subject subject = session.getSubjectId() == null ? null : subjectMapper.selectById(session.getSubjectId());
-        List<PracticeExerciseRecordVO> records = listSessionExerciseRecordDetails(session.getId());
+        boolean revealCorrectAnswer = !isSessionOngoing(session);
+        List<PracticeExerciseRecordVO> records = listSessionExerciseRecordDetails(session.getId(), revealCorrectAnswer);
 
         PracticeSessionDetailVO detailVO = new PracticeSessionDetailVO();
         detailVO.setSessionId(session.getId());
@@ -310,6 +412,7 @@ public class PracticeServiceImpl implements PracticeService {
         detailVO.setCorrectCount(session.getCorrectCount());
         detailVO.setWrongCount(session.getWrongCount());
         detailVO.setTotalTimeCost(session.getTotalTimeCost());
+        detailVO.setDraftVersion(session.getDraftVersion());
         detailVO.setStatus(session.getStatus());
         detailVO.setCorrectRate(calculateRate(session.getCorrectCount(), session.getAnsweredCount()));
         detailVO.setStartedAt(session.getStartedAt());
@@ -569,6 +672,21 @@ public class PracticeServiceImpl implements PracticeService {
             throw new BusinessException("当前练习已结束，请重新开始", 400);
         }
 
+        PracticeDraftSnapshotVO cachedSnapshot = readDraftSnapshotFromRedis(userId, practiceSession.getId(), null);
+        int persistedVersion = defaultNumber(practiceSession.getDraftVersion());
+        int cachedVersion = cachedSnapshot == null ? 0 : defaultNumber(cachedSnapshot.getVersion());
+        int latestVersion = Math.max(persistedVersion, cachedVersion);
+        int baseVersion = normalizeDraftVersion(practiceBatchSubmitDTO.getBaseVersion());
+        if (baseVersion != latestVersion) {
+            throwDraftConflict(practiceSession.getId(), latestVersion);
+        }
+
+        if (cachedSnapshot != null && cachedVersion >= persistedVersion) {
+            syncDraftSnapshotToDatabase(practiceSession, cachedSnapshot);
+            practiceSession = requireSession(userId, sessionId);
+        }
+        int currentVersion = defaultNumber(practiceSession.getDraftVersion());
+
         List<ExerciseRecord> sessionRecords = listSessionRecords(practiceSession.getId());
         if (sessionRecords.isEmpty()) {
             throw new BusinessException("当前练习没有题目可提交", 400);
@@ -622,16 +740,26 @@ public class PracticeServiceImpl implements PracticeService {
             results.add(buildAnswerResult(question, submittedAnswer, isCorrect, timeCost));
         }
 
-        practiceSession.setAnsweredCount(sessionRecords.size());
-        practiceSession.setCorrectCount(correctCount);
-        practiceSession.setWrongCount(wrongCount);
-        practiceSession.setTotalTimeCost(totalTimeCost);
-        practiceSession.setStatus(PracticeModeConstants.STATUS_FINISHED);
-        practiceSession.setEndedAt(submitTime);
-        practiceSessionMapper.updateById(practiceSession);
+        int nextVersion = currentVersion + 1;
+        int finishRows = practiceSessionMapper.finishSessionByVersion(
+                practiceSession.getId(),
+                userId,
+                currentVersion,
+                nextVersion,
+                sessionRecords.size(),
+                correctCount,
+                wrongCount,
+                totalTimeCost,
+                PracticeModeConstants.STATUS_FINISHED,
+                submitTime
+        );
+        if (finishRows <= 0) {
+            throwDraftConflict(practiceSession.getId());
+        }
         updateUserSubjectLastPracticeTime(userId, practiceSession.getSubjectId(), submitTime);
+        clearDraftSnapshotCache(practiceSession.getId());
 
-        log.info("练习批量提交完成，userId={}, sessionId={}, answeredCount={}, correctCount={}",
+        log.info("练习提交完成，userId={}, sessionId={}, answeredCount={}, correctCount={}",
                 userId, practiceSession.getId(), sessionRecords.size(), correctCount);
 
         PracticeBatchSubmitResultVO resultVO = new PracticeBatchSubmitResultVO();
@@ -797,7 +925,7 @@ public class PracticeServiceImpl implements PracticeService {
             Subject subject = subjectMap.get(subjectStats.getSubjectId());
             PracticeStatsVO.SubjectStatsVO subjectStatsVO = new PracticeStatsVO.SubjectStatsVO();
             subjectStatsVO.setSubjectId(subjectStats.getSubjectId());
-            subjectStatsVO.setSubjectName(subject == null ? "已删除学科" : subject.getName());
+            subjectStatsVO.setSubjectName(subject == null ? "未知学科" : subject.getName());
             subjectStatsVO.setTotalCount(defaultNumber(subjectStats.getTotalCount()));
             subjectStatsVO.setCorrectCount(defaultNumber(subjectStats.getCorrectCount()));
             subjectStatsVO.setWrongCount(defaultNumber(subjectStats.getWrongCount()));
@@ -865,9 +993,9 @@ public class PracticeServiceImpl implements PracticeService {
 
         PracticeStatsVO.KnowledgeMasteryVO masteryVO = new PracticeStatsVO.KnowledgeMasteryVO();
         masteryVO.setTagId(mastery.getTagId());
-        masteryVO.setTagName(tag == null ? "已删除考点" : tag.getName());
+        masteryVO.setTagName(tag == null ? "未知知识点" : tag.getName());
         masteryVO.setSubjectId(mastery.getSubjectId());
-        masteryVO.setSubjectName(subject == null ? "已删除学科" : subject.getName());
+        masteryVO.setSubjectName(subject == null ? "未知学科" : subject.getName());
         masteryVO.setTotalCount(defaultNumber(mastery.getTotalCount()));
         masteryVO.setCorrectCount(defaultNumber(mastery.getCorrectCount()));
         masteryVO.setWrongCount(defaultNumber(mastery.getWrongCount()));
@@ -949,7 +1077,7 @@ public class PracticeServiceImpl implements PracticeService {
             throw new BusinessException("学科不存在", 404);
         }
         if (!Integer.valueOf(1).equals(subject.getIsEnabled())) {
-            throw new BusinessException("当前学科已停用，暂不支持练习", 400);
+            throw new BusinessException("当前学科未启用，无法开始练习", 400);
         }
         return subject;
     }
@@ -963,7 +1091,7 @@ public class PracticeServiceImpl implements PracticeService {
             throw new BusinessException("请先加入该学科后再开始练习", 400);
         }
         if (!Integer.valueOf(1).equals(userSubject.getStatus())) {
-            throw new BusinessException("当前学科学习状态不可用，请先恢复后再练习", 400);
+            throw new BusinessException("当前学科学习状态不可用，请恢复后再练习", 400);
         }
         return userSubject;
     }
@@ -1096,7 +1224,7 @@ public class PracticeServiceImpl implements PracticeService {
                 .orderByAsc(ExerciseRecord::getId));
     }
 
-    private List<PracticeExerciseRecordVO> listSessionExerciseRecordDetails(Long sessionId) {
+    private List<PracticeExerciseRecordVO> listSessionExerciseRecordDetails(Long sessionId, boolean revealCorrectAnswer) {
         List<ExerciseRecord> records = listSessionRecords(sessionId).stream()
                 .filter(record -> record.getUserAnswer() != null)
                 .toList();
@@ -1122,7 +1250,7 @@ public class PracticeServiceImpl implements PracticeService {
             recordVO.setQuestionType(question == null ? null : question.getType());
             recordVO.setDifficulty(question == null ? null : question.getDifficulty());
             recordVO.setUserAnswer(record.getUserAnswer());
-            recordVO.setCorrectAnswer(question == null ? null : question.getAnswer());
+            recordVO.setCorrectAnswer(revealCorrectAnswer && question != null ? question.getAnswer() : null);
             recordVO.setIsCorrect(record.getIsCorrect());
             recordVO.setTimeCost(record.getTimeCost());
             recordVO.setExerciseTime(record.getExerciseTime());
@@ -1237,13 +1365,495 @@ public class PracticeServiceImpl implements PracticeService {
         Map<Long, PracticeAnswerItemDTO> answerMap = new LinkedHashMap<>();
         for (PracticeAnswerItemDTO answer : answers) {
             if (answer == null || answer.getQuestionId() == null || answer.getQuestionId() <= 0) {
-                throw new BusinessException("存在不合法的作答题目", 400);
+                throw new BusinessException("作答数据不合法，题目ID不能为空", 400);
             }
             if (answerMap.putIfAbsent(answer.getQuestionId(), answer) != null) {
                 throw new BusinessException("存在重复的题目作答数据", 400);
             }
         }
         return answerMap;
+    }
+
+    private PracticeDraftSnapshotVO buildDraftSnapshotFromRecords(PracticeSession practiceSession, List<ExerciseRecord> sessionRecords) {
+        Map<Long, DraftAnswerState> answerStateMap = new LinkedHashMap<>();
+        long latestUpdatedAt = 0L;
+        for (ExerciseRecord record : sessionRecords) {
+            DraftAnswerState answerState = new DraftAnswerState();
+            answerState.setQuestionId(record.getQuestionId());
+            answerState.setUserAnswer(normalizeStoredAnswer(record.getUserAnswer()));
+            answerState.setTimeCost(normalizeTimeCost(record.getTimeCost()));
+            long updatedAt = toEpochMilli(record.getExerciseTime());
+            answerState.setUpdatedAt(updatedAt);
+            latestUpdatedAt = Math.max(latestUpdatedAt, updatedAt);
+            answerStateMap.put(record.getQuestionId(), answerState);
+        }
+        DraftStats draftStats = calculateDraftStats(answerStateMap);
+        long savedAt = latestUpdatedAt > 0 ? latestUpdatedAt : 0L;
+        return buildDraftSnapshot(
+                practiceSession.getId(),
+                defaultNumber(practiceSession.getDraftVersion()),
+                draftStats.answeredCount(),
+                draftStats.totalTimeCost(),
+                savedAt,
+                answerStateMap
+        );
+    }
+
+    private Map<Long, DraftAnswerState> loadDraftAnswerState(
+            PracticeDraftSnapshotVO cachedSnapshot,
+            List<ExerciseRecord> sessionRecords
+    ) {
+        if (cachedSnapshot != null) {
+            // Redis snapshot is the source of truth for ongoing sessions.
+            Map<Long, DraftAnswerState> answerStateMap = new LinkedHashMap<>();
+            for (PracticeDraftAnswerVO answer : cachedSnapshot.getAnswers()) {
+                if (answer == null || answer.getQuestionId() == null || answer.getQuestionId() <= 0) {
+                    continue;
+                }
+                DraftAnswerState answerState = new DraftAnswerState();
+                answerState.setQuestionId(answer.getQuestionId());
+                answerState.setUserAnswer(normalizeStoredAnswer(answer.getUserAnswer()));
+                answerState.setTimeCost(normalizeTimeCost(answer.getTimeCost()));
+                answerState.setUpdatedAt(answer.getUpdatedAt() == null ? cachedSnapshot.getSavedAt() : answer.getUpdatedAt());
+                answerStateMap.put(answer.getQuestionId(), answerState);
+            }
+            return answerStateMap;
+        }
+
+        Map<Long, DraftAnswerState> answerStateMap = new LinkedHashMap<>();
+        for (ExerciseRecord record : sessionRecords) {
+            DraftAnswerState answerState = new DraftAnswerState();
+            answerState.setQuestionId(record.getQuestionId());
+            answerState.setUserAnswer(normalizeStoredAnswer(record.getUserAnswer()));
+            answerState.setTimeCost(normalizeTimeCost(record.getTimeCost()));
+            answerState.setUpdatedAt(toEpochMilli(record.getExerciseTime()));
+            answerStateMap.put(record.getQuestionId(), answerState);
+        }
+        return answerStateMap;
+    }
+
+    private PracticeDraftSnapshotVO readDraftSnapshotFromRedis(Long userId, Long sessionId, Integer expectedVersion) {
+        try {
+            HashOperations<String, Object, Object> hashOps = stringRedisTemplate.opsForHash();
+            String metaKey = buildDraftMetaRedisKey(sessionId);
+            Map<Object, Object> metaMap = hashOps.entries(metaKey);
+            if (metaMap == null || metaMap.isEmpty()) {
+                return null;
+            }
+
+            Long cachedUserId = parseLongValue(metaMap.get("userId"), null);
+            if (cachedUserId == null || !cachedUserId.equals(userId)) {
+                return null;
+            }
+
+            int cachedVersion = parseIntValue(metaMap.get("version"), -1);
+            if (expectedVersion != null && cachedVersion != expectedVersion) {
+                return null;
+            }
+
+            int answeredCount = parseIntValue(metaMap.get("answeredCount"), 0);
+            int totalTimeCost = parseIntValue(metaMap.get("totalTimeCost"), 0);
+            long savedAt = parseLongValue(metaMap.get("savedAt"), 0L);
+
+            String answersKey = buildDraftAnswersRedisKey(sessionId);
+            Map<Object, Object> rawAnswers = hashOps.entries(answersKey);
+            Map<Long, DraftAnswerState> answerStateMap = new LinkedHashMap<>();
+            if (rawAnswers != null && !rawAnswers.isEmpty()) {
+                for (Map.Entry<Object, Object> entry : rawAnswers.entrySet()) {
+                    Long questionId = parseLongValue(entry.getKey(), null);
+                    if (questionId == null || questionId <= 0) {
+                        continue;
+                    }
+                    DraftAnswerState answerState = parseDraftAnswerState(entry.getValue());
+                    if (answerState == null) {
+                        continue;
+                    }
+                    answerState.setQuestionId(questionId);
+                    answerStateMap.put(questionId, answerState);
+                }
+            }
+
+            if (!answerStateMap.isEmpty() && answeredCount == 0 && totalTimeCost == 0) {
+                DraftStats draftStats = calculateDraftStats(answerStateMap);
+                answeredCount = draftStats.answeredCount();
+                totalTimeCost = draftStats.totalTimeCost();
+            }
+
+            return buildDraftSnapshot(sessionId, cachedVersion, answeredCount, totalTimeCost, savedAt, answerStateMap);
+        } catch (DataAccessException exception) {
+            log.warn("Read draft cache failed. sessionId={}", sessionId, exception);
+            return null;
+        }
+    }
+
+    private void writeDraftSnapshotToRedis(Long userId, PracticeDraftSnapshotVO snapshot) {
+        HashOperations<String, Object, Object> hashOps = stringRedisTemplate.opsForHash();
+        String metaKey = buildDraftMetaRedisKey(snapshot.getSessionId());
+        String answersKey = buildDraftAnswersRedisKey(snapshot.getSessionId());
+
+        Map<String, String> metaMap = new LinkedHashMap<>();
+        metaMap.put("userId", String.valueOf(userId));
+        metaMap.put("version", String.valueOf(defaultNumber(snapshot.getVersion())));
+        metaMap.put("answeredCount", String.valueOf(defaultNumber(snapshot.getAnsweredCount())));
+        metaMap.put("totalTimeCost", String.valueOf(defaultNumber(snapshot.getTotalTimeCost())));
+        metaMap.put("savedAt", String.valueOf(snapshot.getSavedAt() == null ? System.currentTimeMillis() : snapshot.getSavedAt()));
+        hashOps.putAll(metaKey, metaMap);
+        stringRedisTemplate.expire(metaKey, DRAFT_CACHE_TTL);
+
+        stringRedisTemplate.delete(answersKey);
+        Map<String, String> answerPayloadMap = new LinkedHashMap<>();
+        for (PracticeDraftAnswerVO answer : snapshot.getAnswers()) {
+            if (answer == null || answer.getQuestionId() == null || answer.getQuestionId() <= 0) {
+                continue;
+            }
+            DraftAnswerState answerState = new DraftAnswerState();
+            answerState.setQuestionId(answer.getQuestionId());
+            String normalizedAnswer = normalizeStoredAnswer(answer.getUserAnswer());
+            boolean answered = normalizedAnswer != null && !normalizedAnswer.isBlank();
+            answerState.setUserAnswer(answered ? normalizedAnswer : "");
+            answerState.setTimeCost(normalizeTimeCost(answer.getTimeCost()));
+            answerState.setUpdatedAt(answer.getUpdatedAt() == null ? snapshot.getSavedAt() : answer.getUpdatedAt());
+            JSONObject payload = new JSONObject();
+            payload.put("questionId", answerState.getQuestionId());
+            payload.put("userAnswer", answerState.getUserAnswer());
+            payload.put("timeCost", answerState.getTimeCost());
+            payload.put("updatedAt", answerState.getUpdatedAt());
+            payload.put("answered", answered);
+            answerPayloadMap.put(String.valueOf(answer.getQuestionId()), payload.toJSONString());
+        }
+        if (!answerPayloadMap.isEmpty()) {
+            hashOps.putAll(answersKey, answerPayloadMap);
+            stringRedisTemplate.expire(answersKey, DRAFT_CACHE_TTL);
+        }
+    }
+
+    private void clearDraftSnapshotCache(Long sessionId) {
+        try {
+            stringRedisTemplate.delete(List.of(buildDraftMetaRedisKey(sessionId), buildDraftAnswersRedisKey(sessionId)));
+            removeDraftSessionDirty(sessionId);
+        } catch (DataAccessException exception) {
+            log.warn("Clear draft cache failed. sessionId={}", sessionId, exception);
+        }
+    }
+
+    private void markDraftSessionDirty(Long sessionId) {
+        if (sessionId == null || sessionId <= 0) {
+            return;
+        }
+        try {
+            stringRedisTemplate.opsForSet().add(DRAFT_DIRTY_SESSION_SET_KEY, String.valueOf(sessionId));
+        } catch (DataAccessException exception) {
+            log.warn("Mark draft session dirty failed. sessionId={}", sessionId, exception);
+        }
+    }
+
+    private void removeDraftSessionDirty(Long sessionId) {
+        if (sessionId == null || sessionId <= 0) {
+            return;
+        }
+        try {
+            stringRedisTemplate.opsForSet().remove(DRAFT_DIRTY_SESSION_SET_KEY, String.valueOf(sessionId));
+        } catch (DataAccessException exception) {
+            log.warn("Clear draft dirty marker failed. sessionId={}", sessionId, exception);
+        }
+    }
+
+    // Periodically flush Redis-first draft snapshots to MySQL to reduce request-path write pressure.
+    @Scheduled(
+            fixedDelayString = "${practice.draft.db-sync-interval-ms:300000}",
+            initialDelayString = "${practice.draft.db-sync-initial-delay-ms:300000}"
+    )
+    public void syncDraftCacheToDatabase() {
+        List<Long> dirtySessionIds = listDirtyDraftSessionIds(Math.max(draftSyncBatchSize, 1));
+        if (dirtySessionIds.isEmpty()) {
+            return;
+        }
+
+        for (Long dirtySessionId : dirtySessionIds) {
+            if (dirtySessionId == null || dirtySessionId <= 0) {
+                continue;
+            }
+            try {
+                transactionTemplate.executeWithoutResult(status -> syncDraftSessionToDatabase(dirtySessionId));
+            } catch (Exception exception) {
+                log.warn("Scheduled draft sync failed. sessionId={}", dirtySessionId, exception);
+            }
+        }
+    }
+
+    private List<Long> listDirtyDraftSessionIds(int limit) {
+        try {
+            SetOperations<String, String> setOps = stringRedisTemplate.opsForSet();
+            Set<String> members = setOps.members(DRAFT_DIRTY_SESSION_SET_KEY);
+            if (members == null || members.isEmpty()) {
+                return List.of();
+            }
+            return members.stream()
+                    .map(item -> parseLongValue(item, null))
+                    .filter(id -> id != null && id > 0)
+                    .limit(Math.max(limit, 1))
+                    .toList();
+        } catch (DataAccessException exception) {
+            log.warn("List dirty draft sessions failed.", exception);
+            return List.of();
+        }
+    }
+
+    private void syncDraftSnapshotToDatabase(PracticeSession practiceSession, PracticeDraftSnapshotVO cachedSnapshot) {
+        if (practiceSession == null || cachedSnapshot == null) {
+            return;
+        }
+
+        int expectedVersion = defaultNumber(practiceSession.getDraftVersion());
+        int nextVersion = Math.max(expectedVersion, defaultNumber(cachedSnapshot.getVersion()));
+        int affectedRows = practiceSessionMapper.updateDraftMetaByVersion(
+                practiceSession.getId(),
+                practiceSession.getUserId(),
+                expectedVersion,
+                nextVersion,
+                defaultNumber(cachedSnapshot.getAnsweredCount()),
+                defaultNumber(cachedSnapshot.getTotalTimeCost())
+        );
+        if (affectedRows <= 0) {
+            PracticeSession latestSession = practiceSessionMapper.selectById(practiceSession.getId());
+            int latestVersion = latestSession == null ? -1 : defaultNumber(latestSession.getDraftVersion());
+            if (latestVersion < nextVersion) {
+                throwDraftConflict(practiceSession.getId(), nextVersion);
+            }
+        }
+
+        List<ExerciseRecord> sessionRecords = listSessionRecords(practiceSession.getId());
+        if (!sessionRecords.isEmpty()) {
+            persistDraftSnapshotAnswersToDatabase(sessionRecords, cachedSnapshot);
+        }
+    }
+
+    private void syncDraftSessionToDatabase(Long sessionId) {
+        PracticeSession practiceSession = practiceSessionMapper.selectById(sessionId);
+        if (practiceSession == null || !isSessionOngoing(practiceSession)) {
+            clearDraftSnapshotCache(sessionId);
+            return;
+        }
+
+        PracticeDraftSnapshotVO cachedSnapshot = readDraftSnapshotFromRedis(practiceSession.getUserId(), sessionId, null);
+        if (cachedSnapshot == null) {
+            removeDraftSessionDirty(sessionId);
+            return;
+        }
+
+        syncDraftSnapshotToDatabase(practiceSession, cachedSnapshot);
+        PracticeDraftSnapshotVO latestSnapshot = readDraftSnapshotFromRedis(practiceSession.getUserId(), sessionId, null);
+        if (latestSnapshot == null || defaultNumber(latestSnapshot.getVersion()) <= defaultNumber(cachedSnapshot.getVersion())) {
+            removeDraftSessionDirty(sessionId);
+        }
+    }
+
+    private void persistDraftSnapshotAnswersToDatabase(List<ExerciseRecord> sessionRecords, PracticeDraftSnapshotVO snapshot) {
+        long fallbackUpdatedAt = snapshot.getSavedAt() == null || snapshot.getSavedAt() <= 0
+                ? System.currentTimeMillis()
+                : snapshot.getSavedAt();
+        Map<Long, DraftAnswerState> draftAnswerMap = new LinkedHashMap<>();
+        for (PracticeDraftAnswerVO answer : snapshot.getAnswers()) {
+            if (answer == null || answer.getQuestionId() == null || answer.getQuestionId() <= 0) {
+                continue;
+            }
+            DraftAnswerState state = new DraftAnswerState();
+            state.setQuestionId(answer.getQuestionId());
+            state.setUserAnswer(normalizeStoredAnswer(answer.getUserAnswer()));
+            state.setTimeCost(normalizeTimeCost(answer.getTimeCost()));
+            state.setUpdatedAt(answer.getUpdatedAt() == null ? fallbackUpdatedAt : answer.getUpdatedAt());
+            draftAnswerMap.put(answer.getQuestionId(), state);
+        }
+
+        for (ExerciseRecord record : sessionRecords) {
+            DraftAnswerState draftAnswerState = draftAnswerMap.get(record.getQuestionId());
+            String targetAnswer = draftAnswerState == null ? null : normalizeStoredAnswer(draftAnswerState.getUserAnswer());
+            int targetTimeCost = draftAnswerState == null ? 0 : normalizeTimeCost(draftAnswerState.getTimeCost());
+            Long updateEpochMilli = draftAnswerState == null ? null : draftAnswerState.getUpdatedAt();
+            LocalDateTime targetExerciseTime = targetAnswer == null
+                    ? null
+                    : LocalDateTime.ofInstant(Instant.ofEpochMilli(updateEpochMilli == null ? fallbackUpdatedAt : updateEpochMilli), ZoneId.systemDefault());
+
+            String currentAnswer = normalizeStoredAnswer(record.getUserAnswer());
+            int currentTimeCost = normalizeTimeCost(record.getTimeCost());
+            long currentExerciseEpoch = toEpochMilli(record.getExerciseTime());
+            long targetExerciseEpoch = toEpochMilli(targetExerciseTime);
+            if (equalsNullable(currentAnswer, targetAnswer)
+                    && currentTimeCost == targetTimeCost
+                    && currentExerciseEpoch == targetExerciseEpoch) {
+                continue;
+            }
+
+            LambdaUpdateWrapper<ExerciseRecord> updateWrapper = new LambdaUpdateWrapper<ExerciseRecord>()
+                    .eq(ExerciseRecord::getId, record.getId())
+                    .set(ExerciseRecord::getUserAnswer, targetAnswer)
+                    .set(ExerciseRecord::getIsCorrect, null)
+                    .set(ExerciseRecord::getTimeCost, targetTimeCost)
+                    .set(ExerciseRecord::getExerciseTime, targetExerciseTime);
+            exerciseRecordMapper.update(null, updateWrapper);
+        }
+    }
+
+    private DraftStats calculateDraftStats(Map<Long, DraftAnswerState> answerStateMap) {
+        int answeredCount = 0;
+        int totalTimeCost = 0;
+        for (DraftAnswerState answerState : answerStateMap.values()) {
+            String userAnswer = normalizeStoredAnswer(answerState.getUserAnswer());
+            int timeCost = normalizeTimeCost(answerState.getTimeCost());
+            if (userAnswer != null && !userAnswer.isBlank()) {
+                answeredCount += 1;
+            }
+            totalTimeCost += timeCost;
+        }
+        return new DraftStats(answeredCount, totalTimeCost);
+    }
+
+    private PracticeDraftSnapshotVO buildDraftSnapshot(
+            Long sessionId,
+            int version,
+            int answeredCount,
+            int totalTimeCost,
+            long savedAt,
+            Map<Long, DraftAnswerState> answerStateMap
+    ) {
+        PracticeDraftSnapshotVO snapshot = new PracticeDraftSnapshotVO();
+        snapshot.setSessionId(sessionId);
+        snapshot.setVersion(version);
+        snapshot.setAnsweredCount(answeredCount);
+        snapshot.setTotalTimeCost(totalTimeCost);
+        snapshot.setSavedAt(savedAt);
+
+        List<PracticeDraftAnswerVO> answers = answerStateMap.values().stream()
+                .filter(state -> state.getQuestionId() != null && state.getQuestionId() > 0)
+                .filter(state -> {
+                    String userAnswer = normalizeStoredAnswer(state.getUserAnswer());
+                    return userAnswer != null && !userAnswer.isBlank();
+                })
+                .sorted(Comparator.comparing(DraftAnswerState::getQuestionId))
+                .map(state -> {
+                    PracticeDraftAnswerVO answerVO = new PracticeDraftAnswerVO();
+                    answerVO.setQuestionId(state.getQuestionId());
+                    answerVO.setUserAnswer(normalizeStoredAnswer(state.getUserAnswer()));
+                    answerVO.setTimeCost(normalizeTimeCost(state.getTimeCost()));
+                    answerVO.setUpdatedAt(state.getUpdatedAt() == null ? savedAt : state.getUpdatedAt());
+                    return answerVO;
+                })
+                .toList();
+        snapshot.setAnswers(answers);
+        return snapshot;
+    }
+
+    private DraftAnswerState parseDraftAnswerState(Object rawValue) {
+        if (!(rawValue instanceof String rawText) || rawText.isBlank()) {
+            return null;
+        }
+        try {
+            JSONObject jsonObject = JSON.parseObject(rawText);
+            DraftAnswerState answerState = new DraftAnswerState();
+            String normalizedAnswer = normalizeStoredAnswer(jsonObject.getString("userAnswer"));
+            Boolean answered = jsonObject.getBoolean("answered");
+            if (Boolean.FALSE.equals(answered) && normalizedAnswer == null) {
+                answerState.setUserAnswer(null);
+            } else {
+                answerState.setUserAnswer(normalizedAnswer);
+            }
+            answerState.setTimeCost(normalizeTimeCost(jsonObject.getInteger("timeCost")));
+            answerState.setUpdatedAt(parseLongValue(jsonObject.get("updatedAt"), 0L));
+            return answerState;
+        } catch (Exception exception) {
+            return null;
+        }
+    }
+
+    private Integer parseIntValue(Object value, Integer defaultValue) {
+        if (value == null) {
+            return defaultValue;
+        }
+        try {
+            return Integer.parseInt(String.valueOf(value));
+        } catch (NumberFormatException exception) {
+            return defaultValue;
+        }
+    }
+
+    private Long parseLongValue(Object value, Long defaultValue) {
+        if (value == null) {
+            return defaultValue;
+        }
+        try {
+            return Long.parseLong(String.valueOf(value));
+        } catch (NumberFormatException exception) {
+            return defaultValue;
+        }
+    }
+
+    private long toEpochMilli(LocalDateTime value) {
+        if (value == null) {
+            return 0L;
+        }
+        return value.atZone(ZoneId.systemDefault()).toInstant().toEpochMilli();
+    }
+
+    private boolean equalsNullable(String left, String right) {
+        if (left == null && right == null) {
+            return true;
+        }
+        if (left == null || right == null) {
+            return false;
+        }
+        return left.equals(right);
+    }
+
+    private String normalizeStoredAnswer(String value) {
+        if (value == null) {
+            return null;
+        }
+        String normalized = value.trim();
+        return normalized.isEmpty() ? null : normalized;
+    }
+
+    private String buildDraftMetaRedisKey(Long sessionId) {
+        return DRAFT_REDIS_KEY_PREFIX + sessionId + ":meta";
+    }
+
+    private String buildDraftAnswersRedisKey(Long sessionId) {
+        return DRAFT_REDIS_KEY_PREFIX + sessionId + ":answers";
+    }
+
+    private String buildDraftSaveLockRedisKey(Long sessionId) {
+        return DRAFT_SAVE_LOCK_REDIS_KEY_PREFIX + sessionId;
+    }
+
+    private boolean tryAcquireDraftSaveLock(Long sessionId, String lockToken) {
+        if (sessionId == null || sessionId <= 0 || lockToken == null || lockToken.isBlank()) {
+            return false;
+        }
+        try {
+            Boolean locked = stringRedisTemplate.opsForValue().setIfAbsent(
+                    buildDraftSaveLockRedisKey(sessionId),
+                    lockToken,
+                    DRAFT_SAVE_LOCK_TTL
+            );
+            return Boolean.TRUE.equals(locked);
+        } catch (DataAccessException exception) {
+            log.warn("Acquire draft save lock failed. sessionId={}", sessionId, exception);
+            return true;
+        }
+    }
+
+    private void releaseDraftSaveLock(Long sessionId, String lockToken) {
+        if (sessionId == null || sessionId <= 0 || lockToken == null || lockToken.isBlank()) {
+            return;
+        }
+        try {
+            stringRedisTemplate.execute(
+                    RELEASE_DRAFT_SAVE_LOCK_SCRIPT,
+                    List.of(buildDraftSaveLockRedisKey(sessionId)),
+                    lockToken
+            );
+        } catch (DataAccessException exception) {
+            log.warn("Release draft save lock failed. sessionId={}", sessionId, exception);
+        }
     }
 
     private void updateUserSubjectLastPracticeTime(Long userId, Long subjectId, LocalDateTime practiceTime) {
@@ -1263,7 +1873,7 @@ public class PracticeServiceImpl implements PracticeService {
             return;
         }
         if (subjectId <= 0) {
-            throw new BusinessException("学科筛选条件不合法", 400);
+            throw new BusinessException("学科参数不合法", 400);
         }
     }
 
@@ -1272,7 +1882,7 @@ public class PracticeServiceImpl implements PracticeService {
             return;
         }
         if (directoryId <= 0) {
-            throw new BusinessException("目录筛选条件不合法", 400);
+            throw new BusinessException("目录参数不合法", 400);
         }
 
         TextbookDirectory directory = textbookDirectoryMapper.selectById(directoryId);
@@ -1289,7 +1899,7 @@ public class PracticeServiceImpl implements PracticeService {
             return;
         }
         if (masterStatus != 0 && masterStatus != 1) {
-            throw new BusinessException("掌握状态筛选条件不合法", 400);
+            throw new BusinessException("掌握状态筛选参数仅支持 0 或 1", 400);
         }
     }
 
@@ -1536,7 +2146,7 @@ public class PracticeServiceImpl implements PracticeService {
             return DEFAULT_QUESTION_COUNT;
         }
         if (questionCount < 1 || questionCount > MAX_QUESTION_COUNT) {
-            throw new BusinessException("题目数量范围应为 1 到 50", 400);
+            throw new BusinessException("题目数量必须在 1 到 50 之间", 400);
         }
         return questionCount;
     }
@@ -1561,7 +2171,7 @@ public class PracticeServiceImpl implements PracticeService {
             return 30;
         }
         if (days != 7 && days != 30 && days != 90) {
-            throw new BusinessException("统计天数仅支持 7、30、90", 400);
+            throw new BusinessException("统计天数仅支持 7、30 或 90", 400);
         }
         return days;
     }
@@ -1571,6 +2181,36 @@ public class PracticeServiceImpl implements PracticeService {
             return 0;
         }
         return Math.max(timeCost, 0);
+    }
+
+    private int normalizeDraftVersion(Integer baseVersion) {
+        if (baseVersion == null || baseVersion < 0) {
+            throw new BusinessException("草稿版本不合法", 400);
+        }
+        return baseVersion;
+    }
+
+    private void throwDraftConflict(Long sessionId) {
+        throwDraftConflict(sessionId, null);
+    }
+
+    private void throwDraftConflict(Long sessionId, Integer latestVersionHint) {
+        int latestVersion = latestVersionHint == null ? 0 : Math.max(latestVersionHint, 0);
+        if (latestVersionHint == null) {
+            PracticeSession latestSession = practiceSessionMapper.selectById(sessionId);
+            if (latestSession != null) {
+                latestVersion = Math.max(latestVersion, defaultNumber(latestSession.getDraftVersion()));
+                PracticeDraftSnapshotVO cachedSnapshot = readDraftSnapshotFromRedis(
+                        latestSession.getUserId(),
+                        sessionId,
+                        null
+                );
+                if (cachedSnapshot != null) {
+                    latestVersion = Math.max(latestVersion, defaultNumber(cachedSnapshot.getVersion()));
+                }
+            }
+        }
+        throw new BusinessException("草稿版本冲突，请刷新后重试。serverVersion=" + latestVersion, 409);
     }
 
     private String normalizeSubmittedAnswer(String userAnswer) {
@@ -1683,6 +2323,51 @@ public class PracticeServiceImpl implements PracticeService {
         return Integer.valueOf(PracticeModeConstants.STATUS_ONGOING).equals(practiceSession.getStatus());
     }
 
+    private static class DraftAnswerState {
+        private Long questionId;
+        private String userAnswer;
+        private Integer timeCost;
+        private Long updatedAt;
+
+        public Long getQuestionId() {
+            return questionId;
+        }
+
+        public void setQuestionId(Long questionId) {
+            this.questionId = questionId;
+        }
+
+        public String getUserAnswer() {
+            return userAnswer;
+        }
+
+        public void setUserAnswer(String userAnswer) {
+            this.userAnswer = userAnswer;
+        }
+
+        public Integer getTimeCost() {
+            return timeCost;
+        }
+
+        public void setTimeCost(Integer timeCost) {
+            this.timeCost = timeCost;
+        }
+
+        public Long getUpdatedAt() {
+            return updatedAt;
+        }
+
+        public void setUpdatedAt(Long updatedAt) {
+            this.updatedAt = updatedAt;
+        }
+    }
+
+    private record DraftStats(int answeredCount, int totalTimeCost) {
+    }
+
     private record TagSnapshot(List<Long> tagIds, List<String> tagNames) {
     }
 }
+
+
+

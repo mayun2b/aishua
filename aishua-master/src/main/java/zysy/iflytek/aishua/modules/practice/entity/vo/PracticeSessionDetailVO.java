@@ -27,6 +27,8 @@ public class PracticeSessionDetailVO {
 
     private Integer totalTimeCost;
 
+    private Integer draftVersion;
+
     private Integer status;
 
     private BigDecimal correctRate;

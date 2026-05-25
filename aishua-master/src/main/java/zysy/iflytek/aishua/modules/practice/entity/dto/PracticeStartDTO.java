@@ -9,15 +9,15 @@ import java.util.List;
 
 @Data
 public class PracticeStartDTO {
-    @NotNull(message = "学科不能为空")
+    @NotNull(message = "subjectId is required")
     private Long subjectId;
 
-    @Min(value = 1, message = "练习模式不合法")
-    @Max(value = 4, message = "练习模式不合法")
+    @Min(value = 1, message = "practiceMode must be between 1 and 4")
+    @Max(value = 4, message = "practiceMode must be between 1 and 4")
     private Integer practiceMode = 1;
 
-    @Min(value = 1, message = "题目数量至少为 1")
-    @Max(value = 50, message = "题目数量不能超过 50")
+    @Min(value = 1, message = "questionCount must be >= 1")
+    @Max(value = 50, message = "questionCount must be <= 50")
     private Integer questionCount = 10;
 
     private List<Long> tagIds;
