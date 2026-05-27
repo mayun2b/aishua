@@ -14,9 +14,12 @@ import lombok.Data;
 import java.time.LocalDateTime;
 import java.util.List;
 
+/**
+ * 考试数据传输对象，负责相关业务逻辑与流程处理。
+ */
 @Data
 public class LegacyExamRecordSaveDTO {
-    @Min(value = 1, message = "用户ID不合法")
+    @Min(value = 1, message = "用户编号不合法")
     private Long userId;
 
     @NotBlank(message = "考试名称不能为空")

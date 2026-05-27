@@ -4,6 +4,9 @@ import lombok.Data;
 
 import java.time.LocalDateTime;
 
+/**
+ * 学科视图对象，负责相关业务逻辑与流程处理。
+ */
 @Data
 public class MySubjectVO {
     private Long userSubjectId;

@@ -3,15 +3,18 @@ import { clearAuthStorage, loadAuthStorage } from '../../auth/utils/authStorage'
 
 const AI_TIMEOUT_MS = 60000
 const AI_STREAM_TIMEOUT_MS = 120000
+const AI_STREAM_ERROR_MESSAGE = 'AI 服务异常，请稍后重试'
 
 const resolveApiBaseUrl = () => {
   const raw = process.env.VUE_APP_API_BASE_URL || '/api'
   return raw.endsWith('/') ? raw.slice(0, -1) : raw
 }
 
+const API_BASE_URL = resolveApiBaseUrl()
+
 const buildApiUrl = (path) => {
   const normalized = path.startsWith('/') ? path : `/${path}`
-  return `${resolveApiBaseUrl()}${normalized}`
+  return `${API_BASE_URL}${normalized}`
 }
 
 const parseJsonSafe = (value) => {
@@ -53,6 +56,31 @@ const createTimeoutError = () => {
   const error = new Error('AI 响应超时，请稍后再试')
   error.code = 'ECONNABORTED'
   return error
+}
+
+// 统一处理 SSE 事件块，保持流式接口行为一致。
+const handleSseEventBlock = (eventBlock, { onChunk, onDone }) => {
+  const { eventName, rawData } = parseSseEvent(eventBlock)
+  const parsedPayload = parseJsonSafe(rawData) || {}
+
+  if (eventName === 'chunk') {
+    const delta = parsedPayload.delta || ''
+    if (delta) {
+      onChunk?.(delta)
+    }
+    return null
+  }
+
+  if (eventName === 'done') {
+    onDone?.(parsedPayload)
+    return parsedPayload
+  }
+
+  if (eventName === 'error') {
+    throw new Error(parsedPayload.message || AI_STREAM_ERROR_MESSAGE)
+  }
+
+  return null
 }
 
 const streamPost = async (path, payload, options = {}) => {
@@ -119,34 +147,18 @@ const streamPost = async (path, payload, options = {}) => {
         const eventBlock = buffer.slice(0, splitIndex)
         buffer = buffer.slice(splitIndex + 2)
 
-        const { eventName, rawData } = parseSseEvent(eventBlock)
-        const parsedPayload = parseJsonSafe(rawData) || {}
-
-        if (eventName === 'chunk') {
-          const delta = parsedPayload?.delta || ''
-          if (delta) {
-            onChunk?.(delta)
-          }
-        } else if (eventName === 'done') {
-          donePayload = parsedPayload
-          onDone?.(donePayload)
-        } else if (eventName === 'error') {
-          throw new Error(parsedPayload?.message || 'AI 服务异常，请稍后重试')
+        const handledDonePayload = handleSseEventBlock(eventBlock, { onChunk, onDone })
+        if (handledDonePayload) {
+          donePayload = handledDonePayload
         }
 
         splitIndex = buffer.indexOf('\n\n')
       }
     }
 
+    // 兜底处理最后一个未分隔完成的事件块。
     if (!donePayload && buffer.trim()) {
-      const { eventName, rawData } = parseSseEvent(buffer)
-      const parsedPayload = parseJsonSafe(rawData) || {}
-      if (eventName === 'done') {
-        donePayload = parsedPayload
-        onDone?.(donePayload)
-      } else if (eventName === 'error') {
-        throw new Error(parsedPayload?.message || 'AI 服务异常，请稍后重试')
-      }
+      donePayload = handleSseEventBlock(buffer, { onChunk, onDone })
     }
 
     if (!donePayload) {
@@ -167,51 +179,55 @@ const streamPost = async (path, payload, options = {}) => {
   }
 }
 
+const apiGet = (url, params) => request.get(url, { params })
+const apiPost = (url, data, config) => request.post(url, data, config)
+const apiPut = (url, data, config) => request.put(url, data, config)
+
 export default {
   start(payload) {
-    return request.post('/practice/start', payload)
+    return apiPost('/practice/start', payload)
   },
   listSessions(params) {
-    return request.get('/practice/sessions', { params })
+    return apiGet('/practice/sessions', params)
   },
   getSessionDetail(sessionId) {
-    return request.get(`/practice/sessions/${sessionId}`)
+    return apiGet(`/practice/sessions/${sessionId}`)
   },
   listRecords(params) {
-    return request.get('/practice/records', { params })
+    return apiGet('/practice/records', params)
   },
   listWrongQuestions(params) {
-    return request.get('/practice/wrong-questions', { params })
+    return apiGet('/practice/wrong-questions', params)
   },
   updateWrongQuestionMasterStatus(wrongQuestionId, masterStatus) {
-    return request.put(`/practice/wrong-questions/${wrongQuestionId}/master-status`, null, {
+    return apiPut(`/practice/wrong-questions/${wrongQuestionId}/master-status`, null, {
       params: { masterStatus }
     })
   },
   getWrongQuestionTrends(params) {
-    return request.get('/practice/wrong-questions/trend', { params })
+    return apiGet('/practice/wrong-questions/trend', params)
   },
   analyzeWrongQuestion(wrongQuestionId, payload) {
-    return request.post(
+    return apiPost(
       `/practice/wrong-questions/${wrongQuestionId}/ai-analysis`,
       payload || {},
       { timeout: AI_TIMEOUT_MS }
     )
   },
   getLatestWrongQuestionAnalysis(wrongQuestionId) {
-    return request.get(`/practice/wrong-questions/${wrongQuestionId}/ai-analysis/latest`)
+    return apiGet(`/practice/wrong-questions/${wrongQuestionId}/ai-analysis/latest`)
   },
   getLatestWrongQuestionAiSession(wrongQuestionId) {
-    return request.get(`/practice/wrong-questions/${wrongQuestionId}/ai-chat/sessions/latest`)
+    return apiGet(`/practice/wrong-questions/${wrongQuestionId}/ai-chat/sessions/latest`)
   },
   createWrongQuestionAiSession(wrongQuestionId, payload) {
-    return request.post(`/practice/wrong-questions/${wrongQuestionId}/ai-chat/sessions`, payload || {})
+    return apiPost(`/practice/wrong-questions/${wrongQuestionId}/ai-chat/sessions`, payload || {})
   },
   listWrongQuestionAiMessages(wrongQuestionId, sessionId) {
-    return request.get(`/practice/wrong-questions/${wrongQuestionId}/ai-chat/sessions/${sessionId}/messages`)
+    return apiGet(`/practice/wrong-questions/${wrongQuestionId}/ai-chat/sessions/${sessionId}/messages`)
   },
   sendWrongQuestionAiMessage(wrongQuestionId, sessionId, payload) {
-    return request.post(
+    return apiPost(
       `/practice/wrong-questions/${wrongQuestionId}/ai-chat/sessions/${sessionId}/messages`,
       payload,
       { timeout: AI_TIMEOUT_MS }
@@ -225,42 +241,42 @@ export default {
     )
   },
   closeWrongQuestionAiSession(wrongQuestionId, sessionId) {
-    return request.put(`/practice/wrong-questions/${wrongQuestionId}/ai-chat/sessions/${sessionId}/close`)
+    return apiPut(`/practice/wrong-questions/${wrongQuestionId}/ai-chat/sessions/${sessionId}/close`)
   },
   getStats(params) {
-    return request.get('/practice/stats', { params })
+    return apiGet('/practice/stats', params)
   },
   listTags(params) {
-    return request.get('/practice/tags', { params })
+    return apiGet('/practice/tags', params)
   },
   getQuestions(sessionId) {
-    return request.get(`/practice/${sessionId}/questions`)
+    return apiGet(`/practice/${sessionId}/questions`)
   },
   getDraft(sessionId) {
-    return request.get(`/practice/${sessionId}/draft`)
+    return apiGet(`/practice/${sessionId}/draft`)
   },
   saveDraft(sessionId, payload) {
-    return request.put(`/practice/${sessionId}/draft`, payload)
+    return apiPut(`/practice/${sessionId}/draft`, payload)
   },
   submitAll(sessionId, payload) {
-    return request.post(`/practice/${sessionId}/submit-all`, payload)
+    return apiPost(`/practice/${sessionId}/submit-all`, payload)
   },
   getLatestPracticeQuestionAiSession(sessionId, questionId) {
-    return request.get(`/practice/${sessionId}/questions/${questionId}/assistant/sessions/latest`)
+    return apiGet(`/practice/${sessionId}/questions/${questionId}/assistant/sessions/latest`)
   },
   createPracticeQuestionAiSession(sessionId, questionId, payload) {
-    return request.post(
+    return apiPost(
       `/practice/${sessionId}/questions/${questionId}/assistant/sessions`,
       payload || {}
     )
   },
   listPracticeQuestionAiMessages(sessionId, questionId, assistantSessionId) {
-    return request.get(
+    return apiGet(
       `/practice/${sessionId}/questions/${questionId}/assistant/sessions/${assistantSessionId}/messages`
     )
   },
   sendPracticeQuestionAiMessage(sessionId, questionId, assistantSessionId, payload) {
-    return request.post(
+    return apiPost(
       `/practice/${sessionId}/questions/${questionId}/assistant/sessions/${assistantSessionId}/messages`,
       payload,
       { timeout: AI_TIMEOUT_MS }
@@ -274,7 +290,7 @@ export default {
     )
   },
   closePracticeQuestionAiSession(sessionId, questionId, assistantSessionId) {
-    return request.put(
+    return apiPut(
       `/practice/${sessionId}/questions/${questionId}/assistant/sessions/${assistantSessionId}/close`
     )
   }

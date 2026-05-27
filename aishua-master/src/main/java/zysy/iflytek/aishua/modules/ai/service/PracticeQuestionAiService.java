@@ -8,6 +8,9 @@ import zysy.iflytek.aishua.modules.ai.entity.vo.PracticeQuestionAiChatSessionVO;
 import java.util.List;
 import java.util.function.Consumer;
 
+/**
+ * 智能问答服务接口，定义该领域对外能力契约。
+ */
 public interface PracticeQuestionAiService {
     PracticeQuestionAiChatSessionVO getLatestChatSession(Long userId, Long practiceSessionId, Long questionId);
 

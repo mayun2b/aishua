@@ -9,6 +9,9 @@ import lombok.Data;
 
 import java.util.List;
 
+/**
+ * 题目数据传输对象，负责相关业务逻辑与流程处理。
+ */
 @Data
 public class QuestionUpsertDTO {
     @NotBlank(message = "题干不能为空")
@@ -23,7 +26,7 @@ public class QuestionUpsertDTO {
     @Max(value = 5, message = "题型取值范围为 1-5")
     private Integer type;
 
-    @Size(max = 10000, message = "选项JSON长度不能超过 10000")
+    @Size(max = 10000, message = "选项结构文本长度不能超过 10000")
     private String options;
 
     @NotBlank(message = "标准答案不能为空")
@@ -33,7 +36,7 @@ public class QuestionUpsertDTO {
     @Size(max = 20000, message = "题目解析长度不能超过 20000")
     private String analysis;
 
-    @Size(max = 2000, message = "题目图片URL长度不能超过 2000")
+    @Size(max = 2000, message = "题目图片地址长度不能超过 2000")
     private String imageUrls;
 
     @Size(max = 5000, message = "图片描述长度不能超过 5000")

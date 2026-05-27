@@ -21,9 +21,13 @@ spring:
 ai:
   qwen:
     chat-api: https://dashscope.aliyuncs.com/compatible-mode/v1/chat/completions
-    api-key: sk-e61dc444fb6f4503965af827b50a4ab0
+    api-key: sk-69500d5de19748ecac6d27d4a9083b30
     chat-model: qwen3.6-plus
     chat-max-tokens: 220
+
+dify:
+  base-url: http://localhost
+  api-key: app-brUWNXBqSB0sM0w5VfKDTTG7
 
 mybatis-plus:
   configuration:

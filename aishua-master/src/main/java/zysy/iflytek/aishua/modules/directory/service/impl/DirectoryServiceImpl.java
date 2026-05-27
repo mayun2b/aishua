@@ -18,17 +18,26 @@ import java.util.LinkedHashMap;
 import java.util.List;
 import java.util.Map;
 
+/**
+ * 目录服务实现，负责相关业务逻辑与流程处理。
+ */
 @Slf4j
 @Service
 public class DirectoryServiceImpl implements DirectoryService {
     private final TextbookDirectoryMapper textbookDirectoryMapper;
     private final SubjectMapper subjectMapper;
 
+    /**
+     * 构造方法，负责注入依赖组件。
+     */
     public DirectoryServiceImpl(TextbookDirectoryMapper textbookDirectoryMapper, SubjectMapper subjectMapper) {
         this.textbookDirectoryMapper = textbookDirectoryMapper;
         this.subjectMapper = subjectMapper;
     }
 
+    /**
+     * 执行查询业务流程并返回结果。
+     */
     @Override
     public List<DirectoryTreeVO> listTreeBySubject(Long subjectId) {
         requireSubject(subjectId);
@@ -39,6 +48,9 @@ public class DirectoryServiceImpl implements DirectoryService {
         return buildTree(directories);
     }
 
+    /**
+     * 执行创建业务流程并返回结果。
+     */
     @Override
     @Transactional
     public DirectoryTreeVO createDirectory(DirectoryUpsertDTO directoryUpsertDTO) {
@@ -59,6 +71,9 @@ public class DirectoryServiceImpl implements DirectoryService {
         return toVO(requireDirectory(directory.getId()));
     }
 
+    /**
+     * 执行保存与更新业务流程。
+     */
     @Override
     @Transactional
     public DirectoryTreeVO updateDirectory(Long id, DirectoryUpsertDTO directoryUpsertDTO) {
@@ -88,6 +103,9 @@ public class DirectoryServiceImpl implements DirectoryService {
         return toVO(requireDirectory(id));
     }
 
+    /**
+     * 执行删除与清理业务流程。
+     */
     @Override
     @Transactional
     public void deleteDirectory(Long id) {
@@ -101,6 +119,9 @@ public class DirectoryServiceImpl implements DirectoryService {
         log.info("教材目录删除成功，directoryId={}", directory.getId());
     }
 
+    /**
+     * 构建业务处理所需数据。
+     */
     private List<DirectoryTreeVO> buildTree(List<TextbookDirectory> directories) {
         Map<Long, DirectoryTreeVO> nodeMap = new LinkedHashMap<>();
         for (TextbookDirectory directory : directories) {
@@ -120,10 +141,16 @@ public class DirectoryServiceImpl implements DirectoryService {
         return roots;
     }
 
+    /**
+     * 解析并转换输入数据。
+     */
     private Long normalizeParentId(Long parentId) {
         return parentId == null || parentId <= 0 ? 0L : parentId;
     }
 
+    /**
+     * 执行核心业务处理流程。
+     */
     private boolean wouldCreateCycle(Long currentId, Long parentId) {
         Long cursor = parentId;
         while (cursor != null && cursor > 0) {
@@ -139,6 +166,9 @@ public class DirectoryServiceImpl implements DirectoryService {
         return false;
     }
 
+    /**
+     * 执行参数与状态校验。
+     */
     private Subject requireSubject(Long subjectId) {
         if (subjectId == null || subjectId <= 0) {
             throw new BusinessException("所属学科不合法", 400);
@@ -150,6 +180,9 @@ public class DirectoryServiceImpl implements DirectoryService {
         return subject;
     }
 
+    /**
+     * 执行参数与状态校验。
+     */
     private TextbookDirectory requireDirectory(Long id) {
         TextbookDirectory directory = textbookDirectoryMapper.selectById(id);
         if (directory == null || Integer.valueOf(1).equals(directory.getDeleted())) {
@@ -158,6 +191,9 @@ public class DirectoryServiceImpl implements DirectoryService {
         return directory;
     }
 
+    /**
+     * 执行参数与状态校验。
+     */
     private TextbookDirectory requireParentInSubject(Long parentId, Long subjectId) {
         TextbookDirectory parent = requireDirectory(parentId);
         if (!parent.getSubjectId().equals(subjectId)) {
@@ -166,6 +202,9 @@ public class DirectoryServiceImpl implements DirectoryService {
         return parent;
     }
 
+    /**
+     * 执行核心业务处理流程。
+     */
     private DirectoryTreeVO toVO(TextbookDirectory directory) {
         DirectoryTreeVO directoryTreeVO = new DirectoryTreeVO();
         directoryTreeVO.setId(directory.getId());

@@ -1,54 +1,31 @@
-import axios from 'axios';
+import request from '../core/http/request'
 
-const request = axios.create({
-  baseURL: 'http://localhost:8081',
-  timeout: 30000,
-  headers: {
-    'Content-Type': 'application/json'
+function normalizeUrl(url) {
+  if (typeof url !== 'string') {
+    return url
   }
-});
 
-request.interceptors.request.use(
-  (config) => {
-    const token = localStorage.getItem('token');
-    if (token) {
-      config.headers.Authorization = `Bearer ${token}`;
-    }
-    return config;
-  },
-  (error) => {
-    return Promise.reject(error);
+  // 旧模块大量写法是 /api/xxx，统一适配为新请求层的 /xxx。
+  return url.startsWith('/api/') ? url.slice(4) : url
+}
+
+function normalizeConfig(config = {}) {
+  return {
+    ...config,
+    url: normalizeUrl(config.url)
   }
-);
+}
 
-request.interceptors.response.use(
-  (response) => {
-    const data = response.data;
+function legacyRequest(config) {
+  return request(normalizeConfig(config))
+}
 
-    // 兼容后端统一返回 Result<T>：code=200/401/500...
-    if (data && typeof data === 'object' && 'code' in data) {
-      if (data.code === 401) {
-        localStorage.removeItem('token');
-        localStorage.removeItem('userId');
-        localStorage.removeItem('username');
-        localStorage.removeItem('isAdmin');
-        window.location.href = '/login';
-      }
-      return data;
-    }
+legacyRequest.get = (url, config) => request.get(normalizeUrl(url), config)
+legacyRequest.post = (url, data, config) => request.post(normalizeUrl(url), data, config)
+legacyRequest.put = (url, data, config) => request.put(normalizeUrl(url), data, config)
+legacyRequest.delete = (url, config) => request.delete(normalizeUrl(url), config)
+legacyRequest.patch = (url, data, config) => request.patch(normalizeUrl(url), data, config)
+legacyRequest.interceptors = request.interceptors
+legacyRequest.defaults = request.defaults
 
-    return data;
-  },
-  (error) => {
-    if (error.response?.status === 401) {
-      localStorage.removeItem('token');
-      localStorage.removeItem('userId');
-      localStorage.removeItem('username');
-      localStorage.removeItem('isAdmin');
-      window.location.href = '/login';
-    }
-    return Promise.reject(error);
-  }
-);
-
-export default request;
+export default legacyRequest

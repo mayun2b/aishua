@@ -16,17 +16,26 @@ import java.util.HashSet;
 import java.util.List;
 import java.util.Set;
 
+/**
+ * 学科服务实现，负责相关业务逻辑与流程处理。
+ */
 @Slf4j
 @Service
 public class UserSubjectServiceImpl implements UserSubjectService {
     private final SubjectMapper subjectMapper;
     private final UserSubjectMapper userSubjectMapper;
 
+    /**
+     * 构造方法，负责注入依赖组件。
+     */
     public UserSubjectServiceImpl(SubjectMapper subjectMapper, UserSubjectMapper userSubjectMapper) {
         this.subjectMapper = subjectMapper;
         this.userSubjectMapper = userSubjectMapper;
     }
 
+    /**
+     * 执行查询业务流程并返回结果。
+     */
     @Override
     public List<SubjectCatalogVO> listSubjectCatalog(Long userId) {
         List<Subject> subjects = subjectMapper.selectList(new LambdaQueryWrapper<Subject>()
@@ -40,16 +49,22 @@ public class UserSubjectServiceImpl implements UserSubjectService {
                 .toList();
     }
 
+    /**
+     * 执行查询业务流程并返回结果。
+     */
     @Override
     public List<MySubjectVO> listMySubjects(Long userId) {
         return userSubjectMapper.selectMySubjects(userId);
     }
 
+    /**
+     * 执行核心业务处理流程。
+     */
     @Override
     @Transactional
     public MySubjectVO joinSubject(Long userId, Long subjectId) {
         if (subjectId == null || subjectId <= 0) {
-            throw new BusinessException("学科ID不合法", 400);
+            throw new BusinessException("学科编号不合法", 400);
         }
 
         Subject subject = subjectMapper.selectById(subjectId);
@@ -70,6 +85,9 @@ public class UserSubjectServiceImpl implements UserSubjectService {
         return mySubjectVO;
     }
 
+    /**
+     * 执行核心业务处理流程。
+     */
     private SubjectCatalogVO toCatalogVO(Subject subject, boolean joined) {
         SubjectCatalogVO subjectCatalogVO = new SubjectCatalogVO();
         subjectCatalogVO.setId(subject.getId());

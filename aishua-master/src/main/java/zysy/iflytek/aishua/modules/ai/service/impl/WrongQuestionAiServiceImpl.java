@@ -9,7 +9,6 @@ import org.springframework.stereotype.Service;
 import org.springframework.transaction.annotation.Transactional;
 import org.springframework.util.StringUtils;
 import zysy.iflytek.aishua.common.exception.BusinessException;
-import zysy.iflytek.aishua.config.properties.QwenAiProperties;
 import zysy.iflytek.aishua.modules.practice.entity.ExerciseRecord;
 import zysy.iflytek.aishua.modules.practice.entity.UserKnowledgeMastery;
 import zysy.iflytek.aishua.modules.practice.entity.WrongQuestion;
@@ -30,6 +29,7 @@ import zysy.iflytek.aishua.modules.ai.mapper.WrongQuestionAiChatSessionMapper;
 import zysy.iflytek.aishua.modules.practice.mapper.WrongQuestionMapper;
 import zysy.iflytek.aishua.modules.ai.service.WrongQuestionAiService;
 import zysy.iflytek.aishua.modules.ai.support.QwenChatClient;
+import zysy.iflytek.aishua.modules.ai.support.QwenChatOptionsResolver;
 import zysy.iflytek.aishua.modules.question.entity.Question;
 import zysy.iflytek.aishua.modules.question.mapper.QuestionMapper;
 import zysy.iflytek.aishua.modules.tag.entity.ExamTag;
@@ -42,16 +42,23 @@ import java.util.Comparator;
 import java.util.HashMap;
 import java.util.List;
 import java.util.Map;
-import java.util.UUID;
 import java.util.function.Consumer;
 
+import static zysy.iflytek.aishua.modules.ai.support.AiServiceSupport.defaultNumber;
+import static zysy.iflytek.aishua.modules.ai.support.AiServiceSupport.mapRoleName;
+import static zysy.iflytek.aishua.modules.ai.support.AiServiceSupport.mapRoleToOpenAiRole;
+import static zysy.iflytek.aishua.modules.ai.support.AiServiceSupport.newCode;
+import static zysy.iflytek.aishua.modules.ai.support.AiServiceSupport.ROLE_ASSISTANT;
+import static zysy.iflytek.aishua.modules.ai.support.AiServiceSupport.ROLE_USER;
+
+/**
+ * 错题智能服务实现，负责分析、会话管理与对话持久化。 */
+/**
+ * 智能问答服务实现，负责相关业务逻辑与流程处理。
+ */
 @Slf4j
 @Service
 public class WrongQuestionAiServiceImpl implements WrongQuestionAiService {
-    private static final int ROLE_SYSTEM = 1;
-    private static final int ROLE_USER = 2;
-    private static final int ROLE_ASSISTANT = 3;
-
     private static final int SESSION_STATUS_ONGOING = 1;
     private static final int SESSION_STATUS_CLOSED = 2;
 
@@ -65,7 +72,6 @@ public class WrongQuestionAiServiceImpl implements WrongQuestionAiService {
     private static final int MAX_WEAK_KNOWLEDGE_POINTS = 8;
 
     private static final String PROMPT_VERSION = "wq-ai-v2-lean";
-    private static final String MODEL_PROVIDER = "qwen";
 
     private static final int MAX_SUMMARY_CHARS = 100;
     private static final int MAX_ERROR_REASONS = 3;
@@ -79,39 +85,18 @@ public class WrongQuestionAiServiceImpl implements WrongQuestionAiService {
     private static final int MAX_HISTORY_MESSAGE_CHARS = 120;
     private static final int MAX_CHAT_REPLY_CHARS = 120;
     private static final int MAX_CHAT_REPLY_DETAIL_CHARS = 220;
+    private static final int MIN_CHAT_MAX_TOKENS = 120;
+    private static final int DETAIL_CHAT_TOKEN_BOOST = 120;
+    private static final int MAX_CHAT_MAX_TOKENS = 480;
 
     private static final String CHAT_CONCISE_POLICY_PROMPT = """
-            Reply in Simplified Chinese with ultra concise style.
-            Rules:
-            1) Plain text only, no markdown headings/sections.
-            2) First sentence gives the conclusion.
-            3) Then provide at most 2 short reasons.
-            4) Default total length <= 120 Chinese characters.
-            5) If user explicitly asks for detail/examples, allow up to 220 Chinese characters.
-            6) If context is insufficient, state what is missing in one sentence.
-            """;
+            Reply in Simplified Chinese with ultra concise style. Rules: 1) Plain text only. 2) First sentence gives conclusion. 3) Then at most 2 short reasons. 4) Default <= 120 Chinese chars. 5) If user asks for detail/examples, allow up to 220 chars. 6) If context is insufficient, state what is missing in one sentence.            """;
 
     private static final String ANALYSIS_SYSTEM_PROMPT = """
-            你是一名严谨高效的中学刷题辅导老师。
-            请基于给定错题上下文输出结构化诊断结果。
-            输出必须是 JSON（json）对象，不要 markdown、不要代码块、不要额外解释。
-            必须包含字段：
-            - summary: string（结论）
-            - error_reasons: string[]（1~3条）
-            - reason_evidence: string[]（1~3条）
-            - solution_steps: string[]（2~3条）
-            - knowledge_points: string[]（1~3条）
-            - avoidance_tips: string[]（1~2条）
-            约束：
-            1) 不输出以上字段之外的任何字段。
-            2) 内容简洁、可执行、避免重复。
-            """;
+            You are a rigorous tutor for wrong-question analysis. Output JSON only (no markdown/code block). Required fields: summary, error_reasons, reason_evidence, solution_steps, knowledge_points, avoidance_tips. Keep concise and actionable. Use Simplified Chinese in values.            """;
 
     private static final String CHAT_SYSTEM_PROMPT = """
-            你是一名耐心的错题讲解老师。
-            请严格围绕当前错题和用户追问作答，不要编造题目信息。
-            先给结论，再给简短推理；若上下文不足，明确说明缺失信息并给出下一步建议。
-            """;
+            You are a patient wrong-question coach. Answer only based on provided context and user follow-up. Give conclusion first, then short reasoning; if context is insufficient, state missing info and suggest next step.            """;
 
     private final WrongQuestionMapper wrongQuestionMapper;
     private final QuestionMapper questionMapper;
@@ -122,8 +107,11 @@ public class WrongQuestionAiServiceImpl implements WrongQuestionAiService {
     private final WrongQuestionAiChatSessionMapper wrongQuestionAiChatSessionMapper;
     private final WrongQuestionAiChatMessageMapper wrongQuestionAiChatMessageMapper;
     private final QwenChatClient qwenChatClient;
-    private final QwenAiProperties qwenAiProperties;
+    private final QwenChatOptionsResolver qwenChatOptionsResolver;
 
+    /**
+     * 构造方法，负责注入依赖组件。
+     */
     public WrongQuestionAiServiceImpl(
             WrongQuestionMapper wrongQuestionMapper,
             QuestionMapper questionMapper,
@@ -134,7 +122,7 @@ public class WrongQuestionAiServiceImpl implements WrongQuestionAiService {
             WrongQuestionAiChatSessionMapper wrongQuestionAiChatSessionMapper,
             WrongQuestionAiChatMessageMapper wrongQuestionAiChatMessageMapper,
             QwenChatClient qwenChatClient,
-            QwenAiProperties qwenAiProperties
+            QwenChatOptionsResolver qwenChatOptionsResolver
     ) {
         this.wrongQuestionMapper = wrongQuestionMapper;
         this.questionMapper = questionMapper;
@@ -145,9 +133,12 @@ public class WrongQuestionAiServiceImpl implements WrongQuestionAiService {
         this.wrongQuestionAiChatSessionMapper = wrongQuestionAiChatSessionMapper;
         this.wrongQuestionAiChatMessageMapper = wrongQuestionAiChatMessageMapper;
         this.qwenChatClient = qwenChatClient;
-        this.qwenAiProperties = qwenAiProperties;
+        this.qwenChatOptionsResolver = qwenChatOptionsResolver;
     }
 
+    /**
+     * 执行核心业务处理流程。
+     */
     @Override
     public WrongQuestionAiAnalysisVO analyzeWrongQuestion(
             Long userId,
@@ -157,7 +148,7 @@ public class WrongQuestionAiServiceImpl implements WrongQuestionAiService {
         WrongQuestion wrongQuestion = requireWrongQuestion(userId, wrongQuestionId);
         Question question = requireQuestion(wrongQuestion.getQuestionId());
 
-        // Build immutable snapshot for reproducibility and troubleshooting.
+        // 构建不可变快照，便于问题复现与排查。
         JSONObject contextSnapshot = buildContextSnapshot(userId, wrongQuestion, question);
         String userPrompt = buildAnalysisUserPrompt(contextSnapshot, requestDTO == null ? null : requestDTO.getExtraInstruction());
         List<QwenChatClient.ChatMessage> messages = List.of(
@@ -182,8 +173,8 @@ public class WrongQuestionAiServiceImpl implements WrongQuestionAiService {
             analysis.setContextSnapshot(contextSnapshot.toJSONString());
             analysis.setResultJson(resultJson.toJSONString());
             analysis.setSummary(resultJson.getString("summary"));
-            analysis.setModelProvider(MODEL_PROVIDER);
-            analysis.setModelName(resolveChatModelName());
+            analysis.setModelProvider(qwenChatOptionsResolver.modelProvider());
+            analysis.setModelName(qwenChatOptionsResolver.resolveChatModelName());
             analysis.setPromptVersion(PROMPT_VERSION);
             analysis.setPromptTokens(chatResult.usage().promptTokens());
             analysis.setCompletionTokens(chatResult.usage().completionTokens());
@@ -198,13 +189,16 @@ public class WrongQuestionAiServiceImpl implements WrongQuestionAiService {
                     (int) (System.currentTimeMillis() - beginMs));
             throw exception;
         } catch (Exception exception) {
-            persistFailedAnalysis(userId, wrongQuestion, question, contextSnapshot, "AI 分析失败",
+            persistFailedAnalysis(userId, wrongQuestion, question, contextSnapshot, "智能分析失败",
                     (int) (System.currentTimeMillis() - beginMs));
-            log.error("错题AI分析失败, userId={}, wrongQuestionId={}", userId, wrongQuestionId, exception);
-            throw new BusinessException("AI 分析失败，请稍后重试", 500);
+            log.error("Wrong-question 智能分析失败, userId={}, wrongQuestionId={}", userId, wrongQuestionId, exception);
+            throw new BusinessException("智能分析失败，请稍后重试", 500);
         }
     }
 
+    /**
+     * 执行查询业务流程并返回结果。
+     */
     @Override
     public WrongQuestionAiAnalysisVO getLatestAnalysis(Long userId, Long wrongQuestionId) {
         requireWrongQuestion(userId, wrongQuestionId);
@@ -215,21 +209,27 @@ public class WrongQuestionAiServiceImpl implements WrongQuestionAiService {
                 .orderByDesc(WrongQuestionAiAnalysis::getId)
                 .last("LIMIT 1"));
         if (analysis == null) {
-            throw new BusinessException("该错题暂无 AI 分析记录", 404);
+            throw new BusinessException("当前错题不存在智能分析记录", 404);
         }
         return toAnalysisVO(analysis, parseStoredJson(analysis.getResultJson()));
     }
 
+    /**
+     * 执行查询业务流程并返回结果。
+     */
     @Override
     public WrongQuestionAiChatSessionVO getLatestChatSession(Long userId, Long wrongQuestionId) {
         requireWrongQuestion(userId, wrongQuestionId);
         WrongQuestionAiChatSession session = findLatestAssistantSession(userId, wrongQuestionId);
         if (session == null) {
-            throw new BusinessException("当前错题暂无助手记录", 404);
+            throw new BusinessException("\u5f53\u524d\u9519\u9898\u6682\u65e0\u52a9\u624b\u4f1a\u8bdd", 404);
         }
         return toSessionVO(session);
     }
 
+    /**
+     * 执行创建业务流程并返回结果。
+     */
     @Override
     @Transactional
     public WrongQuestionAiChatSessionVO createChatSession(
@@ -288,6 +288,9 @@ public class WrongQuestionAiServiceImpl implements WrongQuestionAiService {
         return toSessionVO(session);
     }
 
+    /**
+     * 执行查询业务流程并返回结果。
+     */
     @Override
     public List<WrongQuestionAiChatMessageVO> listChatMessages(Long userId, Long wrongQuestionId, Long sessionId) {
         requireWrongQuestion(userId, wrongQuestionId);
@@ -304,6 +307,9 @@ public class WrongQuestionAiServiceImpl implements WrongQuestionAiService {
         return messages.stream().map(this::toMessageVO).toList();
     }
 
+    /**
+     * 执行核心业务处理流程。
+     */
     @Override
     public WrongQuestionAiChatMessageVO sendChatMessage(
             Long userId,
@@ -314,6 +320,9 @@ public class WrongQuestionAiServiceImpl implements WrongQuestionAiService {
         return doSendChatMessage(userId, wrongQuestionId, sessionId, requestDTO, null);
     }
 
+    /**
+     * 执行核心业务处理流程。
+     */
     @Override
     public WrongQuestionAiChatMessageVO streamChatMessage(
             Long userId,
@@ -325,6 +334,9 @@ public class WrongQuestionAiServiceImpl implements WrongQuestionAiService {
         return doSendChatMessage(userId, wrongQuestionId, sessionId, requestDTO, chunkConsumer);
     }
 
+    /**
+     * 执行核心业务处理流程。
+     */
     private WrongQuestionAiChatMessageVO doSendChatMessage(
             Long userId,
             Long wrongQuestionId,
@@ -334,7 +346,7 @@ public class WrongQuestionAiServiceImpl implements WrongQuestionAiService {
     ) {
         WrongQuestionAiChatSession session = requireSession(userId, wrongQuestionId, sessionId);
         if (!isSessionOngoing(session.getStatus())) {
-            throw new BusinessException("当前会话已结束，请新建会话", 400);
+            throw new BusinessException("当前对话会话已关闭，请新建会话后重试", 400);
         }
 
         WrongQuestion wrongQuestion = requireWrongQuestion(userId, wrongQuestionId);
@@ -355,11 +367,13 @@ public class WrongQuestionAiServiceImpl implements WrongQuestionAiService {
         userMessage.setLatencyMs(0);
         wrongQuestionAiChatMessageMapper.insert(userMessage);
 
-        // Build context with question facts, latest analysis and short history.
+        // 组合题目事实、最新分析和近期对话，构建上下文。
         JSONObject chatContext = buildChatContext(userId, wrongQuestion, question, session);
         List<QwenChatClient.ChatMessage> messages = buildChatPromptMessages(chatContext, userId, wrongQuestionId, content);
         int chatMaxTokens = resolveChatMaxTokens(content);
-        int maxReplyChars = shouldAllowDetailedAnswer(content) ? MAX_CHAT_REPLY_DETAIL_CHARS : MAX_CHAT_REPLY_CHARS;
+        int maxReplyChars = qwenChatOptionsResolver.shouldAllowDetailedAnswer(content)
+                ? MAX_CHAT_REPLY_DETAIL_CHARS
+                : MAX_CHAT_REPLY_CHARS;
 
         long beginMs = System.currentTimeMillis();
         try {
@@ -375,8 +389,8 @@ public class WrongQuestionAiServiceImpl implements WrongQuestionAiService {
             assistantMessage.setRole(ROLE_ASSISTANT);
             assistantMessage.setMessageType(MESSAGE_TYPE_TEXT);
             assistantMessage.setContentText(assistantContent);
-            assistantMessage.setModelProvider(MODEL_PROVIDER);
-            assistantMessage.setModelName(resolveChatModelName());
+            assistantMessage.setModelProvider(qwenChatOptionsResolver.modelProvider());
+            assistantMessage.setModelName(qwenChatOptionsResolver.resolveChatModelName());
             assistantMessage.setPromptTokens(chatResult.usage().promptTokens());
             assistantMessage.setCompletionTokens(chatResult.usage().completionTokens());
             assistantMessage.setTotalTokens(chatResult.usage().totalTokens());
@@ -393,8 +407,8 @@ public class WrongQuestionAiServiceImpl implements WrongQuestionAiService {
             failedMessage.setRole(ROLE_ASSISTANT);
             failedMessage.setMessageType(MESSAGE_TYPE_TEXT);
             failedMessage.setContentText(null);
-            failedMessage.setModelProvider(MODEL_PROVIDER);
-            failedMessage.setModelName(resolveChatModelName());
+            failedMessage.setModelProvider(qwenChatOptionsResolver.modelProvider());
+            failedMessage.setModelName(qwenChatOptionsResolver.resolveChatModelName());
             failedMessage.setStatus(RECORD_STATUS_FAILED);
             failedMessage.setErrorMessage(exception.getMessage());
             failedMessage.setLatencyMs((int) (System.currentTimeMillis() - beginMs));
@@ -404,6 +418,9 @@ public class WrongQuestionAiServiceImpl implements WrongQuestionAiService {
             throw exception;
         }
     }
+    /**
+     * 执行删除与清理业务流程。
+     */
     @Override
     @Transactional
     public WrongQuestionAiChatSessionVO closeChatSession(Long userId, Long wrongQuestionId, Long sessionId) {
@@ -423,6 +440,9 @@ public class WrongQuestionAiServiceImpl implements WrongQuestionAiService {
         return toSessionVO(session);
     }
 
+    /**
+     * 执行保存与更新业务流程。
+     */
     private void persistFailedAnalysis(
             Long userId,
             WrongQuestion wrongQuestion,
@@ -442,8 +462,8 @@ public class WrongQuestionAiServiceImpl implements WrongQuestionAiService {
         failed.setContextSnapshot(contextSnapshot.toJSONString());
         failed.setResultJson(null);
         failed.setSummary(null);
-        failed.setModelProvider(MODEL_PROVIDER);
-        failed.setModelName(resolveChatModelName());
+        failed.setModelProvider(qwenChatOptionsResolver.modelProvider());
+        failed.setModelName(qwenChatOptionsResolver.resolveChatModelName());
         failed.setPromptVersion(PROMPT_VERSION);
         failed.setPromptTokens(0);
         failed.setCompletionTokens(0);
@@ -454,6 +474,9 @@ public class WrongQuestionAiServiceImpl implements WrongQuestionAiService {
         wrongQuestionAiAnalysisMapper.insert(failed);
     }
 
+    /**
+     * 构建业务处理所需数据。
+     */
     private JSONObject buildContextSnapshot(Long userId, WrongQuestion wrongQuestion, Question question) {
         JSONObject context = new JSONObject();
         context.put("userId", userId);
@@ -480,12 +503,15 @@ public class WrongQuestionAiServiceImpl implements WrongQuestionAiService {
         context.put("wrongQuestion", wrongNode);
 
         context.put("recentWrongRecords", loadRecentWrongRecords(userId, question.getId()));
-        // Inject weak-knowledge profile for personalized diagnosis.
+        // 注入薄弱知识画像，支持个性化诊断。
         context.put("knowledgeProfile", loadKnowledgeProfile(userId, question.getSubjectId()));
         context.put("generatedAt", LocalDateTime.now().toString());
         return context;
     }
 
+    /**
+     * 执行核心业务处理流程。
+     */
     private JSONArray loadRecentWrongRecords(Long userId, Long questionId) {
         List<ExerciseRecord> records = exerciseRecordMapper.selectList(new LambdaQueryWrapper<ExerciseRecord>()
                 .eq(ExerciseRecord::getUserId, userId)
@@ -507,6 +533,9 @@ public class WrongQuestionAiServiceImpl implements WrongQuestionAiService {
         return array;
     }
 
+    /**
+     * 执行核心业务处理流程。
+     */
     private JSONArray loadKnowledgeProfile(Long userId, Long subjectId) {
         if (subjectId == null || subjectId <= 0) {
             return new JSONArray();
@@ -543,6 +572,9 @@ public class WrongQuestionAiServiceImpl implements WrongQuestionAiService {
         return array;
     }
 
+    /**
+     * 执行核心业务处理流程。
+     */
     private Map<Long, String> loadTagNameMap(List<Long> tagIds) {
         if (tagIds.isEmpty()) {
             return Collections.emptyMap();
@@ -557,19 +589,25 @@ public class WrongQuestionAiServiceImpl implements WrongQuestionAiService {
         return map;
     }
 
+    /**
+     * 构建业务处理所需数据。
+     */
     private String buildAnalysisUserPrompt(JSONObject contextSnapshot, String extraInstruction) {
         StringBuilder prompt = new StringBuilder();
-        prompt.append("请对以下错题进行诊断，并输出 JSON（json）对象。\n");
+        prompt.append("\u8bf7\u5bf9\u4ee5\u4e0b\u9519\u9898\u8fdb\u884c\u5206\u6790\uff0c\u5e76\u8fd4\u56de\u0020\u004a\u0053\u004f\u004e\u0020\u5bf9\u8c61\u3002\\n");
         if (StringUtils.hasText(extraInstruction)) {
-            prompt.append("用户补充要求：").append(extraInstruction.trim()).append("\n");
+            prompt.append("\u7528\u6237\u8865\u5145\u8981\u6c42\uff1a").append(extraInstruction.trim()).append("\\n");
         }
-        prompt.append("错题上下文：\n").append(contextSnapshot.toJSONString());
+        prompt.append("\u9519\u9898\u4e0a\u4e0b\u6587\uff1a\\n").append(contextSnapshot.toJSONString());
         return prompt.toString();
     }
 
+    /**
+     * 解析并转换输入数据。
+     */
     private JSONObject parseModelJson(String content) {
         if (!StringUtils.hasText(content)) {
-            throw new BusinessException("AI 返回内容为空", 502);
+            throw new BusinessException("智能服务响应内容为空", 502);
         }
         String trimmed = content.trim();
         if (trimmed.startsWith("```")) {
@@ -587,13 +625,16 @@ public class WrongQuestionAiServiceImpl implements WrongQuestionAiService {
                 try {
                     return JSON.parseObject(trimmed.substring(first, last + 1));
                 } catch (Exception ignoredAgain) {
-                    throw new BusinessException("AI 返回格式不合法", 502);
+                    throw new BusinessException("智能服务响应格式不合法", 502);
                 }
             }
-            throw new BusinessException("AI 返回格式不合法", 502);
+            throw new BusinessException("智能服务响应格式不合法", 502);
         }
     }
 
+    /**
+     * 解析并转换输入数据。
+     */
     private JSONObject parseStoredJson(String value) {
         if (!StringUtils.hasText(value)) {
             return new JSONObject();
@@ -605,6 +646,9 @@ public class WrongQuestionAiServiceImpl implements WrongQuestionAiService {
         }
     }
 
+    /**
+     * 解析并转换输入数据。
+     */
     private Object parseJsonIfPossible(String value) {
         if (!StringUtils.hasText(value)) {
             return null;
@@ -616,6 +660,9 @@ public class WrongQuestionAiServiceImpl implements WrongQuestionAiService {
         }
     }
 
+    /**
+     * 构建业务处理所需数据。
+     */
     private List<QwenChatClient.ChatMessage> buildChatPromptMessages(
             JSONObject context,
             Long userId,
@@ -625,9 +672,9 @@ public class WrongQuestionAiServiceImpl implements WrongQuestionAiService {
         List<QwenChatClient.ChatMessage> messages = new ArrayList<>();
         messages.add(new QwenChatClient.ChatMessage("system", CHAT_SYSTEM_PROMPT));
         messages.add(new QwenChatClient.ChatMessage("system", CHAT_CONCISE_POLICY_PROMPT));
-        messages.add(new QwenChatClient.ChatMessage("system", "题目上下文：" + context.toJSONString()));
+        messages.add(new QwenChatClient.ChatMessage("system", "Question context: " + context.toJSONString()));
 
-        // Replay recent successful messages for the same wrong question across sessions.
+        // 跨会话回放同一错题的近期有效消息。
         List<WrongQuestionAiChatMessage> historyMessages = wrongQuestionAiChatMessageMapper.selectList(
                 new LambdaQueryWrapper<WrongQuestionAiChatMessage>()
                         .inSql(
@@ -656,6 +703,9 @@ public class WrongQuestionAiServiceImpl implements WrongQuestionAiService {
         return messages;
     }
 
+    /**
+     * 构建业务处理所需数据。
+     */
     private JSONObject buildChatContext(
             Long userId,
             WrongQuestion wrongQuestion,
@@ -692,6 +742,9 @@ public class WrongQuestionAiServiceImpl implements WrongQuestionAiService {
         return context;
     }
 
+    /**
+     * 执行保存与更新业务流程。
+     */
     private void updateSessionAfterReply(
             WrongQuestionAiChatSession session,
             QwenChatClient.Usage usage,
@@ -708,6 +761,9 @@ public class WrongQuestionAiServiceImpl implements WrongQuestionAiService {
         wrongQuestionAiChatSessionMapper.updateById(session);
     }
 
+    /**
+     * 执行参数与状态校验。
+     */
     private WrongQuestion requireWrongQuestion(Long userId, Long wrongQuestionId) {
         WrongQuestion wrongQuestion = wrongQuestionMapper.selectOne(new LambdaQueryWrapper<WrongQuestion>()
                 .eq(WrongQuestion::getId, wrongQuestionId)
@@ -719,14 +775,20 @@ public class WrongQuestionAiServiceImpl implements WrongQuestionAiService {
         return wrongQuestion;
     }
 
+    /**
+     * 执行参数与状态校验。
+     */
     private Question requireQuestion(Long questionId) {
         Question question = questionMapper.selectById(questionId);
         if (question == null || Integer.valueOf(1).equals(question.getDeleted())) {
-            throw new BusinessException("题目不存在或已删除", 404);
+            throw new BusinessException("题目不存在或已被删除", 404);
         }
         return question;
     }
 
+    /**
+     * 执行参数与状态校验。
+     */
     private WrongQuestionAiAnalysis requireAnalysis(Long userId, Long wrongQuestionId, Long analysisId) {
         WrongQuestionAiAnalysis analysis = wrongQuestionAiAnalysisMapper.selectOne(new LambdaQueryWrapper<WrongQuestionAiAnalysis>()
                 .eq(WrongQuestionAiAnalysis::getId, analysisId)
@@ -739,6 +801,9 @@ public class WrongQuestionAiServiceImpl implements WrongQuestionAiService {
         return analysis;
     }
 
+    /**
+     * 执行参数与状态校验。
+     */
     private WrongQuestionAiChatSession requireSession(Long userId, Long wrongQuestionId, Long sessionId) {
         WrongQuestionAiChatSession session = wrongQuestionAiChatSessionMapper.selectOne(new LambdaQueryWrapper<WrongQuestionAiChatSession>()
                 .eq(WrongQuestionAiChatSession::getId, sessionId)
@@ -751,6 +816,9 @@ public class WrongQuestionAiServiceImpl implements WrongQuestionAiService {
         return session;
     }
 
+    /**
+     * 执行查询业务流程并返回结果。
+     */
     private WrongQuestionAiChatSession findLatestAssistantSession(Long userId, Long wrongQuestionId) {
         return wrongQuestionAiChatSessionMapper.selectOne(
                 new LambdaQueryWrapper<WrongQuestionAiChatSession>()
@@ -762,6 +830,9 @@ public class WrongQuestionAiServiceImpl implements WrongQuestionAiService {
         );
     }
 
+    /**
+     * 计算并返回处理结果。
+     */
     private int nextSeqNo(Long sessionId) {
         WrongQuestionAiChatMessage latest = wrongQuestionAiChatMessageMapper.selectOne(
                 new LambdaQueryWrapper<WrongQuestionAiChatMessage>()
@@ -773,6 +844,9 @@ public class WrongQuestionAiServiceImpl implements WrongQuestionAiService {
         return latest == null ? 1 : defaultNumber(latest.getSeqNo()) + 1;
     }
 
+    /**
+     * 判断当前条件是否满足。
+     */
     private boolean hasUserMessageContent(Long sessionId) {
         Number count = wrongQuestionAiChatMessageMapper.selectCount(
                 new LambdaQueryWrapper<WrongQuestionAiChatMessage>()
@@ -782,32 +856,9 @@ public class WrongQuestionAiServiceImpl implements WrongQuestionAiService {
         return count != null && count.longValue() > 0;
     }
 
-    private String mapRoleToOpenAiRole(Integer role) {
-        if (ROLE_SYSTEM == role) {
-            return "system";
-        }
-        if (ROLE_USER == role) {
-            return "user";
-        }
-        if (ROLE_ASSISTANT == role) {
-            return "assistant";
-        }
-        return null;
-    }
-
-    private String mapRoleName(Integer role) {
-        if (ROLE_SYSTEM == role) {
-            return "system";
-        }
-        if (ROLE_USER == role) {
-            return "user";
-        }
-        if (ROLE_ASSISTANT == role) {
-            return "assistant";
-        }
-        return "unknown";
-    }
-
+    /**
+     * 执行核心业务处理流程。
+     */
     private WrongQuestionAiAnalysisVO toAnalysisVO(WrongQuestionAiAnalysis analysis, JSONObject resultJson) {
         WrongQuestionAiAnalysisVO vo = new WrongQuestionAiAnalysisVO();
         vo.setAnalysisId(analysis.getId());
@@ -828,7 +879,7 @@ public class WrongQuestionAiServiceImpl implements WrongQuestionAiService {
         vo.setSolutionSteps(compactList(resultJson.getJSONArray("solution_steps"), MAX_SOLUTION_STEPS, MAX_SOLUTION_STEP_CHARS));
         vo.setKnowledgePoints(compactList(resultJson.getJSONArray("knowledge_points"), MAX_KNOWLEDGE_POINTS, MAX_NORMAL_ITEM_CHARS));
         vo.setAvoidanceTips(compactList(resultJson.getJSONArray("avoidance_tips"), MAX_AVOIDANCE_TIPS, MAX_AVOIDANCE_ITEM_CHARS));
-        // Lean analysis does not generate follow-up questions.
+        // 精简分析模式不生成追问题目。
         vo.setFollowUpQuestions(Collections.emptyList());
         if (!StringUtils.hasText(vo.getSummary())) {
             vo.setSummary(compactText(resultJson.getString("summary"), MAX_SUMMARY_CHARS));
@@ -836,6 +887,9 @@ public class WrongQuestionAiServiceImpl implements WrongQuestionAiService {
         return vo;
     }
 
+    /**
+     * 执行核心业务处理流程。
+     */
     private List<String> toStringList(JSONArray array) {
         if (array == null || array.isEmpty()) {
             return Collections.emptyList();
@@ -854,6 +908,9 @@ public class WrongQuestionAiServiceImpl implements WrongQuestionAiService {
         return result;
     }
 
+    /**
+     * 执行核心业务处理流程。
+     */
     private List<String> compactList(JSONArray array, int maxItems, int maxChars) {
         List<String> source = toStringList(array);
         if (source.isEmpty()) {
@@ -872,6 +929,9 @@ public class WrongQuestionAiServiceImpl implements WrongQuestionAiService {
         return compacted;
     }
 
+    /**
+     * 执行核心业务处理流程。
+     */
     private String compactText(String text, int maxChars) {
         if (!StringUtils.hasText(text)) {
             return "";
@@ -883,6 +943,9 @@ public class WrongQuestionAiServiceImpl implements WrongQuestionAiService {
         return normalized.substring(0, maxChars);
     }
 
+    /**
+     * 执行核心业务处理流程。
+     */
     private WrongQuestionAiChatSessionVO toSessionVO(WrongQuestionAiChatSession session) {
         WrongQuestionAiChatSessionVO vo = new WrongQuestionAiChatSessionVO();
         vo.setSessionId(session.getId());
@@ -899,6 +962,9 @@ public class WrongQuestionAiServiceImpl implements WrongQuestionAiService {
         return vo;
     }
 
+    /**
+     * 执行核心业务处理流程。
+     */
     private WrongQuestionAiChatMessageVO toMessageVO(WrongQuestionAiChatMessage message) {
         WrongQuestionAiChatMessageVO vo = new WrongQuestionAiChatMessageVO();
         vo.setMessageId(message.getId());
@@ -917,32 +983,34 @@ public class WrongQuestionAiServiceImpl implements WrongQuestionAiService {
         return vo;
     }
 
+    /**
+     * 解析并转换输入数据。
+     */
     private String normalizeInputContent(String content) {
         String normalized = content == null ? "" : content.trim();
         if (normalized.isEmpty()) {
-            throw new BusinessException("提问内容不能为空", 400);
+            throw new BusinessException("题目内容不能为空", 400);
         }
         return normalized;
     }
 
+    /**
+     * 解析并转换输入数据。
+     */
     private int resolveChatMaxTokens(String currentUserQuestion) {
-        int configured = qwenAiProperties.getChatMaxTokens() == null ? 220 : qwenAiProperties.getChatMaxTokens();
-        int safeBase = Math.max(configured, 120);
-        return shouldAllowDetailedAnswer(currentUserQuestion) ? Math.min(safeBase + 120, 480) : safeBase;
-    }
-
-    private boolean shouldAllowDetailedAnswer(String currentUserQuestion) {
-        if (!StringUtils.hasText(currentUserQuestion)) {
-            return false;
+        int safeBase = qwenChatOptionsResolver.resolveBoundedChatMaxTokens(
+                MIN_CHAT_MAX_TOKENS,
+                Integer.MAX_VALUE
+        );
+        if (qwenChatOptionsResolver.shouldAllowDetailedAnswer(currentUserQuestion)) {
+            return Math.min(safeBase + DETAIL_CHAT_TOKEN_BOOST, MAX_CHAT_MAX_TOKENS);
         }
-        String text = currentUserQuestion.trim();
-        return text.contains("\u8BE6\u7EC6")
-                || text.contains("\u5C55\u5F00")
-                || text.contains("\u4E3E\u4F8B")
-                || text.toLowerCase().contains("detail")
-                || text.toLowerCase().contains("example");
+        return safeBase;
     }
 
+    /**
+     * 执行核心业务处理流程。
+     */
     private String compactChatReply(String text, int maxChars) {
         if (!StringUtils.hasText(text)) {
             return "";
@@ -962,25 +1030,16 @@ public class WrongQuestionAiServiceImpl implements WrongQuestionAiService {
         return normalized.substring(0, maxChars);
     }
 
-    private Integer defaultNumber(Integer value) {
-        return value == null ? 0 : value;
-    }
-
-    private String newCode() {
-        return UUID.randomUUID().toString().replace("-", "");
-    }
-
-    private String resolveChatModelName() {
-        if (StringUtils.hasText(qwenAiProperties.getChatModel())) {
-            return qwenAiProperties.getChatModel().trim();
-        }
-        return "qwen3.6-plus";
-    }
-
+    /**
+     * 判断当前条件是否满足。
+     */
     private boolean isSessionOngoing(Integer status) {
         return status != null && status == SESSION_STATUS_ONGOING;
     }
 
+    /**
+     * 判断当前条件是否满足。
+     */
     private boolean isSessionClosed(Integer status) {
         return status != null && status == SESSION_STATUS_CLOSED;
     }

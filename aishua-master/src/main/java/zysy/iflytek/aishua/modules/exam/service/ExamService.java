@@ -18,6 +18,9 @@ import zysy.iflytek.aishua.modules.directory.entity.vo.DirectoryTreeVO;
 import java.time.LocalDate;
 import java.util.List;
 
+/**
+ * 考试服务接口，定义该领域对外能力契约。
+ */
 public interface ExamService {
     List<ExamPaperVO> listAdminPapers(Long subjectId, Integer status, String keyword);
 

@@ -8,6 +8,9 @@ import lombok.Data;
 
 import java.time.LocalDateTime;
 
+/**
+ * 智能问答实体对象，负责相关业务逻辑与流程处理。
+ */
 @Data
 @TableName("wrong_question_ai_chat_message")
 public class WrongQuestionAiChatMessage {

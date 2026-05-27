@@ -84,6 +84,9 @@ import java.util.UUID;
 import java.util.function.Function;
 import java.util.stream.Collectors;
 
+/**
+ * 练习服务实现，负责相关业务逻辑与流程处理。
+ */
 @Slf4j
 @Service
 public class PracticeServiceImpl implements PracticeService {
@@ -124,6 +127,9 @@ public class PracticeServiceImpl implements PracticeService {
     @Value("${practice.draft.sync-batch-size:50}")
     private int draftSyncBatchSize;
 
+    /**
+     * 构造方法，负责注入依赖组件。
+     */
     public PracticeServiceImpl(
             PracticeSessionMapper practiceSessionMapper,
             ExerciseRecordMapper exerciseRecordMapper,
@@ -162,6 +168,9 @@ public class PracticeServiceImpl implements PracticeService {
         this.transactionTemplate = transactionTemplate;
     }
 
+    /**
+     * 构建业务处理所需数据。
+     */
     private static DefaultRedisScript<Long> buildReleaseDraftSaveLockScript() {
         DefaultRedisScript<Long> script = new DefaultRedisScript<>();
         script.setScriptText("if redis.call('get', KEYS[1]) == ARGV[1] then return redis.call('del', KEYS[1]) else return 0 end");
@@ -169,6 +178,9 @@ public class PracticeServiceImpl implements PracticeService {
         return script;
     }
 
+    /**
+     * 执行创建业务流程并返回结果。
+     */
     @Override
     @Transactional
     public PracticeStartVO startPractice(Long userId, PracticeStartDTO practiceStartDTO) {
@@ -213,6 +225,9 @@ public class PracticeServiceImpl implements PracticeService {
         return buildStartVO(practiceSession, subject);
     }
 
+    /**
+     * 执行查询业务流程并返回结果。
+     */
     @Override
     public PracticeQuestionSheetVO getPracticeQuestions(Long userId, Long sessionId) {
         PracticeSession practiceSession = requireSession(userId, sessionId);
@@ -259,6 +274,9 @@ public class PracticeServiceImpl implements PracticeService {
         return sheetVO;
     }
 
+    /**
+     * 执行查询业务流程并返回结果。
+     */
     @Override
     public PracticeDraftSnapshotVO getPracticeDraft(Long userId, Long sessionId) {
         PracticeSession practiceSession = requireSession(userId, sessionId);
@@ -287,6 +305,9 @@ public class PracticeServiceImpl implements PracticeService {
         return fallbackSnapshot;
     }
 
+    /**
+     * 执行保存与更新业务流程。
+     */
     @Override
     public PracticeDraftSnapshotVO savePracticeDraft(Long userId, Long sessionId, PracticeDraftSaveDTO practiceDraftSaveDTO) {
         PracticeSession practiceSession = requireSession(userId, sessionId);
@@ -294,7 +315,7 @@ public class PracticeServiceImpl implements PracticeService {
             throw new BusinessException("当前练习已结束，无法继续保存草稿", 400);
         }
 
-        // Serialize draft writes per session to avoid lost updates under concurrent saves.
+        // 对每个会话的草稿写入串行化，避免并发保存导致更新丢失。
         String lockToken = UUID.randomUUID().toString();
         if (!tryAcquireDraftSaveLock(practiceSession.getId(), lockToken)) {
             throw new BusinessException("草稿保存过于频繁，请稍后再试", 429);
@@ -359,7 +380,7 @@ public class PracticeServiceImpl implements PracticeService {
                 markDraftSessionDirty(practiceSession.getId());
             } catch (RuntimeException exception) {
                 log.warn("Draft cache write failed. sessionId={}", practiceSession.getId(), exception);
-                // Fallback path: if Redis is unavailable, persist the same snapshot to DB directly.
+                // 兜底路径：若缓存不可用，则直接将同一快照落库。
                 syncDraftSnapshotToDatabase(practiceSession, snapshot);
             }
             return snapshot;
@@ -368,6 +389,9 @@ public class PracticeServiceImpl implements PracticeService {
         }
     }
 
+    /**
+     * 执行查询业务流程并返回结果。
+     */
     @Override
     public List<PracticeSessionSummaryVO> listPracticeSessions(Long userId, Long subjectId) {
         validateSubjectFilter(subjectId);
@@ -395,6 +419,9 @@ public class PracticeServiceImpl implements PracticeService {
         return result;
     }
 
+    /**
+     * 执行查询业务流程并返回结果。
+     */
     @Override
     public PracticeSessionDetailVO getPracticeSessionDetail(Long userId, Long sessionId) {
         PracticeSession session = requireSession(userId, sessionId);
@@ -421,6 +448,9 @@ public class PracticeServiceImpl implements PracticeService {
         return detailVO;
     }
 
+    /**
+     * 执行查询业务流程并返回结果。
+     */
     @Override
     public List<PracticeExerciseRecordVO> listExerciseRecords(Long userId, Long subjectId) {
         validateSubjectFilter(subjectId);
@@ -486,6 +516,9 @@ public class PracticeServiceImpl implements PracticeService {
         return result;
     }
 
+    /**
+     * 执行查询业务流程并返回结果。
+     */
     @Override
     public List<PracticeWrongQuestionVO> listWrongQuestions(Long userId, Long subjectId, Long directoryId, Integer masterStatus) {
         validateSubjectFilter(subjectId);
@@ -528,6 +561,9 @@ public class PracticeServiceImpl implements PracticeService {
         return result;
     }
 
+    /**
+     * 执行保存与更新业务流程。
+     */
     @Override
     @Transactional
     public PracticeWrongQuestionVO updateWrongQuestionMasterStatus(Long userId, Long wrongQuestionId, Integer masterStatus) {
@@ -543,6 +579,9 @@ public class PracticeServiceImpl implements PracticeService {
         return toWrongQuestionVO(wrongQuestion, subjectMap, questionMap, directoryMap);
     }
 
+    /**
+     * 执行查询业务流程并返回结果。
+     */
     @Override
     public List<PracticeWrongTrendVO> getWrongQuestionTrends(Long userId, Long subjectId, Long directoryId, Integer days) {
         validateSubjectFilter(subjectId);
@@ -615,6 +654,9 @@ public class PracticeServiceImpl implements PracticeService {
         return result;
     }
 
+    /**
+     * 执行查询业务流程并返回结果。
+     */
     @Override
     public PracticeStatsVO getPracticeStats(Long userId, Integer days) {
         int statsDays = normalizeStatsDays(days);
@@ -650,6 +692,9 @@ public class PracticeServiceImpl implements PracticeService {
         return statsVO;
     }
 
+    /**
+     * 执行查询业务流程并返回结果。
+     */
     @Override
     public List<ExamTagVO> listPracticeTags(Long userId, Long subjectId) {
         Subject subject = requireEnabledSubject(subjectId);
@@ -664,6 +709,9 @@ public class PracticeServiceImpl implements PracticeService {
                 .toList();
     }
 
+    /**
+     * 执行保存与更新业务流程。
+     */
     @Override
     @Transactional
     public PracticeBatchSubmitResultVO submitPractice(Long userId, Long sessionId, PracticeBatchSubmitDTO practiceBatchSubmitDTO) {
@@ -775,6 +823,9 @@ public class PracticeServiceImpl implements PracticeService {
         return resultVO;
     }
 
+    /**
+     * 执行创建业务流程并返回结果。
+     */
     private void createSessionPlan(Long userId, PracticeSession practiceSession, List<Question> selectedQuestions) {
         for (Question question : selectedQuestions) {
             ExerciseRecord record = new ExerciseRecord();
@@ -790,6 +841,9 @@ public class PracticeServiceImpl implements PracticeService {
         }
     }
 
+    /**
+     * 构建业务处理所需数据。
+     */
     private PracticeStartVO buildStartVO(PracticeSession practiceSession, Subject subject) {
         PracticeStartVO practiceStartVO = new PracticeStartVO();
         practiceStartVO.setSessionId(practiceSession.getId());
@@ -806,6 +860,9 @@ public class PracticeServiceImpl implements PracticeService {
         return practiceStartVO;
     }
 
+    /**
+     * 构建业务处理所需数据。
+     */
     private PracticeSessionSummaryVO buildPracticeSessionSummary(PracticeSession session, Subject subject) {
         PracticeSessionSummaryVO summaryVO = new PracticeSessionSummaryVO();
         summaryVO.setSessionId(session.getId());
@@ -824,6 +881,9 @@ public class PracticeServiceImpl implements PracticeService {
         return summaryVO;
     }
 
+    /**
+     * 构建业务处理所需数据。
+     */
     private PracticeAnswerResultVO buildAnswerResult(Question question, String submittedAnswer, boolean isCorrect, int timeCost) {
         PracticeAnswerResultVO resultVO = new PracticeAnswerResultVO();
         resultVO.setQuestionId(question.getId());
@@ -836,6 +896,9 @@ public class PracticeServiceImpl implements PracticeService {
         return resultVO;
     }
 
+    /**
+     * 构建业务处理所需数据。
+     */
     private PracticeStatsVO.OverviewVO buildOverview(
             Long userId,
             UserStats userStats,
@@ -887,6 +950,9 @@ public class PracticeServiceImpl implements PracticeService {
         return overviewVO;
     }
 
+    /**
+     * 构建业务处理所需数据。
+     */
     private List<PracticeStatsVO.DailyTrendVO> buildDailyTrends(LocalDate startDate, LocalDate today, List<DailyStats> dailyStatsList) {
         Map<LocalDate, DailyStats> dailyStatsMap = dailyStatsList.stream()
                 .filter(stats -> stats.getStatDate() != null)
@@ -913,6 +979,9 @@ public class PracticeServiceImpl implements PracticeService {
         return result;
     }
 
+    /**
+     * 构建业务处理所需数据。
+     */
     private List<PracticeStatsVO.SubjectStatsVO> buildSubjectStats(List<UserSubjectStats> subjectStatsList) {
         Map<Long, Subject> subjectMap = loadSubjectMap(subjectStatsList.stream()
                 .map(UserSubjectStats::getSubjectId)
@@ -937,6 +1006,9 @@ public class PracticeServiceImpl implements PracticeService {
         return result;
     }
 
+    /**
+     * 构建业务处理所需数据。
+     */
     private List<PracticeStatsVO.KnowledgeMasteryVO> buildKnowledgeMasteries(List<UserKnowledgeMastery> knowledgeMasteries, int limit) {
         if (knowledgeMasteries.isEmpty()) {
             return Collections.emptyList();
@@ -960,6 +1032,9 @@ public class PracticeServiceImpl implements PracticeService {
         return result;
     }
 
+    /**
+     * 构建业务处理所需数据。
+     */
     private List<PracticeStatsVO.KnowledgeMasteryVO> buildWeakPoints(List<UserKnowledgeMastery> knowledgeMasteries, int limit) {
         if (knowledgeMasteries.isEmpty()) {
             return Collections.emptyList();
@@ -983,6 +1058,9 @@ public class PracticeServiceImpl implements PracticeService {
         return buildKnowledgeMasteries(weakMasteries, limit);
     }
 
+    /**
+     * 执行核心业务处理流程。
+     */
     private PracticeStatsVO.KnowledgeMasteryVO toKnowledgeMasteryVO(
             UserKnowledgeMastery mastery,
             Map<Long, Subject> subjectMap,
@@ -1005,6 +1083,9 @@ public class PracticeServiceImpl implements PracticeService {
         return masteryVO;
     }
 
+    /**
+     * 执行查询业务流程并返回结果。
+     */
     private List<PracticeSessionSummaryVO> listRecentPracticeSessions(Long userId, int limit) {
         List<PracticeSession> sessions = practiceSessionMapper.selectList(new LambdaQueryWrapper<PracticeSession>()
                 .eq(PracticeSession::getUserId, userId)
@@ -1028,6 +1109,9 @@ public class PracticeServiceImpl implements PracticeService {
         return result;
     }
 
+    /**
+     * 计算并返回处理结果。
+     */
     private int calculateContinuousDays(List<DailyStats> dailyStatsList, LocalDate today) {
         Set<LocalDate> activeDates = toActiveDateSet(dailyStatsList);
         int continuousDays = 0;
@@ -1039,6 +1123,9 @@ public class PracticeServiceImpl implements PracticeService {
         return continuousDays;
     }
 
+    /**
+     * 计算并返回处理结果。
+     */
     private int calculateMaxContinuousDays(List<DailyStats> dailyStatsList) {
         List<LocalDate> activeDates = new ArrayList<>(toActiveDateSet(dailyStatsList));
         Collections.sort(activeDates);
@@ -1058,6 +1145,9 @@ public class PracticeServiceImpl implements PracticeService {
         return maxContinuousDays;
     }
 
+    /**
+     * 执行核心业务处理流程。
+     */
     private Set<LocalDate> toActiveDateSet(List<DailyStats> dailyStatsList) {
         Set<LocalDate> activeDates = new HashSet<>();
         for (DailyStats dailyStats : dailyStatsList) {
@@ -1068,9 +1158,12 @@ public class PracticeServiceImpl implements PracticeService {
         return activeDates;
     }
 
+    /**
+     * 执行参数与状态校验。
+     */
     private Subject requireEnabledSubject(Long subjectId) {
         if (subjectId == null || subjectId <= 0) {
-            throw new BusinessException("学科ID不合法", 400);
+            throw new BusinessException("学科编号不合法", 400);
         }
         Subject subject = subjectMapper.selectById(subjectId);
         if (subject == null || Integer.valueOf(1).equals(subject.getDeleted())) {
@@ -1082,6 +1175,9 @@ public class PracticeServiceImpl implements PracticeService {
         return subject;
     }
 
+    /**
+     * 执行参数与状态校验。
+     */
     private UserSubject requireJoinedSubject(Long userId, Long subjectId) {
         UserSubject userSubject = userSubjectMapper.selectOne(new LambdaQueryWrapper<UserSubject>()
                 .eq(UserSubject::getUserId, userId)
@@ -1096,9 +1192,12 @@ public class PracticeServiceImpl implements PracticeService {
         return userSubject;
     }
 
+    /**
+     * 执行参数与状态校验。
+     */
     private PracticeSession requireSession(Long userId, Long sessionId) {
         if (sessionId == null || sessionId <= 0) {
-            throw new BusinessException("练习会话ID不合法", 400);
+            throw new BusinessException("练习会话编号不合法", 400);
         }
         PracticeSession practiceSession = practiceSessionMapper.selectById(sessionId);
         if (practiceSession == null) {
@@ -1110,6 +1209,9 @@ public class PracticeServiceImpl implements PracticeService {
         return practiceSession;
     }
 
+    /**
+     * 执行核心业务处理流程。
+     */
     private List<Question> selectSessionQuestions(Long userId, Long subjectId, int practiceMode, int questionCount, List<Long> tagIds) {
         if (practiceMode == PracticeModeConstants.KNOWLEDGE_POINT) {
             return selectTaggedQuestions(subjectId, tagIds, questionCount);
@@ -1134,6 +1236,9 @@ public class PracticeServiceImpl implements PracticeService {
         return new ArrayList<>(selectedQuestions.subList(0, limit));
     }
 
+    /**
+     * 执行核心业务处理流程。
+     */
     private List<Question> selectWrongRetryQuestions(Long userId, Long subjectId, int questionCount) {
         List<WrongQuestion> wrongQuestions = wrongQuestionMapper.selectList(new LambdaQueryWrapper<WrongQuestion>()
                 .eq(WrongQuestion::getUserId, userId)
@@ -1166,6 +1271,9 @@ public class PracticeServiceImpl implements PracticeService {
         return selected;
     }
 
+    /**
+     * 执行核心业务处理流程。
+     */
     private List<Question> selectTaggedQuestions(Long subjectId, List<Long> tagIds, int questionCount) {
         ensureTagsBelongToSubject(subjectId, tagIds);
 
@@ -1203,6 +1311,9 @@ public class PracticeServiceImpl implements PracticeService {
         return new ArrayList<>(selectedQuestions.subList(0, limit));
     }
 
+    /**
+     * 执行参数与状态校验。
+     */
     private void ensureTagsBelongToSubject(Long subjectId, List<Long> tagIds) {
         if (tagIds.isEmpty()) {
             throw new BusinessException("请选择知识点", 400);
@@ -1218,12 +1329,18 @@ public class PracticeServiceImpl implements PracticeService {
         }
     }
 
+    /**
+     * 执行查询业务流程并返回结果。
+     */
     private List<ExerciseRecord> listSessionRecords(Long sessionId) {
         return exerciseRecordMapper.selectList(new LambdaQueryWrapper<ExerciseRecord>()
                 .eq(ExerciseRecord::getSessionRefId, sessionId)
                 .orderByAsc(ExerciseRecord::getId));
     }
 
+    /**
+     * 执行查询业务流程并返回结果。
+     */
     private List<PracticeExerciseRecordVO> listSessionExerciseRecordDetails(Long sessionId, boolean revealCorrectAnswer) {
         List<ExerciseRecord> records = listSessionRecords(sessionId).stream()
                 .filter(record -> record.getUserAnswer() != null)
@@ -1259,6 +1376,9 @@ public class PracticeServiceImpl implements PracticeService {
         return result;
     }
 
+    /**
+     * 执行查询业务流程并返回结果。
+     */
     private List<Long> listFilteredSessionIds(Long userId, Long subjectId) {
         LambdaQueryWrapper<PracticeSession> queryWrapper = new LambdaQueryWrapper<PracticeSession>()
                 .eq(PracticeSession::getUserId, userId);
@@ -1271,6 +1391,9 @@ public class PracticeServiceImpl implements PracticeService {
                 .toList();
     }
 
+    /**
+     * 执行核心业务处理流程。
+     */
     private Map<Long, PracticeSession> loadSessionMap(List<Long> sessionIds) {
         if (sessionIds.isEmpty()) {
             return Map.of();
@@ -1280,6 +1403,9 @@ public class PracticeServiceImpl implements PracticeService {
                 .collect(Collectors.toMap(PracticeSession::getId, Function.identity(), (left, right) -> left));
     }
 
+    /**
+     * 执行核心业务处理流程。
+     */
     private Map<Long, Question> loadQuestionMap(List<Long> questionIds) {
         if (questionIds.isEmpty()) {
             return Map.of();
@@ -1289,6 +1415,9 @@ public class PracticeServiceImpl implements PracticeService {
                 .collect(Collectors.toMap(Question::getId, Function.identity(), (left, right) -> left));
     }
 
+    /**
+     * 执行核心业务处理流程。
+     */
     private Map<Long, Subject> loadSubjectMap(List<Long> subjectIds) {
         if (subjectIds.isEmpty()) {
             return Map.of();
@@ -1298,6 +1427,9 @@ public class PracticeServiceImpl implements PracticeService {
                 .collect(Collectors.toMap(Subject::getId, Function.identity(), (left, right) -> left));
     }
 
+    /**
+     * 执行核心业务处理流程。
+     */
     private Map<Long, TextbookDirectory> loadDirectoryMap(List<Long> directoryIds) {
         if (directoryIds.isEmpty()) {
             return Map.of();
@@ -1307,6 +1439,9 @@ public class PracticeServiceImpl implements PracticeService {
                 .collect(Collectors.toMap(TextbookDirectory::getId, Function.identity(), (left, right) -> left));
     }
 
+    /**
+     * 执行核心业务处理流程。
+     */
     private Map<Long, ExamTag> loadTagMap(List<Long> tagIds) {
         if (tagIds.isEmpty()) {
             return Map.of();
@@ -1316,6 +1451,9 @@ public class PracticeServiceImpl implements PracticeService {
                 .collect(Collectors.toMap(ExamTag::getId, Function.identity(), (left, right) -> left));
     }
 
+    /**
+     * 执行核心业务处理流程。
+     */
     private ExamTagVO toExamTagVO(ExamTag tag, String subjectName) {
         ExamTagVO tagVO = new ExamTagVO();
         tagVO.setId(tag.getId());
@@ -1328,6 +1466,9 @@ public class PracticeServiceImpl implements PracticeService {
         return tagVO;
     }
 
+    /**
+     * 执行核心业务处理流程。
+     */
     private PracticeWrongQuestionVO toWrongQuestionVO(
             WrongQuestion wrongQuestion,
             Map<Long, Subject> subjectMap,
@@ -1357,6 +1498,9 @@ public class PracticeServiceImpl implements PracticeService {
         return wrongQuestionVO;
     }
 
+    /**
+     * 执行核心业务处理流程。
+     */
     private Map<Long, PracticeAnswerItemDTO> toAnswerMap(List<PracticeAnswerItemDTO> answers) {
         if (answers == null || answers.isEmpty()) {
             return Map.of();
@@ -1365,7 +1509,7 @@ public class PracticeServiceImpl implements PracticeService {
         Map<Long, PracticeAnswerItemDTO> answerMap = new LinkedHashMap<>();
         for (PracticeAnswerItemDTO answer : answers) {
             if (answer == null || answer.getQuestionId() == null || answer.getQuestionId() <= 0) {
-                throw new BusinessException("作答数据不合法，题目ID不能为空", 400);
+                throw new BusinessException("作答数据不合法，题目编号不能为空", 400);
             }
             if (answerMap.putIfAbsent(answer.getQuestionId(), answer) != null) {
                 throw new BusinessException("存在重复的题目作答数据", 400);
@@ -1374,6 +1518,9 @@ public class PracticeServiceImpl implements PracticeService {
         return answerMap;
     }
 
+    /**
+     * 构建业务处理所需数据。
+     */
     private PracticeDraftSnapshotVO buildDraftSnapshotFromRecords(PracticeSession practiceSession, List<ExerciseRecord> sessionRecords) {
         Map<Long, DraftAnswerState> answerStateMap = new LinkedHashMap<>();
         long latestUpdatedAt = 0L;
@@ -1399,12 +1546,15 @@ public class PracticeServiceImpl implements PracticeService {
         );
     }
 
+    /**
+     * 执行核心业务处理流程。
+     */
     private Map<Long, DraftAnswerState> loadDraftAnswerState(
             PracticeDraftSnapshotVO cachedSnapshot,
             List<ExerciseRecord> sessionRecords
     ) {
         if (cachedSnapshot != null) {
-            // Redis snapshot is the source of truth for ongoing sessions.
+            // 进行中的会话以缓存快照为准。
             Map<Long, DraftAnswerState> answerStateMap = new LinkedHashMap<>();
             for (PracticeDraftAnswerVO answer : cachedSnapshot.getAnswers()) {
                 if (answer == null || answer.getQuestionId() == null || answer.getQuestionId() <= 0) {
@@ -1432,6 +1582,9 @@ public class PracticeServiceImpl implements PracticeService {
         return answerStateMap;
     }
 
+    /**
+     * 执行核心业务处理流程。
+     */
     private PracticeDraftSnapshotVO readDraftSnapshotFromRedis(Long userId, Long sessionId, Integer expectedVersion) {
         try {
             HashOperations<String, Object, Object> hashOps = stringRedisTemplate.opsForHash();
@@ -1486,6 +1639,9 @@ public class PracticeServiceImpl implements PracticeService {
         }
     }
 
+    /**
+     * 执行核心业务处理流程。
+     */
     private void writeDraftSnapshotToRedis(Long userId, PracticeDraftSnapshotVO snapshot) {
         HashOperations<String, Object, Object> hashOps = stringRedisTemplate.opsForHash();
         String metaKey = buildDraftMetaRedisKey(snapshot.getSessionId());
@@ -1527,6 +1683,9 @@ public class PracticeServiceImpl implements PracticeService {
         }
     }
 
+    /**
+     * 执行删除与清理业务流程。
+     */
     private void clearDraftSnapshotCache(Long sessionId) {
         try {
             stringRedisTemplate.delete(List.of(buildDraftMetaRedisKey(sessionId), buildDraftAnswersRedisKey(sessionId)));
@@ -1536,6 +1695,9 @@ public class PracticeServiceImpl implements PracticeService {
         }
     }
 
+    /**
+     * 执行保存与更新业务流程。
+     */
     private void markDraftSessionDirty(Long sessionId) {
         if (sessionId == null || sessionId <= 0) {
             return;
@@ -1547,6 +1709,9 @@ public class PracticeServiceImpl implements PracticeService {
         }
     }
 
+    /**
+     * 执行删除与清理业务流程。
+     */
     private void removeDraftSessionDirty(Long sessionId) {
         if (sessionId == null || sessionId <= 0) {
             return;
@@ -1558,11 +1723,14 @@ public class PracticeServiceImpl implements PracticeService {
         }
     }
 
-    // Periodically flush Redis-first draft snapshots to MySQL to reduce request-path write pressure.
+    // 定时将缓存优先的草稿快照刷入数据库，降低请求链路写入压力。
     @Scheduled(
             fixedDelayString = "${practice.draft.db-sync-interval-ms:300000}",
             initialDelayString = "${practice.draft.db-sync-initial-delay-ms:300000}"
     )
+    /**
+     * 执行保存与更新业务流程。
+     */
     public void syncDraftCacheToDatabase() {
         List<Long> dirtySessionIds = listDirtyDraftSessionIds(Math.max(draftSyncBatchSize, 1));
         if (dirtySessionIds.isEmpty()) {
@@ -1581,6 +1749,9 @@ public class PracticeServiceImpl implements PracticeService {
         }
     }
 
+    /**
+     * 执行查询业务流程并返回结果。
+     */
     private List<Long> listDirtyDraftSessionIds(int limit) {
         try {
             SetOperations<String, String> setOps = stringRedisTemplate.opsForSet();
@@ -1599,6 +1770,9 @@ public class PracticeServiceImpl implements PracticeService {
         }
     }
 
+    /**
+     * 执行保存与更新业务流程。
+     */
     private void syncDraftSnapshotToDatabase(PracticeSession practiceSession, PracticeDraftSnapshotVO cachedSnapshot) {
         if (practiceSession == null || cachedSnapshot == null) {
             return;
@@ -1628,6 +1802,9 @@ public class PracticeServiceImpl implements PracticeService {
         }
     }
 
+    /**
+     * 执行保存与更新业务流程。
+     */
     private void syncDraftSessionToDatabase(Long sessionId) {
         PracticeSession practiceSession = practiceSessionMapper.selectById(sessionId);
         if (practiceSession == null || !isSessionOngoing(practiceSession)) {
@@ -1648,6 +1825,9 @@ public class PracticeServiceImpl implements PracticeService {
         }
     }
 
+    /**
+     * 执行保存与更新业务流程。
+     */
     private void persistDraftSnapshotAnswersToDatabase(List<ExerciseRecord> sessionRecords, PracticeDraftSnapshotVO snapshot) {
         long fallbackUpdatedAt = snapshot.getSavedAt() == null || snapshot.getSavedAt() <= 0
                 ? System.currentTimeMillis()
@@ -1694,6 +1874,9 @@ public class PracticeServiceImpl implements PracticeService {
         }
     }
 
+    /**
+     * 计算并返回处理结果。
+     */
     private DraftStats calculateDraftStats(Map<Long, DraftAnswerState> answerStateMap) {
         int answeredCount = 0;
         int totalTimeCost = 0;
@@ -1708,6 +1891,9 @@ public class PracticeServiceImpl implements PracticeService {
         return new DraftStats(answeredCount, totalTimeCost);
     }
 
+    /**
+     * 构建业务处理所需数据。
+     */
     private PracticeDraftSnapshotVO buildDraftSnapshot(
             Long sessionId,
             int version,
@@ -1743,6 +1929,9 @@ public class PracticeServiceImpl implements PracticeService {
         return snapshot;
     }
 
+    /**
+     * 解析并转换输入数据。
+     */
     private DraftAnswerState parseDraftAnswerState(Object rawValue) {
         if (!(rawValue instanceof String rawText) || rawText.isBlank()) {
             return null;
@@ -1765,6 +1954,9 @@ public class PracticeServiceImpl implements PracticeService {
         }
     }
 
+    /**
+     * 解析并转换输入数据。
+     */
     private Integer parseIntValue(Object value, Integer defaultValue) {
         if (value == null) {
             return defaultValue;
@@ -1776,6 +1968,9 @@ public class PracticeServiceImpl implements PracticeService {
         }
     }
 
+    /**
+     * 解析并转换输入数据。
+     */
     private Long parseLongValue(Object value, Long defaultValue) {
         if (value == null) {
             return defaultValue;
@@ -1787,6 +1982,9 @@ public class PracticeServiceImpl implements PracticeService {
         }
     }
 
+    /**
+     * 执行核心业务处理流程。
+     */
     private long toEpochMilli(LocalDateTime value) {
         if (value == null) {
             return 0L;
@@ -1794,6 +1992,9 @@ public class PracticeServiceImpl implements PracticeService {
         return value.atZone(ZoneId.systemDefault()).toInstant().toEpochMilli();
     }
 
+    /**
+     * 执行核心业务处理流程。
+     */
     private boolean equalsNullable(String left, String right) {
         if (left == null && right == null) {
             return true;
@@ -1804,6 +2005,9 @@ public class PracticeServiceImpl implements PracticeService {
         return left.equals(right);
     }
 
+    /**
+     * 解析并转换输入数据。
+     */
     private String normalizeStoredAnswer(String value) {
         if (value == null) {
             return null;
@@ -1812,18 +2016,30 @@ public class PracticeServiceImpl implements PracticeService {
         return normalized.isEmpty() ? null : normalized;
     }
 
+    /**
+     * 构建业务处理所需数据。
+     */
     private String buildDraftMetaRedisKey(Long sessionId) {
         return DRAFT_REDIS_KEY_PREFIX + sessionId + ":meta";
     }
 
+    /**
+     * 构建业务处理所需数据。
+     */
     private String buildDraftAnswersRedisKey(Long sessionId) {
         return DRAFT_REDIS_KEY_PREFIX + sessionId + ":answers";
     }
 
+    /**
+     * 构建业务处理所需数据。
+     */
     private String buildDraftSaveLockRedisKey(Long sessionId) {
         return DRAFT_SAVE_LOCK_REDIS_KEY_PREFIX + sessionId;
     }
 
+    /**
+     * 执行核心业务处理流程。
+     */
     private boolean tryAcquireDraftSaveLock(Long sessionId, String lockToken) {
         if (sessionId == null || sessionId <= 0 || lockToken == null || lockToken.isBlank()) {
             return false;
@@ -1841,6 +2057,9 @@ public class PracticeServiceImpl implements PracticeService {
         }
     }
 
+    /**
+     * 执行核心业务处理流程。
+     */
     private void releaseDraftSaveLock(Long sessionId, String lockToken) {
         if (sessionId == null || sessionId <= 0 || lockToken == null || lockToken.isBlank()) {
             return;
@@ -1856,6 +2075,9 @@ public class PracticeServiceImpl implements PracticeService {
         }
     }
 
+    /**
+     * 执行保存与更新业务流程。
+     */
     private void updateUserSubjectLastPracticeTime(Long userId, Long subjectId, LocalDateTime practiceTime) {
         UserSubject userSubject = userSubjectMapper.selectOne(new LambdaQueryWrapper<UserSubject>()
                 .eq(UserSubject::getUserId, userId)
@@ -1868,6 +2090,9 @@ public class PracticeServiceImpl implements PracticeService {
         userSubjectMapper.updateById(userSubject);
     }
 
+    /**
+     * 执行参数与状态校验。
+     */
     private void validateSubjectFilter(Long subjectId) {
         if (subjectId == null) {
             return;
@@ -1877,6 +2102,9 @@ public class PracticeServiceImpl implements PracticeService {
         }
     }
 
+    /**
+     * 执行参数与状态校验。
+     */
     private void validateDirectoryFilter(Long directoryId, Long subjectId) {
         if (directoryId == null) {
             return;
@@ -1894,6 +2122,9 @@ public class PracticeServiceImpl implements PracticeService {
         }
     }
 
+    /**
+     * 执行参数与状态校验。
+     */
     private void validateMasterStatusFilter(Integer masterStatus) {
         if (masterStatus == null) {
             return;
@@ -1903,6 +2134,9 @@ public class PracticeServiceImpl implements PracticeService {
         }
     }
 
+    /**
+     * 解析并转换输入数据。
+     */
     private int normalizeMasterStatus(Integer masterStatus) {
         if (masterStatus == null || (masterStatus != 0 && masterStatus != 1)) {
             throw new BusinessException("掌握状态仅支持 0 或 1", 400);
@@ -1910,9 +2144,12 @@ public class PracticeServiceImpl implements PracticeService {
         return masterStatus;
     }
 
+    /**
+     * 执行参数与状态校验。
+     */
     private WrongQuestion requireWrongQuestion(Long userId, Long wrongQuestionId) {
         if (wrongQuestionId == null || wrongQuestionId <= 0) {
-            throw new BusinessException("错题记录ID不合法", 400);
+            throw new BusinessException("错题记录编号不合法", 400);
         }
         WrongQuestion wrongQuestion = wrongQuestionMapper.selectOne(new LambdaQueryWrapper<WrongQuestion>()
                 .eq(WrongQuestion::getId, wrongQuestionId)
@@ -1924,6 +2161,9 @@ public class PracticeServiceImpl implements PracticeService {
         return wrongQuestion;
     }
 
+    /**
+     * 构建业务处理所需数据。
+     */
     private List<PracticeWrongTrendVO> buildEmptyWrongTrends(LocalDate startDate, LocalDate endDate) {
         List<PracticeWrongTrendVO> result = new ArrayList<>();
         LocalDate cursor = startDate;
@@ -1938,6 +2178,9 @@ public class PracticeServiceImpl implements PracticeService {
         return result;
     }
 
+    /**
+     * 执行保存与更新业务流程。
+     */
     private void updateQuestionStats(Question question, boolean isCorrect) {
         int previousDoCount = defaultNumber(question.getDoCount());
         BigDecimal previousRate = defaultDecimal(question.getCorrectRate());
@@ -1956,6 +2199,9 @@ public class PracticeServiceImpl implements PracticeService {
         questionMapper.updateById(question);
     }
 
+    /**
+     * 执行保存与更新业务流程。
+     */
     private void updateUserStats(Long userId, boolean isCorrect) {
         UserStats userStats = userStatsMapper.selectOne(new LambdaQueryWrapper<UserStats>()
                 .eq(UserStats::getUserId, userId)
@@ -1982,6 +2228,9 @@ public class PracticeServiceImpl implements PracticeService {
         }
     }
 
+    /**
+     * 执行保存与更新业务流程。
+     */
     private void updateUserSubjectStats(Long userId, Long subjectId, boolean isCorrect, int timeCost) {
         UserSubjectStats subjectStats = userSubjectStatsMapper.selectOne(new LambdaQueryWrapper<UserSubjectStats>()
                 .eq(UserSubjectStats::getUserId, userId)
@@ -2012,6 +2261,9 @@ public class PracticeServiceImpl implements PracticeService {
         }
     }
 
+    /**
+     * 执行保存与更新业务流程。
+     */
     private void updateDailyStats(Long userId, boolean isCorrect, int timeCost) {
         LocalDate today = LocalDate.now();
         DailyStats dailyStats = dailyStatsMapper.selectOne(new LambdaQueryWrapper<DailyStats>()
@@ -2038,6 +2290,9 @@ public class PracticeServiceImpl implements PracticeService {
         }
     }
 
+    /**
+     * 执行保存与更新业务流程。
+     */
     private void updateKnowledgeMastery(Long userId, Long subjectId, List<Long> tagIds, boolean isCorrect) {
         if (tagIds.isEmpty()) {
             return;
@@ -2074,6 +2329,9 @@ public class PracticeServiceImpl implements PracticeService {
         }
     }
 
+    /**
+     * 执行核心业务处理流程。
+     */
     private void upsertWrongQuestion(Long userId, Question question, List<String> tagNames, LocalDateTime wrongTime) {
         WrongQuestion wrongQuestion = wrongQuestionMapper.selectOne(new LambdaQueryWrapper<WrongQuestion>()
                 .eq(WrongQuestion::getUserId, userId)
@@ -2104,6 +2362,9 @@ public class PracticeServiceImpl implements PracticeService {
         wrongQuestionMapper.updateById(wrongQuestion);
     }
 
+    /**
+     * 执行核心业务处理流程。
+     */
     private TagSnapshot loadTagSnapshot(Long questionId) {
         List<QuestionTagRelation> relations = questionTagRelationMapper.selectList(new LambdaQueryWrapper<QuestionTagRelation>()
                 .eq(QuestionTagRelation::getQuestionId, questionId));
@@ -2130,6 +2391,9 @@ public class PracticeServiceImpl implements PracticeService {
         return new TagSnapshot(tagIds, tagNames);
     }
 
+    /**
+     * 解析并转换输入数据。
+     */
     private int normalizePracticeMode(Integer practiceMode) {
         int mode = practiceMode == null ? PracticeModeConstants.SEQUENTIAL : practiceMode;
         if (mode != PracticeModeConstants.SEQUENTIAL
@@ -2141,6 +2405,9 @@ public class PracticeServiceImpl implements PracticeService {
         return mode;
     }
 
+    /**
+     * 解析并转换输入数据。
+     */
     private int normalizeQuestionCount(Integer questionCount) {
         if (questionCount == null) {
             return DEFAULT_QUESTION_COUNT;
@@ -2151,6 +2418,9 @@ public class PracticeServiceImpl implements PracticeService {
         return questionCount;
     }
 
+    /**
+     * 解析并转换输入数据。
+     */
     private List<Long> normalizeTagIds(List<Long> tagIds) {
         if (tagIds == null || tagIds.isEmpty()) {
             throw new BusinessException("请选择知识点", 400);
@@ -2166,6 +2436,9 @@ public class PracticeServiceImpl implements PracticeService {
         return normalizedTagIds;
     }
 
+    /**
+     * 解析并转换输入数据。
+     */
     private int normalizeStatsDays(Integer days) {
         if (days == null) {
             return 30;
@@ -2176,6 +2449,9 @@ public class PracticeServiceImpl implements PracticeService {
         return days;
     }
 
+    /**
+     * 解析并转换输入数据。
+     */
     private int normalizeTimeCost(Integer timeCost) {
         if (timeCost == null) {
             return 0;
@@ -2183,6 +2459,9 @@ public class PracticeServiceImpl implements PracticeService {
         return Math.max(timeCost, 0);
     }
 
+    /**
+     * 解析并转换输入数据。
+     */
     private int normalizeDraftVersion(Integer baseVersion) {
         if (baseVersion == null || baseVersion < 0) {
             throw new BusinessException("草稿版本不合法", 400);
@@ -2190,10 +2469,16 @@ public class PracticeServiceImpl implements PracticeService {
         return baseVersion;
     }
 
+    /**
+     * 执行核心业务处理流程。
+     */
     private void throwDraftConflict(Long sessionId) {
         throwDraftConflict(sessionId, null);
     }
 
+    /**
+     * 执行核心业务处理流程。
+     */
     private void throwDraftConflict(Long sessionId, Integer latestVersionHint) {
         int latestVersion = latestVersionHint == null ? 0 : Math.max(latestVersionHint, 0);
         if (latestVersionHint == null) {
@@ -2210,9 +2495,12 @@ public class PracticeServiceImpl implements PracticeService {
                 }
             }
         }
-        throw new BusinessException("草稿版本冲突，请刷新后重试。serverVersion=" + latestVersion, 409);
+        throw new BusinessException("草稿版本冲突，请刷新后重试。服务端版本=" + latestVersion, 409);
     }
 
+    /**
+     * 解析并转换输入数据。
+     */
     private String normalizeSubmittedAnswer(String userAnswer) {
         if (userAnswer == null) {
             return "";
@@ -2220,6 +2508,9 @@ public class PracticeServiceImpl implements PracticeService {
         return userAnswer.trim();
     }
 
+    /**
+     * 解析并转换输入数据。
+     */
     private int resolveMasteryLevel(BigDecimal correctRate, Integer totalCount) {
         int answeredCount = defaultNumber(totalCount);
         if (answeredCount <= 0) {
@@ -2234,14 +2525,17 @@ public class PracticeServiceImpl implements PracticeService {
         int warmupLevelCap = resolveConfiguredWarmupLevelCap();
 
         if (answeredCount < minSampleCount) {
-            // Warm-up stage: avoid overestimating mastery from too few samples.
+            // 预热阶段：避免因样本过少而高估掌握度。
             return Math.min(resolveMasteryLevelByRate(rate, level1Rate, level2Rate, level3Rate), warmupLevelCap);
         }
 
-        // Stable stage: classify by accuracy only.
+        // 稳定阶段：仅按正确率分层。
         return resolveMasteryLevelByRate(rate, level1Rate, level2Rate, level3Rate);
     }
 
+    /**
+     * 解析并转换输入数据。
+     */
     private int resolveMasteryLevelByRate(BigDecimal rate, int level1Rate, int level2Rate, int level3Rate) {
         if (rate.compareTo(BigDecimal.valueOf(level3Rate)) >= 0) {
             return 3;
@@ -2255,25 +2549,40 @@ public class PracticeServiceImpl implements PracticeService {
         return 0;
     }
 
+    /**
+     * 解析并转换输入数据。
+     */
     private int resolveConfiguredMinSampleCount() {
         Integer configured = practiceMasteryProperties.getMinSampleCount();
         return configured == null || configured < 1 ? DEFAULT_MASTERY_MIN_SAMPLE_COUNT : configured;
     }
 
+    /**
+     * 解析并转换输入数据。
+     */
     private int resolveConfiguredRateLevel1() {
         return clampRate(practiceMasteryProperties.getRateLevel1(), DEFAULT_MASTERY_RATE_LEVEL_1);
     }
 
+    /**
+     * 解析并转换输入数据。
+     */
     private int resolveConfiguredRateLevel2(int level1Rate) {
         int level2Rate = clampRate(practiceMasteryProperties.getRateLevel2(), DEFAULT_MASTERY_RATE_LEVEL_2);
         return Math.max(level1Rate, level2Rate);
     }
 
+    /**
+     * 解析并转换输入数据。
+     */
     private int resolveConfiguredRateLevel3(int level2Rate) {
         int level3Rate = clampRate(practiceMasteryProperties.getRateLevel3(), DEFAULT_MASTERY_RATE_LEVEL_3);
         return Math.max(level2Rate, level3Rate);
     }
 
+    /**
+     * 解析并转换输入数据。
+     */
     private int resolveConfiguredWarmupLevelCap() {
         Integer configured = practiceMasteryProperties.getWarmupLevelCap();
         int warmupLevelCap = configured == null ? DEFAULT_MASTERY_WARMUP_LEVEL_CAP : configured;
@@ -2283,6 +2592,9 @@ public class PracticeServiceImpl implements PracticeService {
         return Math.min(warmupLevelCap, 3);
     }
 
+    /**
+     * 执行核心业务处理流程。
+     */
     private int clampRate(Integer configured, int defaultValue) {
         int rate = configured == null ? defaultValue : configured;
         if (rate < 0) {
@@ -2291,6 +2603,9 @@ public class PracticeServiceImpl implements PracticeService {
         return Math.min(rate, 100);
     }
 
+    /**
+     * 计算并返回处理结果。
+     */
     private BigDecimal calculateRate(Integer correctCount, Integer totalCount) {
         int total = defaultNumber(totalCount);
         if (total <= 0) {
@@ -2301,10 +2616,16 @@ public class PracticeServiceImpl implements PracticeService {
                 .divide(BigDecimal.valueOf(total), 2, RoundingMode.HALF_UP);
     }
 
+    /**
+     * 执行核心业务处理流程。
+     */
     private int defaultNumber(Integer value) {
         return value == null ? 0 : value;
     }
 
+    /**
+     * 执行核心业务处理流程。
+     */
     private int toInt(Long value) {
         if (value == null) {
             return 0;
@@ -2315,10 +2636,16 @@ public class PracticeServiceImpl implements PracticeService {
         return value.intValue();
     }
 
+    /**
+     * 执行核心业务处理流程。
+     */
     private BigDecimal defaultDecimal(BigDecimal value) {
         return value == null ? BigDecimal.ZERO : value;
     }
 
+    /**
+     * 判断当前条件是否满足。
+     */
     private boolean isSessionOngoing(PracticeSession practiceSession) {
         return Integer.valueOf(PracticeModeConstants.STATUS_ONGOING).equals(practiceSession.getStatus());
     }
@@ -2329,34 +2656,58 @@ public class PracticeServiceImpl implements PracticeService {
         private Integer timeCost;
         private Long updatedAt;
 
+        /**
+         * 执行查询业务流程并返回结果。
+         */
         public Long getQuestionId() {
             return questionId;
         }
 
+        /**
+         * 执行保存与更新业务流程。
+         */
         public void setQuestionId(Long questionId) {
             this.questionId = questionId;
         }
 
+        /**
+         * 执行查询业务流程并返回结果。
+         */
         public String getUserAnswer() {
             return userAnswer;
         }
 
+        /**
+         * 执行保存与更新业务流程。
+         */
         public void setUserAnswer(String userAnswer) {
             this.userAnswer = userAnswer;
         }
 
+        /**
+         * 执行查询业务流程并返回结果。
+         */
         public Integer getTimeCost() {
             return timeCost;
         }
 
+        /**
+         * 执行保存与更新业务流程。
+         */
         public void setTimeCost(Integer timeCost) {
             this.timeCost = timeCost;
         }
 
+        /**
+         * 执行查询业务流程并返回结果。
+         */
         public Long getUpdatedAt() {
             return updatedAt;
         }
 
+        /**
+         * 执行保存与更新业务流程。
+         */
         public void setUpdatedAt(Long updatedAt) {
             this.updatedAt = updatedAt;
         }

@@ -8,6 +8,9 @@ import lombok.Data;
 
 import java.time.LocalDateTime;
 
+/**
+ * 考试实体对象，负责相关业务逻辑与流程处理。
+ */
 @Data
 @TableName("exam_record_question")
 public class ExamRecordQuestion {

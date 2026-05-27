@@ -8,8 +8,11 @@ import {
 function createInitialState() {
   const { token, user } = loadAuthStorage()
   return {
+    // 当前登录态 token（空串表示未登录）
     token,
+    // 当前登录用户信息
     user,
+    // 是否已完成应用启动阶段的鉴权初始化
     bootstrapped: false
   }
 }
@@ -47,6 +50,7 @@ export default {
         return
       }
 
+      // 已有 token 但无用户详情时，尝试恢复用户信息。
       if (!state.user) {
         try {
           const response = await authApi.fetchProfile()

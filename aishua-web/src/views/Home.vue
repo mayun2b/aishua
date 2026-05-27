@@ -277,6 +277,7 @@ import { onMounted, ref, onUnmounted } from 'vue'
 const router = useRouter()
 const isScrolled = ref(false)
 
+// 统一读取本地用户信息，解析失败时按未登录处理。
 const getStoredUser = () => {
   try {
     const rawUser = localStorage.getItem('user')
@@ -286,7 +287,11 @@ const getStoredUser = () => {
   }
 }
 
-
+// 根据用户角色返回登录后默认落地页。
+const resolveAuthenticatedLanding = () => {
+  const user = getStoredUser()
+  return user?.isAdmin === 1 ? '/admin' : '/my-subjects'
+}
 
 const goToLogin = () => {
   router.push('/login')
@@ -294,23 +299,20 @@ const goToLogin = () => {
 const goToRegister = () => {
   router.push('/register')
 }
-const goToExercise = () => {
+const goToPracticeLanding = () => {
   const token = localStorage.getItem('token')
-  const user = getStoredUser()
   if (token) {
-    router.push(user?.isAdmin === 1 ? '/admin' : '/my-subjects')
+    router.push(resolveAuthenticatedLanding())
   } else {
     router.push('/login')
   }
 }
+// 保留两个入口方法，避免改动模板结构。
+const goToExercise = () => {
+  goToPracticeLanding()
+}
 const goToDashboard = () => {
-  const token = localStorage.getItem('token')
-  const user = getStoredUser()
-  if (token) {
-    router.push(user?.isAdmin === 1 ? '/admin' : '/my-subjects')
-  } else {
-    router.push('/login')
-  }
+  goToPracticeLanding()
 }
 const goToHome = () => {
   router.push('/')

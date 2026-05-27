@@ -10,6 +10,9 @@ public final class PracticeModeConstants {
     public static final int STATUS_ONGOING = 1;
     public static final int STATUS_FINISHED = 2;
 
+    /**
+     * 构造方法，负责注入依赖组件。
+     */
     private PracticeModeConstants() {
     }
 }

@@ -3,7 +3,7 @@ package zysy.iflytek.aishua.modules.user.entity.vo;
 import lombok.Data;
 
 /**
- * 登录响应VO
+ * 登录响应视图对象。
  */
 @Data
 public class LoginVO {
@@ -11,7 +11,7 @@ public class LoginVO {
     private UserVO user;
 
     /**
-     * 用户信息VO
+     * 用户信息视图对象。
      */
     @Data
     public static class UserVO {

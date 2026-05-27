@@ -7,6 +7,9 @@ import java.time.LocalDateTime;
 import java.util.ArrayList;
 import java.util.List;
 
+/**
+ * 练习视图对象，负责相关业务逻辑与流程处理。
+ */
 @Data
 public class PracticeSessionDetailVO {
     private Long sessionId;

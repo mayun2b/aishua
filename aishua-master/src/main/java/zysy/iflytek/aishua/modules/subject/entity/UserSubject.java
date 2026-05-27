@@ -8,6 +8,9 @@ import lombok.Data;
 
 import java.time.LocalDateTime;
 
+/**
+ * 学科实体对象，负责相关业务逻辑与流程处理。
+ */
 @Data
 @TableName("user_subject")
 public class UserSubject {

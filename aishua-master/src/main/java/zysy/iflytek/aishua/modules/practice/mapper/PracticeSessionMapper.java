@@ -8,6 +8,9 @@ import zysy.iflytek.aishua.modules.practice.entity.PracticeSession;
 
 import java.time.LocalDateTime;
 
+/**
+ * 练习数据访问映射，定义该领域对外能力契约。
+ */
 @Mapper
 public interface PracticeSessionMapper extends BaseMapper<PracticeSession> {
     @Update("""

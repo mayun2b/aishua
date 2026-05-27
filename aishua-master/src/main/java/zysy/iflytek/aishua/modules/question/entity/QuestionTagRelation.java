@@ -5,6 +5,9 @@ import com.baomidou.mybatisplus.annotation.TableId;
 import com.baomidou.mybatisplus.annotation.TableName;
 import lombok.Data;
 
+/**
+ * 题目实体对象，负责相关业务逻辑与流程处理。
+ */
 @Data
 @TableName("question_tag_relation")
 public class QuestionTagRelation {

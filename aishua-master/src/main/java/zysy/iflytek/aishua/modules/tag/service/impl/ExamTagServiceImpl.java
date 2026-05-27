@@ -19,17 +19,26 @@ import java.util.Map;
 import java.util.Set;
 import java.util.stream.Collectors;
 
+/**
+ * 标签服务实现，负责相关业务逻辑与流程处理。
+ */
 @Slf4j
 @Service
 public class ExamTagServiceImpl implements ExamTagService {
     private final ExamTagMapper examTagMapper;
     private final SubjectMapper subjectMapper;
 
+    /**
+     * 构造方法，负责注入依赖组件。
+     */
     public ExamTagServiceImpl(ExamTagMapper examTagMapper, SubjectMapper subjectMapper) {
         this.examTagMapper = examTagMapper;
         this.subjectMapper = subjectMapper;
     }
 
+    /**
+     * 执行查询业务流程并返回结果。
+     */
     @Override
     public List<ExamTagVO> listTags(Long subjectId, String keyword) {
         LambdaQueryWrapper<ExamTag> queryWrapper = new LambdaQueryWrapper<>();
@@ -51,6 +60,9 @@ public class ExamTagServiceImpl implements ExamTagService {
         return examTags.stream().map(examTag -> toVO(examTag, subjectNameMap.get(examTag.getSubjectId()))).toList();
     }
 
+    /**
+     * 执行创建业务流程并返回结果。
+     */
     @Override
     @Transactional
     public ExamTagVO createTag(ExamTagUpsertDTO examTagUpsertDTO) {
@@ -65,6 +77,9 @@ public class ExamTagServiceImpl implements ExamTagService {
         return toVO(requireTag(examTag.getId()), subject.getName());
     }
 
+    /**
+     * 执行保存与更新业务流程。
+     */
     @Override
     @Transactional
     public ExamTagVO updateTag(Long id, ExamTagUpsertDTO examTagUpsertDTO) {
@@ -79,6 +94,9 @@ public class ExamTagServiceImpl implements ExamTagService {
         return toVO(requireTag(id), subject.getName());
     }
 
+    /**
+     * 执行删除与清理业务流程。
+     */
     @Override
     @Transactional
     public void deleteTag(Long id) {
@@ -87,12 +105,18 @@ public class ExamTagServiceImpl implements ExamTagService {
         log.info("考点标签删除成功，tagId={}", examTag.getId());
     }
 
+    /**
+     * 执行核心业务处理流程。
+     */
     private void applyChanges(ExamTag examTag, ExamTagUpsertDTO examTagUpsertDTO) {
         examTag.setName(examTagUpsertDTO.getName().trim());
         examTag.setSubjectId(examTagUpsertDTO.getSubjectId());
         examTag.setTag(normalizeText(examTagUpsertDTO.getTag()));
     }
 
+    /**
+     * 执行参数与状态校验。
+     */
     private void ensureUniqueName(Long id, Long subjectId, String name) {
         ExamTag existing = examTagMapper.selectOne(new LambdaQueryWrapper<ExamTag>()
                 .eq(ExamTag::getSubjectId, subjectId)
@@ -103,6 +127,9 @@ public class ExamTagServiceImpl implements ExamTagService {
         }
     }
 
+    /**
+     * 构建业务处理所需数据。
+     */
     private Map<Long, String> buildSubjectNameMap(List<ExamTag> examTags) {
         if (examTags.isEmpty()) {
             return Map.of();
@@ -118,6 +145,9 @@ public class ExamTagServiceImpl implements ExamTagService {
         return subjectNameMap;
     }
 
+    /**
+     * 执行参数与状态校验。
+     */
     private Subject requireSubject(Long subjectId) {
         if (subjectId == null || subjectId <= 0) {
             throw new BusinessException("所属学科不合法", 400);
@@ -129,6 +159,9 @@ public class ExamTagServiceImpl implements ExamTagService {
         return subject;
     }
 
+    /**
+     * 执行参数与状态校验。
+     */
     private ExamTag requireTag(Long id) {
         ExamTag examTag = examTagMapper.selectById(id);
         if (examTag == null) {
@@ -137,6 +170,9 @@ public class ExamTagServiceImpl implements ExamTagService {
         return examTag;
     }
 
+    /**
+     * 解析并转换输入数据。
+     */
     private String normalizeText(String value) {
         if (value == null) {
             return null;
@@ -145,6 +181,9 @@ public class ExamTagServiceImpl implements ExamTagService {
         return trimmed.isEmpty() ? null : trimmed;
     }
 
+    /**
+     * 执行核心业务处理流程。
+     */
     private ExamTagVO toVO(ExamTag examTag, String subjectName) {
         ExamTagVO examTagVO = new ExamTagVO();
         examTagVO.setId(examTag.getId());

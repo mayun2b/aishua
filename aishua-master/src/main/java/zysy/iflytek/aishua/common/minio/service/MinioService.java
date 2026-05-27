@@ -10,17 +10,26 @@ import java.time.LocalDate;
 import java.util.UUID;
 import java.util.concurrent.TimeUnit;
 
+/**
+ * 通用基础服务组件，负责相关业务逻辑与流程处理。
+ */
 @Service
 public class MinioService {
 
     private final MinioClient minioClient;
     private final MinioProperties properties;
 
+    /**
+     * 构造方法，负责注入依赖组件。
+     */
     public MinioService(MinioClient minioClient, MinioProperties properties) {
         this.minioClient = minioClient;
         this.properties = properties;
     }
 
+    /**
+     * 定义业务能力接口。
+     */
     public void createBucketIfNotExists() {
         try {
             String bucketName = properties.getBucketName();
@@ -39,10 +48,13 @@ public class MinioService {
                 );
             }
         } catch (Exception e) {
-            throw new RuntimeException("创建 MinIO bucket 失败", e);
+            throw new RuntimeException("创建对象存储桶失败", e);
         }
     }
 
+    /**
+     * 定义业务能力接口。
+     */
     public String upload(MultipartFile file) {
         try {
             createBucketIfNotExists();
@@ -67,10 +79,13 @@ public class MinioService {
 
             return objectName;
         } catch (Exception e) {
-            throw new RuntimeException("文件上传到 MinIO 失败", e);
+            throw new RuntimeException("文件上传到对象存储失败", e);
         }
     }
 
+    /**
+     * 定义业务能力接口。
+     */
     public InputStream download(String objectName) {
         try {
             return minioClient.getObject(
@@ -80,10 +95,13 @@ public class MinioService {
                             .build()
             );
         } catch (Exception e) {
-            throw new RuntimeException("从 MinIO 下载文件失败", e);
+            throw new RuntimeException("从对象存储下载文件失败", e);
         }
     }
 
+    /**
+     * 定义业务能力接口。
+     */
     public StatObjectResponse getObjectInfo(String objectName) {
         try {
             return minioClient.statObject(
@@ -93,10 +111,13 @@ public class MinioService {
                             .build()
             );
         } catch (Exception e) {
-            throw new RuntimeException("获取 MinIO 文件信息失败", e);
+            throw new RuntimeException("获取对象存储文件信息失败", e);
         }
     }
 
+    /**
+     * 定义业务能力接口。
+     */
     public void remove(String objectName) {
         try {
             minioClient.removeObject(
@@ -106,10 +127,13 @@ public class MinioService {
                             .build()
             );
         } catch (Exception e) {
-            throw new RuntimeException("删除 MinIO 文件失败", e);
+            throw new RuntimeException("删除对象存储文件失败", e);
         }
     }
 
+    /**
+     * 定义业务能力接口。
+     */
     public String getPreviewUrl(String objectName) {
         try {
             return minioClient.getPresignedObjectUrl(
@@ -121,7 +145,7 @@ public class MinioService {
                             .build()
             );
         } catch (Exception e) {
-            throw new RuntimeException("生成 MinIO 预览链接失败", e);
+            throw new RuntimeException("生成对象存储预览链接失败", e);
         }
     }
 }

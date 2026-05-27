@@ -15,16 +15,22 @@ import java.util.List;
 import java.util.Map;
 
 /**
- * Resolve directory scopes for "current directory + all descendants" queries.
+ * 解析“当前目录及其所有子目录”的查询范围。
  */
 @Component
 public class DirectoryScopeResolver {
     private final TextbookDirectoryMapper textbookDirectoryMapper;
 
+    /**
+     * 构造方法，负责注入依赖组件。
+     */
     public DirectoryScopeResolver(TextbookDirectoryMapper textbookDirectoryMapper) {
         this.textbookDirectoryMapper = textbookDirectoryMapper;
     }
 
+    /**
+     * 解析并转换支撑数据。
+     */
     public List<Long> resolveSelfAndDescendants(Long directoryId, Long subjectId) {
         if (directoryId == null || directoryId <= 0) {
             throw new BusinessException("目录筛选条件不合法", 400);

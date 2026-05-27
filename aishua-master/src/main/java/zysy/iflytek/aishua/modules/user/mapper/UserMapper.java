@@ -5,7 +5,7 @@ import org.apache.ibatis.annotations.Mapper;
 import zysy.iflytek.aishua.modules.user.entity.User;
 
 /**
- * 用户Mapper
+ * 用户数据访问映射。
  */
 @Mapper
 public interface UserMapper extends BaseMapper<User> {

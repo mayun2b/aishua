@@ -15,12 +15,18 @@ import zysy.iflytek.aishua.config.properties.JwtProperties;
 import java.nio.charset.StandardCharsets;
 import java.util.Date;
 
+/**
+ * 令牌工具，负责生成、校验与用户标识解析。
+ */
 @Slf4j
 @Component
 public class JwtService {
     private final JwtProperties jwtProperties;
     private SecretKey secretKey;
 
+    /**
+     * 构造方法，负责注入依赖组件。
+     */
     public JwtService(JwtProperties jwtProperties) {
         this.jwtProperties = jwtProperties;
     }
@@ -29,11 +35,14 @@ public class JwtService {
     void init() {
         byte[] keyBytes = jwtProperties.getSecret().getBytes(StandardCharsets.UTF_8);
         if (keyBytes.length < 32) {
-            throw new IllegalStateException("JWT 密钥长度必须至少为 32 字节");
+            throw new IllegalStateException("令牌密钥长度至少为 32 字节");
         }
         secretKey = Keys.hmacShaKeyFor(keyBytes);
     }
 
+    /**
+     * 处理当前业务逻辑。
+     */
     public String generateToken(Long userId) {
         Date now = new Date();
         Date expiration = new Date(now.getTime() + jwtProperties.getExpirationMs());
@@ -45,19 +54,25 @@ public class JwtService {
                 .compact();
     }
 
+    /**
+     * 执行参数与状态校验。
+     */
     public boolean validateToken(String token) {
         try {
             Jwts.parserBuilder().setSigningKey(secretKey).build().parseClaimsJws(token);
             return true;
         } catch (ExpiredJwtException exception) {
-            log.info("JWT 已过期: {}", exception.getMessage());
+            log.info("JWT expired: {}", exception.getMessage());
             return false;
         } catch (JwtException | IllegalArgumentException exception) {
-            log.info("JWT 校验失败: {}", exception.getMessage());
+            log.info("JWT invalid: {}", exception.getMessage());
             return false;
         }
     }
 
+    /**
+     * 查询并返回处理结果。
+     */
     public Long getUserIdFromToken(String token) {
         try {
             Claims claims = Jwts.parserBuilder()
@@ -67,7 +82,7 @@ public class JwtService {
                     .getBody();
             return Long.parseLong(claims.getSubject());
         } catch (JwtException | IllegalArgumentException exception) {
-            log.info("JWT 解析失败: {}", exception.getMessage());
+            log.info("JWT parse failed: {}", exception.getMessage());
             return null;
         }
     }

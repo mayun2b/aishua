@@ -14,15 +14,24 @@ import zysy.iflytek.aishua.modules.subject.service.SubjectService;
 import java.util.List;
 import java.util.Locale;
 
+/**
+ * 学科服务实现，负责相关业务逻辑与流程处理。
+ */
 @Slf4j
 @Service
 public class SubjectServiceImpl implements SubjectService {
     private final SubjectMapper subjectMapper;
 
+    /**
+     * 构造方法，负责注入依赖组件。
+     */
     public SubjectServiceImpl(SubjectMapper subjectMapper) {
         this.subjectMapper = subjectMapper;
     }
 
+    /**
+     * 执行查询业务流程并返回结果。
+     */
     @Override
     public List<SubjectVO> listAdminSubjects(String keyword, Integer enabled) {
         LambdaQueryWrapper<Subject> queryWrapper = new LambdaQueryWrapper<>();
@@ -39,6 +48,9 @@ public class SubjectServiceImpl implements SubjectService {
         return subjectMapper.selectList(queryWrapper).stream().map(this::toVO).toList();
     }
 
+    /**
+     * 执行创建业务流程并返回结果。
+     */
     @Override
     @Transactional
     public SubjectVO createSubject(SubjectUpsertDTO subjectUpsertDTO) {
@@ -54,6 +66,9 @@ public class SubjectServiceImpl implements SubjectService {
         return toVO(subject);
     }
 
+    /**
+     * 执行保存与更新业务流程。
+     */
     @Override
     @Transactional
     public SubjectVO updateSubject(Long id, SubjectUpsertDTO subjectUpsertDTO) {
@@ -68,6 +83,9 @@ public class SubjectServiceImpl implements SubjectService {
         return toVO(subjectMapper.selectById(id));
     }
 
+    /**
+     * 执行保存与更新业务流程。
+     */
     @Override
     @Transactional
     public SubjectVO updateEnabledStatus(Long id, Integer enabled) {
@@ -80,15 +98,21 @@ public class SubjectServiceImpl implements SubjectService {
         return toVO(subjectMapper.selectById(id));
     }
 
+    /**
+     * 执行删除与清理业务流程。
+     */
     @Override
     @Transactional
     public void deleteSubject(Long id) {
         Subject subject = requireSubject(id);
-        // 与 SQL 设计一致：deleted 字段启用逻辑删除
+        // 与数据库设计一致：删除标记字段启用逻辑删除。
         subjectMapper.deleteById(id);
         log.info("学科删除成功，subjectId={}", subject.getId());
     }
 
+    /**
+     * 执行核心业务处理流程。
+     */
     private void applyChanges(Subject subject, SubjectUpsertDTO subjectUpsertDTO) {
         subject.setName(subjectUpsertDTO.getName().trim());
         subject.setCode(subjectUpsertDTO.getCode().trim().toUpperCase(Locale.ROOT));
@@ -98,6 +122,9 @@ public class SubjectServiceImpl implements SubjectService {
         subject.setIsEnabled(subjectUpsertDTO.getIsEnabled());
     }
 
+    /**
+     * 解析并转换输入数据。
+     */
     private String normalizeText(String value) {
         if (value == null) {
             return null;
@@ -106,6 +133,9 @@ public class SubjectServiceImpl implements SubjectService {
         return trimmed.isEmpty() ? null : trimmed;
     }
 
+    /**
+     * 执行参数与状态校验。
+     */
     private void ensureCodeUnique(Long id, String code) {
         Subject existing = subjectMapper.selectOne(new LambdaQueryWrapper<Subject>()
                 .eq(Subject::getCode, code.trim().toUpperCase(Locale.ROOT))
@@ -115,6 +145,9 @@ public class SubjectServiceImpl implements SubjectService {
         }
     }
 
+    /**
+     * 执行参数与状态校验。
+     */
     private Subject requireSubject(Long id) {
         Subject subject = subjectMapper.selectById(id);
         if (subject == null || Integer.valueOf(1).equals(subject.getDeleted())) {
@@ -123,12 +156,18 @@ public class SubjectServiceImpl implements SubjectService {
         return subject;
     }
 
+    /**
+     * 执行参数与状态校验。
+     */
     private void validateEnabled(Integer enabled) {
         if (!Integer.valueOf(0).equals(enabled) && !Integer.valueOf(1).equals(enabled)) {
             throw new BusinessException("启用状态只能是 0 或 1", 400);
         }
     }
 
+    /**
+     * 执行核心业务处理流程。
+     */
     private SubjectVO toVO(Subject subject) {
         SubjectVO subjectVO = new SubjectVO();
         subjectVO.setId(subject.getId());

@@ -10,6 +10,9 @@ import zysy.iflytek.aishua.modules.ai.entity.vo.WrongQuestionAiChatSessionVO;
 import java.util.List;
 import java.util.function.Consumer;
 
+/**
+ * 智能问答服务接口，定义该领域对外能力契约。
+ */
 public interface WrongQuestionAiService {
     WrongQuestionAiAnalysisVO analyzeWrongQuestion(Long userId, Long wrongQuestionId, WrongQuestionAiAnalysisRequestDTO requestDTO);
 

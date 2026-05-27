@@ -10,6 +10,9 @@ import zysy.iflytek.aishua.modules.subject.entity.vo.MySubjectVO;
 
 import java.util.List;
 
+/**
+ * 学科数据访问映射，定义该领域对外能力契约。
+ */
 @Mapper
 public interface UserSubjectMapper extends BaseMapper<UserSubject> {
     @Select("""

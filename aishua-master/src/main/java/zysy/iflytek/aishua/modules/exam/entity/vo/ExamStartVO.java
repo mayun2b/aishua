@@ -5,6 +5,9 @@ import lombok.Data;
 import java.time.LocalDateTime;
 import java.util.List;
 
+/**
+ * 考试视图对象，负责相关业务逻辑与流程处理。
+ */
 @Data
 public class ExamStartVO {
     private Long examRecordId;

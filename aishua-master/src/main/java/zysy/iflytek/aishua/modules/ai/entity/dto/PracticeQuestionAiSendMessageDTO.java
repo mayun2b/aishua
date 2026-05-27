@@ -5,6 +5,9 @@ import jakarta.validation.constraints.NotBlank;
 import jakarta.validation.constraints.Size;
 import lombok.Data;
 
+/**
+ * 智能问答数据传输对象，负责相关业务逻辑与流程处理。
+ */
 @Data
 public class PracticeQuestionAiSendMessageDTO {
     @NotBlank(message = "提问内容不能为空")
@@ -14,6 +17,6 @@ public class PracticeQuestionAiSendMessageDTO {
     @Size(max = 4000, message = "草稿答案不能超过4000字符")
     private String draftAnswer;
 
-    @Min(value = 0, message = "timeCost 不能小于0")
+    @Min(value = 0, message = "作答耗时不能小于 0")
     private Integer timeCost;
 }

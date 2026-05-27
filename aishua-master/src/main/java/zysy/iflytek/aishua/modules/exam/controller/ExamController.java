@@ -26,85 +26,140 @@ import zysy.iflytek.aishua.modules.exam.service.ExamService;
 import java.time.LocalDate;
 import java.util.List;
 
+/**
+ * 考试控制器，负责相关业务逻辑与流程处理。
+ */
 @Validated
 @RestController
 @RequestMapping("/api/exam")
 public class ExamController {
     private final ExamService examService;
 
+    /**
+     * 构造方法，负责注入依赖组件。
+     */
     public ExamController(ExamService examService) {
         this.examService = examService;
     }
 
+    /**
+     * 处理查询请求并返回结果。
+     */
     @GetMapping("/papers")
     public Result<List<ExamPaperVO>> listAvailablePapers(
-            @RequestParam(required = false) @Min(value = 1, message = "学科ID不合法") Long subjectId
+            @RequestParam(required = false) @Min(value = 1, message = "学科编号不合法") Long subjectId
     ) {
+        // 调用服务层处理业务并封装统一响应。
         return Result.success(examService.listAvailablePapers(subjectId));
     }
 
+    /**
+     * 处理创建请求并返回结果。
+     */
     @PostMapping("/start")
     public Result<ExamStartVO> startExam(@Valid @RequestBody ExamStartDTO startDTO) {
+        // 从用户上下文获取当前登录用户编号。
         Long userId = UserContext.requireUserId();
+        // 调用服务层处理业务并封装统一响应。
         return Result.success(examService.startExam(userId, startDTO));
     }
 
+    /**
+     * 处理更新请求并返回结果。
+     */
     @PostMapping("/{recordId}/submit")
     public Result<ExamSubmitResultVO> submitExam(
             @PathVariable Long recordId,
             @Valid @RequestBody ExamSubmitDTO submitDTO
     ) {
+        // 从用户上下文获取当前登录用户编号。
         Long userId = UserContext.requireUserId();
+        // 调用服务层处理业务并封装统一响应。
         return Result.success(examService.submitExam(userId, recordId, submitDTO));
     }
 
+    /**
+     * 处理查询请求并返回结果。
+     */
     @GetMapping("/records/me")
     public Result<List<ExamRecordSummaryVO>> listMyRecords() {
+        // 从用户上下文获取当前登录用户编号。
         Long userId = UserContext.requireUserId();
+        // 调用服务层处理业务并封装统一响应。
         return Result.success(examService.listMyRecords(userId));
     }
 
+    /**
+     * 处理查询请求并返回结果。
+     */
     @GetMapping("/records/{id}")
     public Result<ExamRecordSummaryVO> getMyRecord(@PathVariable Long id) {
+        // 从用户上下文获取当前登录用户编号。
         Long userId = UserContext.requireUserId();
+        // 调用服务层处理业务并封装统一响应。
         return Result.success(examService.getMyRecord(userId, id));
     }
 
+    /**
+     * 处理查询请求并返回结果。
+     */
     @GetMapping("/records/{id}/questions")
     public Result<List<ExamRecordQuestionVO>> listMyRecordQuestions(@PathVariable Long id) {
+        // 从用户上下文获取当前登录用户编号。
         Long userId = UserContext.requireUserId();
+        // 调用服务层处理业务并封装统一响应。
         return Result.success(examService.listMyRecordQuestions(userId, id));
     }
 
-    // legacy compatibility
+    // 兼容旧版接口调用。
+    /**
+     * 处理查询请求并返回结果。
+     */
     @GetMapping("/records/user/{userId}")
     public Result<List<ExamRecordSummaryVO>> getExamRecordsByUser(@PathVariable Long userId) {
+        // 从用户上下文获取当前登录用户编号。
         Long currentUserId = UserContext.requireUserId();
+        // 调用服务层处理业务并封装统一响应。
         return Result.success(examService.listUserRecordsByUserId(currentUserId, userId));
     }
 
+    /**
+     * 处理查询请求并返回结果。
+     */
     @GetMapping("/records/user/{userId}/mode/{mode}")
     public Result<List<ExamRecordSummaryVO>> getExamRecordsByMode(
             @PathVariable Long userId,
             @PathVariable Integer mode
     ) {
+        // 从用户上下文获取当前登录用户编号。
         Long currentUserId = UserContext.requireUserId();
+        // 调用服务层处理业务并封装统一响应。
         return Result.success(examService.listUserRecordsByMode(currentUserId, userId, mode));
     }
 
+    /**
+     * 处理查询请求并返回结果。
+     */
     @GetMapping("/records/user/{userId}/date")
     public Result<List<ExamRecordSummaryVO>> getExamRecordsByDateRange(
             @PathVariable Long userId,
             @RequestParam(required = false) @DateTimeFormat(iso = DateTimeFormat.ISO.DATE) LocalDate startDate,
             @RequestParam(required = false) @DateTimeFormat(iso = DateTimeFormat.ISO.DATE) LocalDate endDate
     ) {
+        // 从用户上下文获取当前登录用户编号。
         Long currentUserId = UserContext.requireUserId();
+        // 调用服务层处理业务并封装统一响应。
         return Result.success(examService.listUserRecordsByDateRange(currentUserId, userId, startDate, endDate));
     }
 
+    /**
+     * 处理更新请求并返回结果。
+     */
     @PostMapping("/records/save")
     public Result<ExamRecordSummaryVO> saveLegacyRecord(@Valid @RequestBody LegacyExamRecordSaveDTO saveDTO) {
+        // 从用户上下文获取当前登录用户编号。
         Long currentUserId = UserContext.requireUserId();
+        // 调用服务层处理业务并封装统一响应。
         return Result.success(examService.saveLegacyRecord(currentUserId, saveDTO));
     }
 }

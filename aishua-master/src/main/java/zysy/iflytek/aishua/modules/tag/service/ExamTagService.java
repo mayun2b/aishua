@@ -5,6 +5,9 @@ import zysy.iflytek.aishua.modules.tag.entity.vo.ExamTagVO;
 
 import java.util.List;
 
+/**
+ * 标签服务接口，定义该领域对外能力契约。
+ */
 public interface ExamTagService {
     List<ExamTagVO> listTags(Long subjectId, String keyword);
 

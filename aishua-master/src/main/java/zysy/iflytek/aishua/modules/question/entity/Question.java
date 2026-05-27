@@ -9,6 +9,9 @@ import lombok.Data;
 import java.math.BigDecimal;
 import java.time.LocalDateTime;
 
+/**
+ * 题目实体对象，负责相关业务逻辑与流程处理。
+ */
 @Data
 @TableName("question")
 public class Question {

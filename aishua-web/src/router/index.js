@@ -1,6 +1,7 @@
 import { createRouter, createWebHistory } from 'vue-router'
 import store from '../store'
 import Home from '../views/Home.vue'
+import NotFound from '../views/NotFound.vue'
 import UserLoginView from '../modules/auth/views/UserLoginView.vue'
 import UserRegisterView from '../modules/auth/views/UserRegisterView.vue'
 import UserDashboardView from '../modules/dashboard/views/UserDashboardView.vue'
@@ -208,6 +209,11 @@ const routes = [
       requiresAuth: true,
       requiresAdmin: true
     }
+  },
+  {
+    path: '/:pathMatch(.*)*',
+    name: 'NotFound',
+    component: NotFound
   }
 ]
 
@@ -216,11 +222,12 @@ const router = createRouter({
   routes
 })
 
-// 已登录用户访问访客页时，按角色直接回到对应工作台
+// 已登录用户访问访客页时，按角色直接回到对应工作台。
 function resolveAuthenticatedHome() {
   return store.getters['auth/isAdmin'] ? '/admin' : '/dashboard'
 }
 
+// 全局前置守卫：统一处理登录态、访客页和管理员权限。
 router.beforeEach((to, from, next) => {
   const isAuthenticated = store.getters['auth/isAuthenticated']
   const isAdmin = store.getters['auth/isAdmin']

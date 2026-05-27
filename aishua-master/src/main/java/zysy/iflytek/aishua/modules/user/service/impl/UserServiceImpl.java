@@ -15,6 +15,9 @@ import zysy.iflytek.aishua.modules.user.mapper.UserMapper;
 import zysy.iflytek.aishua.modules.user.service.UserService;
 import zysy.iflytek.aishua.modules.user.support.PasswordCodec;
 
+/**
+ * 用户服务实现，负责相关业务逻辑与流程处理。
+ */
 @Slf4j
 @Service
 public class UserServiceImpl implements UserService {
@@ -22,12 +25,18 @@ public class UserServiceImpl implements UserService {
     private final JwtService jwtService;
     private final PasswordCodec passwordCodec;
 
+    /**
+     * 构造方法，负责注入依赖组件。
+     */
     public UserServiceImpl(UserMapper userMapper, JwtService jwtService, PasswordCodec passwordCodec) {
         this.userMapper = userMapper;
         this.jwtService = jwtService;
         this.passwordCodec = passwordCodec;
     }
 
+    /**
+     * 执行核心业务处理流程。
+     */
     @Override
     @Transactional
     public LoginVO login(LoginDTO loginDTO) {
@@ -55,6 +64,9 @@ public class UserServiceImpl implements UserService {
         return loginVO;
     }
 
+    /**
+     * 执行核心业务处理流程。
+     */
     @Override
     @Transactional
     public UserProfileVO register(RegisterDTO registerDTO) {
@@ -74,6 +86,9 @@ public class UserServiceImpl implements UserService {
         return toProfile(user);
     }
 
+    /**
+     * 执行查询业务流程并返回结果。
+     */
     @Override
     public UserProfileVO getProfile(Long userId) {
         User user = userMapper.selectById(userId);
@@ -83,6 +98,9 @@ public class UserServiceImpl implements UserService {
         return toProfile(user);
     }
 
+    /**
+     * 执行查询业务流程并返回结果。
+     */
     private User getByPhone(String phone) {
         return userMapper.selectOne(new LambdaQueryWrapper<User>()
                 .eq(User::getPhone, phone)
@@ -90,6 +108,9 @@ public class UserServiceImpl implements UserService {
                 .last("limit 1"));
     }
 
+    /**
+     * 解析并转换输入数据。
+     */
     private String resolveNickname(RegisterDTO registerDTO) {
         String nickname = registerDTO.getNickname();
         if (nickname != null && !nickname.isBlank()) {
@@ -99,6 +120,9 @@ public class UserServiceImpl implements UserService {
         return "用户" + phone.substring(phone.length() - 4);
     }
 
+    /**
+     * 执行核心业务处理流程。
+     */
     private LoginVO.UserVO toLoginUser(User user) {
         LoginVO.UserVO userVO = new LoginVO.UserVO();
         userVO.setId(user.getId());
@@ -109,6 +133,9 @@ public class UserServiceImpl implements UserService {
         return userVO;
     }
 
+    /**
+     * 执行核心业务处理流程。
+     */
     private UserProfileVO toProfile(User user) {
         UserProfileVO profileVO = new UserProfileVO();
         profileVO.setId(user.getId());

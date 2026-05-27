@@ -13,21 +13,35 @@ import zysy.iflytek.aishua.config.properties.JwtProperties;
 import java.io.PrintWriter;
 import java.util.List;
 
+/**
+ * 接口路由令牌鉴权拦截器。
+ */
 @Component
 public class AuthInterceptor implements HandlerInterceptor {
+    // 显式开放的公开接口路径。
+    /**
+     * 处理当前业务逻辑。
+     */
     private static final List<String> PUBLIC_PATH_PREFIXES = List.of(
             "/api/user/login",
-            "/api/user/register"
+            "/api/user/register",
+            "/api/ai/dify-test"
     );
 
     private final JwtService jwtService;
     private final JwtProperties jwtProperties;
 
+    /**
+     * 构造方法，负责注入依赖组件。
+     */
     public AuthInterceptor(JwtService jwtService, JwtProperties jwtProperties) {
         this.jwtService = jwtService;
         this.jwtProperties = jwtProperties;
     }
 
+    /**
+     * 处理当前业务逻辑。
+     */
     @Override
     public boolean preHandle(HttpServletRequest request, HttpServletResponse response, Object handler) throws Exception {
         if ("OPTIONS".equalsIgnoreCase(request.getMethod())) {
@@ -35,12 +49,11 @@ public class AuthInterceptor implements HandlerInterceptor {
         }
 
         String requestUri = request.getRequestURI();
-        for (String prefix : PUBLIC_PATH_PREFIXES) {
-            if (requestUri.startsWith(prefix)) {
-                return true;
-            }
+        if (isPublicPath(requestUri)) {
+            return true;
         }
 
+        // 非接口路由（如静态资源）跳过鉴权。
         if (!requestUri.startsWith("/api/")) {
             return true;
         }
@@ -48,19 +61,19 @@ public class AuthInterceptor implements HandlerInterceptor {
         String token = request.getHeader(jwtProperties.getTokenHeader());
         String tokenPrefix = jwtProperties.getTokenPrefix();
         if (token == null || !token.startsWith(tokenPrefix)) {
-            writeUnauth(response, "请先登录");
+            writeUnauth(response, "Please login first");
             return false;
         }
 
         String realToken = token.substring(tokenPrefix.length());
         if (!jwtService.validateToken(realToken)) {
-            writeUnauth(response, "登录态无效或已过期，请重新登录");
+            writeUnauth(response, "Login token is invalid or expired");
             return false;
         }
 
         Long userId = jwtService.getUserIdFromToken(realToken);
         if (userId == null) {
-            writeUnauth(response, "登录态无效，请重新登录");
+            writeUnauth(response, "Login token is invalid");
             return false;
         }
 
@@ -68,16 +81,34 @@ public class AuthInterceptor implements HandlerInterceptor {
         return true;
     }
 
+    /**
+     * 处理当前业务逻辑。
+     */
     @Override
     public void afterCompletion(HttpServletRequest request, HttpServletResponse response, Object handler, Exception ex) {
         UserContext.clear();
     }
 
+    /**
+     * 处理当前业务逻辑。
+     */
     private void writeUnauth(HttpServletResponse response, String message) throws Exception {
         response.setStatus(HttpServletResponse.SC_UNAUTHORIZED);
         response.setContentType("application/json;charset=UTF-8");
         try (PrintWriter writer = response.getWriter()) {
             writer.write(JSON.toJSONString(Result.unauth(message)));
         }
+    }
+
+    /**
+     * 判断当前条件是否满足。
+     */
+    private boolean isPublicPath(String requestUri) {
+        for (String prefix : PUBLIC_PATH_PREFIXES) {
+            if (requestUri.startsWith(prefix)) {
+                return true;
+            }
+        }
+        return false;
     }
 }

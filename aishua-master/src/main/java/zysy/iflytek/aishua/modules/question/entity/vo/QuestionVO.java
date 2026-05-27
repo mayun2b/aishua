@@ -6,6 +6,9 @@ import java.math.BigDecimal;
 import java.time.LocalDateTime;
 import java.util.List;
 
+/**
+ * 题目视图对象，负责相关业务逻辑与流程处理。
+ */
 @Data
 public class QuestionVO {
     private Long id;

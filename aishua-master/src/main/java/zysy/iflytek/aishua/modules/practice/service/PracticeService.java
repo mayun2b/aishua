@@ -17,6 +17,9 @@ import zysy.iflytek.aishua.modules.tag.entity.vo.ExamTagVO;
 
 import java.util.List;
 
+/**
+ * 练习服务接口，定义该领域对外能力契约。
+ */
 public interface PracticeService {
     PracticeStartVO startPractice(Long userId, PracticeStartDTO practiceStartDTO);
 

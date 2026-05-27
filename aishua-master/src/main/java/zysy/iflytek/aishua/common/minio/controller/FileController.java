@@ -12,16 +12,25 @@ import java.net.URLEncoder;
 import java.nio.charset.StandardCharsets;
 import java.util.Map;
 
+/**
+ * 通用基础控制器，负责相关业务逻辑与流程处理。
+ */
 @RestController
 @RequestMapping("/api/files")
 public class FileController {
 
     private final MinioService minioService;
 
+    /**
+     * 构造方法，负责注入依赖组件。
+     */
     public FileController(MinioService minioService) {
         this.minioService = minioService;
     }
 
+    /**
+     * 处理业务请求并返回结果。
+     */
     @PostMapping("/upload")
     public ResponseEntity<?> upload(@RequestParam("file") MultipartFile file) {
         String objectName = minioService.upload(file);
@@ -32,6 +41,9 @@ public class FileController {
         ));
     }
 
+    /**
+     * 处理业务请求并返回结果。
+     */
     @GetMapping("/download")
     public ResponseEntity<byte[]> download(@RequestParam String objectName) {
         try (InputStream inputStream = minioService.download(objectName)) {
@@ -49,6 +61,9 @@ public class FileController {
         }
     }
 
+    /**
+     * 处理业务请求并返回结果。
+     */
     @GetMapping("/preview-url")
     public ResponseEntity<?> previewUrl(@RequestParam String objectName) {
         String url = minioService.getPreviewUrl(objectName);
@@ -58,6 +73,9 @@ public class FileController {
         ));
     }
 
+    /**
+     * 处理删除请求并返回结果。
+     */
     @DeleteMapping
     public ResponseEntity<?> delete(@RequestParam String objectName) {
         minioService.remove(objectName);

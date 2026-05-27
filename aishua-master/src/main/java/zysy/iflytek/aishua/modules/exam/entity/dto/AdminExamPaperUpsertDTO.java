@@ -7,6 +7,9 @@ import jakarta.validation.constraints.NotNull;
 import jakarta.validation.constraints.Size;
 import lombok.Data;
 
+/**
+ * 考试数据传输对象，负责相关业务逻辑与流程处理。
+ */
 @Data
 public class AdminExamPaperUpsertDTO {
     @NotBlank(message = "试卷名称不能为空")
@@ -14,7 +17,7 @@ public class AdminExamPaperUpsertDTO {
     private String paperName;
 
     @NotNull(message = "学科不能为空")
-    @Min(value = 1, message = "学科ID不合法")
+    @Min(value = 1, message = "学科编号不合法")
     private Long subjectId;
 
     @NotNull(message = "考试时长不能为空")

@@ -2,6 +2,9 @@ package zysy.iflytek.aishua.modules.subject.entity.vo;
 
 import lombok.Data;
 
+/**
+ * 学科视图对象，负责相关业务逻辑与流程处理。
+ */
 @Data
 public class SubjectCatalogVO {
     private Long id;

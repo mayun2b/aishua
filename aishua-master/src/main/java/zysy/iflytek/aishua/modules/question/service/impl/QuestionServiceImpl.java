@@ -34,6 +34,9 @@ import java.util.Set;
 import java.util.function.Function;
 import java.util.stream.Collectors;
 
+/**
+ * 题目服务实现，负责相关业务逻辑与流程处理。
+ */
 @Slf4j
 @Service
 public class QuestionServiceImpl implements QuestionService {
@@ -44,6 +47,9 @@ public class QuestionServiceImpl implements QuestionService {
     private final ExamTagMapper examTagMapper;
     private final DirectoryScopeResolver directoryScopeResolver;
 
+    /**
+     * 构造方法，负责注入依赖组件。
+     */
     public QuestionServiceImpl(
             QuestionMapper questionMapper,
             QuestionTagRelationMapper questionTagRelationMapper,
@@ -60,6 +66,9 @@ public class QuestionServiceImpl implements QuestionService {
         this.directoryScopeResolver = directoryScopeResolver;
     }
 
+    /**
+     * 执行查询业务流程并返回结果。
+     */
     @Override
     public List<QuestionVO> listQuestions(Long subjectId, Long directoryId, Integer difficulty, Integer type, String keyword) {
         LambdaQueryWrapper<Question> queryWrapper = new LambdaQueryWrapper<>();
@@ -95,12 +104,18 @@ public class QuestionServiceImpl implements QuestionService {
         return buildQuestionVOs(questions);
     }
 
+    /**
+     * 执行查询业务流程并返回结果。
+     */
     @Override
     public QuestionVO getQuestionDetail(Long id) {
         Question question = requireQuestion(id);
         return buildQuestionVOs(List.of(question)).get(0);
     }
 
+    /**
+     * 执行创建业务流程并返回结果。
+     */
     @Override
     @Transactional
     public QuestionVO createQuestion(QuestionUpsertDTO questionUpsertDTO) {
@@ -122,6 +137,9 @@ public class QuestionServiceImpl implements QuestionService {
         return getQuestionDetail(question.getId());
     }
 
+    /**
+     * 执行保存与更新业务流程。
+     */
     @Override
     @Transactional
     public QuestionVO updateQuestion(Long id, QuestionUpsertDTO questionUpsertDTO) {
@@ -146,6 +164,9 @@ public class QuestionServiceImpl implements QuestionService {
         return getQuestionDetail(question.getId());
     }
 
+    /**
+     * 执行删除与清理业务流程。
+     */
     @Override
     @Transactional
     public void deleteQuestion(Long id) {
@@ -157,6 +178,9 @@ public class QuestionServiceImpl implements QuestionService {
         log.info("题目删除成功，questionId={}", question.getId());
     }
 
+    /**
+     * 执行核心业务处理流程。
+     */
     private void applyChanges(Question question, QuestionUpsertDTO questionUpsertDTO, TextbookDirectory directory) {
         question.setTitle(questionUpsertDTO.getTitle().trim());
         question.setContent(normalizeText(questionUpsertDTO.getContent()));
@@ -177,6 +201,9 @@ public class QuestionServiceImpl implements QuestionService {
         }
     }
 
+    /**
+     * 构建业务处理所需数据。
+     */
     private List<QuestionVO> buildQuestionVOs(List<Question> questions) {
         if (questions.isEmpty()) {
             return Collections.emptyList();
@@ -266,6 +293,9 @@ public class QuestionServiceImpl implements QuestionService {
         return result;
     }
 
+    /**
+     * 执行核心业务处理流程。
+     */
     private void replaceTagRelations(Long questionId, List<Long> tagIds) {
         questionTagRelationMapper.delete(new LambdaQueryWrapper<QuestionTagRelation>()
                 .eq(QuestionTagRelation::getQuestionId, questionId));
@@ -280,6 +310,9 @@ public class QuestionServiceImpl implements QuestionService {
         }
     }
 
+    /**
+     * 执行参数与状态校验。
+     */
     private List<Long> requireTags(List<Long> tagIds, Long subjectId) {
         if (tagIds == null || tagIds.isEmpty()) {
             return Collections.emptyList();
@@ -287,7 +320,7 @@ public class QuestionServiceImpl implements QuestionService {
 
         List<Long> uniqueTagIds = new ArrayList<>(new LinkedHashSet<>(tagIds));
         if (uniqueTagIds.stream().anyMatch(id -> id == null || id <= 0)) {
-            throw new BusinessException("考点标签ID不合法", 400);
+            throw new BusinessException("考点标签编号不合法", 400);
         }
 
         List<ExamTag> tags = examTagMapper.selectBatchIds(uniqueTagIds);
@@ -302,6 +335,9 @@ public class QuestionServiceImpl implements QuestionService {
         return uniqueTagIds;
     }
 
+    /**
+     * 执行参数与状态校验。
+     */
     private TextbookDirectory requireDirectory(Long directoryId, Long subjectId) {
         if (directoryId == null) {
             return null;
@@ -319,6 +355,9 @@ public class QuestionServiceImpl implements QuestionService {
         return directory;
     }
 
+    /**
+     * 执行参数与状态校验。
+     */
     private Subject requireSubject(Long subjectId) {
         if (subjectId == null || subjectId <= 0) {
             throw new BusinessException("所属学科不合法", 400);
@@ -330,9 +369,12 @@ public class QuestionServiceImpl implements QuestionService {
         return subject;
     }
 
+    /**
+     * 执行参数与状态校验。
+     */
     private Question requireQuestion(Long id) {
         if (id == null || id <= 0) {
-            throw new BusinessException("题目ID不合法", 400);
+            throw new BusinessException("题目编号不合法", 400);
         }
         Question question = questionMapper.selectById(id);
         if (question == null || Integer.valueOf(1).equals(question.getDeleted())) {
@@ -341,11 +383,14 @@ public class QuestionServiceImpl implements QuestionService {
         return question;
     }
 
+    /**
+     * 执行参数与状态校验。
+     */
     private void validateOptions(Integer type, String options) {
         String normalized = normalizeJsonText(options);
         if (Integer.valueOf(1).equals(type) || Integer.valueOf(2).equals(type)) {
             if (normalized == null) {
-                throw new BusinessException("单选/多选题必须填写选项JSON", 400);
+                throw new BusinessException("单选或多选题必须填写选项结构文本", 400);
             }
             JSONArray jsonArray = parseOptions(normalized);
             if (jsonArray.size() < 2) {
@@ -359,14 +404,20 @@ public class QuestionServiceImpl implements QuestionService {
         }
     }
 
+    /**
+     * 解析并转换输入数据。
+     */
     private JSONArray parseOptions(String options) {
         try {
             return JSON.parseArray(options);
         } catch (Exception exception) {
-            throw new BusinessException("选项JSON格式错误，需为数组结构", 400);
+            throw new BusinessException("选项结构文本格式错误，需为数组结构", 400);
         }
     }
 
+    /**
+     * 执行保存与更新业务流程。
+     */
     private void syncSubjectQuestionCount(Long subjectId) {
         if (subjectId == null || subjectId <= 0) {
             return;
@@ -381,6 +432,9 @@ public class QuestionServiceImpl implements QuestionService {
         subjectMapper.updateById(subject);
     }
 
+    /**
+     * 解析并转换输入数据。
+     */
     private String normalizeText(String value) {
         if (value == null) {
             return null;
@@ -389,6 +443,9 @@ public class QuestionServiceImpl implements QuestionService {
         return trimmed.isEmpty() ? null : trimmed;
     }
 
+    /**
+     * 解析并转换输入数据。
+     */
     private String normalizeJsonText(String value) {
         return normalizeText(value);
     }

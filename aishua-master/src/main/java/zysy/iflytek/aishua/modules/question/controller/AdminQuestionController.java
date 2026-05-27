@@ -22,6 +22,9 @@ import zysy.iflytek.aishua.modules.question.service.QuestionService;
 
 import java.util.List;
 
+/**
+ * 题目控制器，负责相关业务逻辑与流程处理。
+ */
 @Validated
 @RestController
 @RequestMapping("/api/admin/questions")
@@ -29,15 +32,21 @@ public class AdminQuestionController {
     private final QuestionService questionService;
     private final AdminAccess adminAccess;
 
+    /**
+     * 构造方法，负责注入依赖组件。
+     */
     public AdminQuestionController(QuestionService questionService, AdminAccess adminAccess) {
         this.questionService = questionService;
         this.adminAccess = adminAccess;
     }
 
+    /**
+     * 处理查询请求并返回结果。
+     */
     @GetMapping
     public Result<List<QuestionVO>> list(
-            @RequestParam(required = false) @Min(value = 1, message = "学科ID不合法") Long subjectId,
-            @RequestParam(required = false) @Min(value = 1, message = "目录ID不合法") Long directoryId,
+            @RequestParam(required = false) @Min(value = 1, message = "学科编号不合法") Long subjectId,
+            @RequestParam(required = false) @Min(value = 1, message = "目录编号不合法") Long directoryId,
             @RequestParam(required = false) @Min(value = 1, message = "难度范围为 1-3")
             @Max(value = 3, message = "难度范围为 1-3") Integer difficulty,
             @RequestParam(required = false) @Min(value = 1, message = "题型范围为 1-5")
@@ -45,34 +54,51 @@ public class AdminQuestionController {
             @RequestParam(required = false) String keyword
     ) {
         adminAccess.ensureAdmin(UserContext.requireUserId());
+        // 调用服务层处理业务并封装统一响应。
         return Result.success(questionService.listQuestions(subjectId, directoryId, difficulty, type, keyword));
     }
 
+    /**
+     * 处理业务请求并返回结果。
+     */
     @GetMapping("/{id}")
     public Result<QuestionVO> detail(@PathVariable Long id) {
         adminAccess.ensureAdmin(UserContext.requireUserId());
+        // 调用服务层处理业务并封装统一响应。
         return Result.success(questionService.getQuestionDetail(id));
     }
 
+    /**
+     * 处理创建请求并返回结果。
+     */
     @PostMapping
     public Result<QuestionVO> create(@Valid @RequestBody QuestionUpsertDTO questionUpsertDTO) {
         adminAccess.ensureAdmin(UserContext.requireUserId());
+        // 调用服务层处理业务并封装统一响应。
         return Result.success(questionService.createQuestion(questionUpsertDTO));
     }
 
+    /**
+     * 处理更新请求并返回结果。
+     */
     @PutMapping("/{id}")
     public Result<QuestionVO> update(
             @PathVariable Long id,
             @Valid @RequestBody QuestionUpsertDTO questionUpsertDTO
     ) {
         adminAccess.ensureAdmin(UserContext.requireUserId());
+        // 调用服务层处理业务并封装统一响应。
         return Result.success(questionService.updateQuestion(id, questionUpsertDTO));
     }
 
+    /**
+     * 处理删除请求并返回结果。
+     */
     @DeleteMapping("/{id}")
     public Result<Void> delete(@PathVariable Long id) {
         adminAccess.ensureAdmin(UserContext.requireUserId());
         questionService.deleteQuestion(id);
+        // 调用服务层处理业务并封装统一响应。
         return Result.success();
     }
 }

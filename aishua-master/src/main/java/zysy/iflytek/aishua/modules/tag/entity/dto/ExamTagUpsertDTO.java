@@ -6,6 +6,9 @@ import jakarta.validation.constraints.NotNull;
 import jakarta.validation.constraints.Size;
 import lombok.Data;
 
+/**
+ * 标签数据传输对象，负责相关业务逻辑与流程处理。
+ */
 @Data
 public class ExamTagUpsertDTO {
     @NotBlank(message = "考点名称不能为空")

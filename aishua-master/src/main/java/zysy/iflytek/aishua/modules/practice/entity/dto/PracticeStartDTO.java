@@ -7,17 +7,20 @@ import lombok.Data;
 
 import java.util.List;
 
+/**
+ * 练习数据传输对象，负责相关业务逻辑与流程处理。
+ */
 @Data
 public class PracticeStartDTO {
-    @NotNull(message = "subjectId is required")
+    @NotNull(message = "学科编号不能为空")
     private Long subjectId;
 
-    @Min(value = 1, message = "practiceMode must be between 1 and 4")
-    @Max(value = 4, message = "practiceMode must be between 1 and 4")
+    @Min(value = 1, message = "练习模式必须在 1 到 4 之间")
+    @Max(value = 4, message = "练习模式必须在 1 到 4 之间")
     private Integer practiceMode = 1;
 
-    @Min(value = 1, message = "questionCount must be >= 1")
-    @Max(value = 50, message = "questionCount must be <= 50")
+    @Min(value = 1, message = "题量必须大于等于 1")
+    @Max(value = 50, message = "题量必须小于等于 50")
     private Integer questionCount = 10;
 
     private List<Long> tagIds;

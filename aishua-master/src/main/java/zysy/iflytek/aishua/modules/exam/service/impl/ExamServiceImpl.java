@@ -67,6 +67,9 @@ import java.util.Set;
 import java.util.function.Function;
 import java.util.stream.Collectors;
 
+/**
+ * 考试服务实现，负责相关业务逻辑与流程处理。
+ */
 @Slf4j
 @Service
 public class ExamServiceImpl implements ExamService {
@@ -92,6 +95,9 @@ public class ExamServiceImpl implements ExamService {
     private final DirectoryScopeResolver directoryScopeResolver;
     private final AnswerJudgeSupport answerJudgeSupport;
 
+    /**
+     * 构造方法，负责注入依赖组件。
+     */
     public ExamServiceImpl(
             ExamPaperMapper examPaperMapper,
             ExamPaperQuestionMapper examPaperQuestionMapper,
@@ -124,6 +130,9 @@ public class ExamServiceImpl implements ExamService {
         this.answerJudgeSupport = answerJudgeSupport;
     }
 
+    /**
+     * 执行查询业务流程并返回结果。
+     */
     @Override
     public List<ExamPaperVO> listAdminPapers(Long subjectId, Integer status, String keyword) {
         LambdaQueryWrapper<ExamPaper> wrapper = new LambdaQueryWrapper<ExamPaper>()
@@ -143,6 +152,9 @@ public class ExamServiceImpl implements ExamService {
         return toPaperVOList(papers);
     }
 
+    /**
+     * 执行创建业务流程并返回结果。
+     */
     @Override
     @Transactional
     public ExamPaperVO createPaper(AdminExamPaperUpsertDTO upsertDTO) {
@@ -154,7 +166,7 @@ public class ExamServiceImpl implements ExamService {
         examPaper.setSubjectId(subject.getId());
         examPaper.setDuration(upsertDTO.getDuration());
         examPaper.setStatus(upsertDTO.getStatus());
-        // totalScore is the target score configured when creating the paper.
+        // 该字段表示创建试卷时配置的目标总分。
         examPaper.setTotalScore(upsertDTO.getTotalScore());
         examPaper.setTotalQuestions(0);
         examPaperMapper.insert(examPaper);
@@ -163,6 +175,9 @@ public class ExamServiceImpl implements ExamService {
         return toPaperVO(requirePaper(examPaper.getId()), subject.getName());
     }
 
+    /**
+     * 执行保存与更新业务流程。
+     */
     @Override
     @Transactional
     public ExamPaperVO updatePaper(Long id, AdminExamPaperUpsertDTO upsertDTO) {
@@ -188,6 +203,9 @@ public class ExamServiceImpl implements ExamService {
         return toPaperVO(requirePaper(id), subject.getName());
     }
 
+    /**
+     * 执行保存与更新业务流程。
+     */
     @Override
     @Transactional
     public ExamPaperVO updatePaperEnabled(Long id, Integer enabled) {
@@ -204,6 +222,9 @@ public class ExamServiceImpl implements ExamService {
         return toPaperVO(paper, subjectName);
     }
 
+    /**
+     * 执行删除与清理业务流程。
+     */
     @Override
     @Transactional
     public void deletePaper(Long id) {
@@ -214,6 +235,9 @@ public class ExamServiceImpl implements ExamService {
         log.info("试卷删除成功，paperId={}", id);
     }
 
+    /**
+     * 执行查询业务流程并返回结果。
+     */
     @Override
     public List<ExamPaperQuestionVO> listPaperQuestions(Long paperId) {
         ExamPaper paper = requirePaper(paperId);
@@ -221,6 +245,9 @@ public class ExamServiceImpl implements ExamService {
         return buildPaperQuestionVOList(relations);
     }
 
+    /**
+     * 执行核心业务处理流程。
+     */
     @Override
     @Transactional
     public List<ExamPaperQuestionVO> assignPaperQuestions(Long paperId, AdminExamPaperQuestionAssignDTO assignDTO) {
@@ -273,7 +300,7 @@ public class ExamServiceImpl implements ExamService {
             examPaperQuestionMapper.insert(relation);
         }
 
-        // Keep paper.totalScore as target score, only sync selected question count here.
+        // 保留试卷目标总分配置，此处仅同步已选题目数量。
         paper.setTotalQuestions(items.size());
         examPaperMapper.updateById(paper);
 
@@ -281,17 +308,23 @@ public class ExamServiceImpl implements ExamService {
         return buildPaperQuestionVOList(listPaperQuestionRelations(paper.getId()));
     }
 
+    /**
+     * 执行查询业务流程并返回结果。
+     */
     @Override
     public List<DirectoryTreeVO> listPaperDirectories(Long paperId) {
         ExamPaper paper = requirePaper(paperId);
         return directoryService.listTreeBySubject(paper.getSubjectId());
     }
 
+    /**
+     * 执行查询业务流程并返回结果。
+     */
     @Override
     public List<ExamDirectoryTagVO> listPaperDirectoryTags(Long paperId, Long directoryId) {
         ExamPaper paper = requirePaper(paperId);
         if (directoryId == null || directoryId <= 0) {
-            throw new BusinessException("目录ID不合法", 400);
+            throw new BusinessException("目录编号不合法", 400);
         }
 
         List<Long> directoryScopeIds = directoryScopeResolver.resolveSelfAndDescendants(directoryId, paper.getSubjectId());
@@ -356,6 +389,9 @@ public class ExamServiceImpl implements ExamService {
         return result;
     }
 
+    /**
+     * 执行查询业务流程并返回结果。
+     */
     @Override
     public ExamAvailableQuestionPageVO listPaperAvailableQuestions(
             Long paperId,
@@ -412,6 +448,9 @@ public class ExamServiceImpl implements ExamService {
         return pageVO;
     }
 
+    /**
+     * 执行查询业务流程并返回结果。
+     */
     @Override
     public List<ExamRecordSummaryVO> listAdminRecords(Long subjectId, Long userId, String keyword, LocalDate startDate, LocalDate endDate) {
         LambdaQueryWrapper<ExamRecord> wrapper = buildRecordFilter(subjectId, userId, keyword, null, startDate, endDate)
@@ -421,18 +460,27 @@ public class ExamServiceImpl implements ExamService {
         return toRecordSummaryVOList(records);
     }
 
+    /**
+     * 执行查询业务流程并返回结果。
+     */
     @Override
     public ExamRecordSummaryVO getAdminRecord(Long recordId) {
         ExamRecord record = requireRecord(recordId);
         return toRecordSummaryVO(record, loadSubjectNameMap(List.of(record)).get(record.getSubjectId()), loadUserMap(List.of(record)).get(record.getUserId()));
     }
 
+    /**
+     * 执行查询业务流程并返回结果。
+     */
     @Override
     public List<ExamRecordQuestionVO> getAdminRecordQuestions(Long recordId) {
         ExamRecord record = requireRecord(recordId);
         return buildRecordQuestionVOList(record);
     }
 
+    /**
+     * 执行查询业务流程并返回结果。
+     */
     @Override
     public List<ExamPaperVO> listAvailablePapers(Long subjectId) {
         LambdaQueryWrapper<ExamPaper> wrapper = new LambdaQueryWrapper<ExamPaper>()
@@ -446,6 +494,9 @@ public class ExamServiceImpl implements ExamService {
         return toPaperVOList(papers);
     }
 
+    /**
+     * 执行创建业务流程并返回结果。
+     */
     @Override
     @Transactional
     public ExamStartVO startExam(Long userId, ExamStartDTO startDTO) {
@@ -522,6 +573,9 @@ public class ExamServiceImpl implements ExamService {
         return startVO;
     }
 
+    /**
+     * 执行保存与更新业务流程。
+     */
     @Override
     @Transactional
     public ExamSubmitResultVO submitExam(Long userId, Long recordId, ExamSubmitDTO submitDTO) {
@@ -589,6 +643,9 @@ public class ExamServiceImpl implements ExamService {
         return submitResultVO;
     }
 
+    /**
+     * 执行查询业务流程并返回结果。
+     */
     @Override
     public List<ExamRecordSummaryVO> listMyRecords(Long userId) {
         List<ExamRecord> records = examRecordMapper.selectList(new LambdaQueryWrapper<ExamRecord>()
@@ -598,18 +655,27 @@ public class ExamServiceImpl implements ExamService {
         return toRecordSummaryVOList(records);
     }
 
+    /**
+     * 执行查询业务流程并返回结果。
+     */
     @Override
     public ExamRecordSummaryVO getMyRecord(Long userId, Long recordId) {
         ExamRecord record = requireUserRecord(userId, recordId);
         return toRecordSummaryVO(record, loadSubjectNameMap(List.of(record)).get(record.getSubjectId()), loadUserMap(List.of(record)).get(record.getUserId()));
     }
 
+    /**
+     * 执行查询业务流程并返回结果。
+     */
     @Override
     public List<ExamRecordQuestionVO> listMyRecordQuestions(Long userId, Long recordId) {
         ExamRecord record = requireUserRecord(userId, recordId);
         return buildRecordQuestionVOList(record);
     }
 
+    /**
+     * 执行查询业务流程并返回结果。
+     */
     @Override
     public List<ExamRecordSummaryVO> listUserRecordsByUserId(Long currentUserId, Long userId) {
         assertSelfOrAdmin(currentUserId, userId);
@@ -620,6 +686,9 @@ public class ExamServiceImpl implements ExamService {
         return toRecordSummaryVOList(records);
     }
 
+    /**
+     * 执行查询业务流程并返回结果。
+     */
     @Override
     public List<ExamRecordSummaryVO> listUserRecordsByMode(Long currentUserId, Long userId, Integer mode) {
         assertSelfOrAdmin(currentUserId, userId);
@@ -634,6 +703,9 @@ public class ExamServiceImpl implements ExamService {
         return toRecordSummaryVOList(records);
     }
 
+    /**
+     * 执行查询业务流程并返回结果。
+     */
     @Override
     public List<ExamRecordSummaryVO> listUserRecordsByDateRange(Long currentUserId, Long userId, LocalDate startDate, LocalDate endDate) {
         assertSelfOrAdmin(currentUserId, userId);
@@ -643,6 +715,9 @@ public class ExamServiceImpl implements ExamService {
         return toRecordSummaryVOList(records);
     }
 
+    /**
+     * 执行保存与更新业务流程。
+     */
     @Override
     @Transactional
     public ExamRecordSummaryVO saveLegacyRecord(Long currentUserId, LegacyExamRecordSaveDTO saveDTO) {
@@ -720,6 +795,9 @@ public class ExamServiceImpl implements ExamService {
         return toRecordSummaryVO(record, loadSubjectNameMap(List.of(record)).get(record.getSubjectId()), loadUserMap(List.of(record)).get(record.getUserId()));
     }
 
+    /**
+     * 计算并返回处理结果。
+     */
     private long countAvailableQuestions(
             ExamPaper paper,
             List<Long> directoryFilterIds,
@@ -740,6 +818,9 @@ public class ExamServiceImpl implements ExamService {
         return total == null ? 0L : total;
     }
 
+    /**
+     * 执行查询业务流程并返回结果。
+     */
     private List<Question> queryAvailableQuestions(
             ExamPaper paper,
             List<Long> directoryFilterIds,
@@ -764,6 +845,9 @@ public class ExamServiceImpl implements ExamService {
         return questionMapper.selectList(queryWrapper);
     }
 
+    /**
+     * 构建业务处理所需数据。
+     */
     private LambdaQueryWrapper<Question> buildAvailableQuestionQuery(
             ExamPaper paper,
             List<Long> directoryFilterIds,
@@ -780,7 +864,7 @@ public class ExamServiceImpl implements ExamService {
         }
         if (!tagFilterIds.isEmpty()) {
             String csvTagIds = tagFilterIds.stream().map(String::valueOf).collect(Collectors.joining(","));
-            // Use DB-side tag filtering so frontend only passes tagIds and renders paged results.
+            // 使用数据库侧标签筛选，前端只需传递标签编号列表并渲染分页结果。
             wrapper.inSql(Question::getId,
                     "SELECT DISTINCT question_id FROM question_tag_relation WHERE tag_id IN (" + csvTagIds + ")");
         }
@@ -799,6 +883,9 @@ public class ExamServiceImpl implements ExamService {
         return wrapper;
     }
 
+    /**
+     * 解析并转换输入数据。
+     */
     private List<Long> parseTagIds(String rawTagIds) {
         if (rawTagIds == null || rawTagIds.isBlank()) {
             return Collections.emptyList();
@@ -814,16 +901,19 @@ public class ExamServiceImpl implements ExamService {
             try {
                 id = Long.parseLong(trimmed);
             } catch (NumberFormatException exception) {
-                throw new BusinessException("考点ID不合法", 400);
+                throw new BusinessException("考点编号不合法", 400);
             }
             if (id <= 0) {
-                throw new BusinessException("考点ID不合法", 400);
+                throw new BusinessException("考点编号不合法", 400);
             }
             parsed.add(id);
         }
         return new ArrayList<>(parsed);
     }
 
+    /**
+     * 执行参数与状态校验。
+     */
     private void validateTagScope(List<Long> tagIds, Long subjectId) {
         List<ExamTag> tags = examTagMapper.selectBatchIds(tagIds);
         if (tags.size() != tagIds.size()) {
@@ -839,6 +929,9 @@ public class ExamServiceImpl implements ExamService {
         }
     }
 
+    /**
+     * 构建业务处理所需数据。
+     */
     private List<ExamAvailableQuestionVO> buildAvailableQuestionVOList(Long paperId, List<Question> questions) {
         if (questions == null || questions.isEmpty()) {
             return Collections.emptyList();
@@ -890,6 +983,9 @@ public class ExamServiceImpl implements ExamService {
         return result;
     }
 
+    /**
+     * 执行核心业务处理流程。
+     */
     private ExamAvailableQuestionPageVO emptyAvailableQuestionPage(int page, int pageSize) {
         ExamAvailableQuestionPageVO pageVO = new ExamAvailableQuestionPageVO();
         pageVO.setTotal(0L);
@@ -899,6 +995,9 @@ public class ExamServiceImpl implements ExamService {
         return pageVO;
     }
 
+    /**
+     * 执行核心业务处理流程。
+     */
     private List<ExamPaperVO> toPaperVOList(List<ExamPaper> papers) {
         if (papers == null || papers.isEmpty()) {
             return Collections.emptyList();
@@ -921,6 +1020,9 @@ public class ExamServiceImpl implements ExamService {
                 .toList();
     }
 
+    /**
+     * 执行核心业务处理流程。
+     */
     private ExamPaperVO toPaperVO(ExamPaper paper, String subjectName) {
         ExamPaperVO paperVO = new ExamPaperVO();
         paperVO.setId(paper.getId());
@@ -936,6 +1038,9 @@ public class ExamServiceImpl implements ExamService {
         return paperVO;
     }
 
+    /**
+     * 构建业务处理所需数据。
+     */
     private List<ExamPaperQuestionVO> buildPaperQuestionVOList(List<ExamPaperQuestion> relations) {
         if (relations.isEmpty()) {
             return Collections.emptyList();
@@ -967,6 +1072,9 @@ public class ExamServiceImpl implements ExamService {
         return result;
     }
 
+    /**
+     * 执行核心业务处理流程。
+     */
     private List<ExamRecordSummaryVO> toRecordSummaryVOList(List<ExamRecord> records) {
         if (records == null || records.isEmpty()) {
             return Collections.emptyList();
@@ -982,6 +1090,9 @@ public class ExamServiceImpl implements ExamService {
         return result;
     }
 
+    /**
+     * 执行核心业务处理流程。
+     */
     private Map<Long, String> loadSubjectNameMap(List<ExamRecord> records) {
         Set<Long> subjectIds = records.stream()
                 .map(ExamRecord::getSubjectId)
@@ -995,6 +1106,9 @@ public class ExamServiceImpl implements ExamService {
                 .collect(Collectors.toMap(Subject::getId, Subject::getName, (left, right) -> left));
     }
 
+    /**
+     * 执行核心业务处理流程。
+     */
     private Map<Long, User> loadUserMap(List<ExamRecord> records) {
         Set<Long> userIds = records.stream()
                 .map(ExamRecord::getUserId)
@@ -1067,6 +1181,9 @@ public class ExamServiceImpl implements ExamService {
         return result;
     }
 
+    /**
+     * 构建业务处理所需数据。
+     */
     private LambdaQueryWrapper<ExamRecord> buildRecordFilter(
             Long subjectId,
             Long userId,
@@ -1097,6 +1214,9 @@ public class ExamServiceImpl implements ExamService {
         return wrapper;
     }
 
+    /**
+     * 执行查询业务流程并返回结果。
+     */
     private List<ExamPaperQuestion> listPaperQuestionRelations(Long paperId) {
         return examPaperQuestionMapper.selectList(new LambdaQueryWrapper<ExamPaperQuestion>()
                 .eq(ExamPaperQuestion::getPaperId, paperId)
@@ -1104,15 +1224,21 @@ public class ExamServiceImpl implements ExamService {
                 .orderByAsc(ExamPaperQuestion::getId));
     }
 
+    /**
+     * 执行查询业务流程并返回结果。
+     */
     private List<ExamRecordQuestion> listRecordQuestionRelations(Long recordId) {
         return examRecordQuestionMapper.selectList(new LambdaQueryWrapper<ExamRecordQuestion>()
                 .eq(ExamRecordQuestion::getExamRecordId, recordId)
                 .orderByAsc(ExamRecordQuestion::getId));
     }
 
+    /**
+     * 执行参数与状态校验。
+     */
     private ExamPaper requirePaper(Long id) {
         if (id == null || id <= 0) {
-            throw new BusinessException("试卷ID不合法", 400);
+            throw new BusinessException("试卷编号不合法", 400);
         }
 
         ExamPaper paper = examPaperMapper.selectById(id);
@@ -1122,6 +1248,9 @@ public class ExamServiceImpl implements ExamService {
         return paper;
     }
 
+    /**
+     * 执行参数与状态校验。
+     */
     private ExamPaper requireEnabledPaper(Long id) {
         ExamPaper paper = requirePaper(id);
         if (!isEnabled(paper.getStatus())) {
@@ -1130,9 +1259,12 @@ public class ExamServiceImpl implements ExamService {
         return paper;
     }
 
+    /**
+     * 执行参数与状态校验。
+     */
     private Subject requireSubject(Long subjectId) {
         if (subjectId == null || subjectId <= 0) {
-            throw new BusinessException("学科ID不合法", 400);
+            throw new BusinessException("学科编号不合法", 400);
         }
         Subject subject = subjectMapper.selectById(subjectId);
         if (subject == null || Integer.valueOf(1).equals(subject.getDeleted())) {
@@ -1141,9 +1273,12 @@ public class ExamServiceImpl implements ExamService {
         return subject;
     }
 
+    /**
+     * 执行参数与状态校验。
+     */
     private ExamRecord requireRecord(Long recordId) {
         if (recordId == null || recordId <= 0) {
-            throw new BusinessException("考试记录ID不合法", 400);
+            throw new BusinessException("考试记录编号不合法", 400);
         }
 
         ExamRecord record = examRecordMapper.selectById(recordId);
@@ -1153,6 +1288,9 @@ public class ExamServiceImpl implements ExamService {
         return record;
     }
 
+    /**
+     * 执行参数与状态校验。
+     */
     private ExamRecord requireUserRecord(Long userId, Long recordId) {
         ExamRecord record = requireRecord(recordId);
         if (!Objects.equals(record.getUserId(), userId)) {
@@ -1161,6 +1299,9 @@ public class ExamServiceImpl implements ExamService {
         return record;
     }
 
+    /**
+     * 执行参数与状态校验。
+     */
     private void ensureUniquePaperName(Long paperId, Long subjectId, String paperName) {
         String normalizedName = paperName == null ? "" : paperName.trim();
         if (normalizedName.isEmpty()) {
@@ -1180,6 +1321,9 @@ public class ExamServiceImpl implements ExamService {
         throw new BusinessException("同一学科下试卷名称不能重复", 400);
     }
 
+    /**
+     * 解析并转换输入数据。
+     */
     private int resolvePaperTotalScore(Long subjectId, String examName) {
         if (subjectId == null || examName == null || examName.isBlank()) {
             return DEFAULT_TOTAL_SCORE;
@@ -1196,6 +1340,9 @@ public class ExamServiceImpl implements ExamService {
         return paper.getTotalScore();
     }
 
+    /**
+     * 解析并转换输入数据。
+     */
     private Long resolveSubjectId(Iterable<Question> questions) {
         Long subjectId = null;
         for (Question question : questions) {
@@ -1210,6 +1357,9 @@ public class ExamServiceImpl implements ExamService {
         return subjectId;
     }
 
+    /**
+     * 执行核心业务处理流程。
+     */
     private void assertSelfOrAdmin(Long currentUserId, Long targetUserId) {
         if (Objects.equals(currentUserId, targetUserId)) {
             return;
@@ -1224,6 +1374,9 @@ public class ExamServiceImpl implements ExamService {
         }
     }
 
+    /**
+     * 解析并转换输入数据。
+     */
     private String normalizeText(String value) {
         if (value == null) {
             return null;
@@ -1232,6 +1385,9 @@ public class ExamServiceImpl implements ExamService {
         return trimmed.isEmpty() ? null : trimmed;
     }
 
+    /**
+     * 解析并转换输入数据。
+     */
     private int normalizeNonNegative(Integer value) {
         if (value == null || value < 0) {
             return 0;
@@ -1239,6 +1395,9 @@ public class ExamServiceImpl implements ExamService {
         return value;
     }
 
+    /**
+     * 计算并返回处理结果。
+     */
     private int calculateDurationMinutes(LocalDateTime start, LocalDateTime end) {
         if (start == null || end == null || end.isBefore(start)) {
             return 0;
@@ -1247,6 +1406,9 @@ public class ExamServiceImpl implements ExamService {
         return (int) Math.round(seconds / 60.0);
     }
 
+    /**
+     * 计算并返回处理结果。
+     */
     private double calculateScore(int correctCount, int totalQuestions, int totalScore) {
         if (totalQuestions <= 0 || totalScore <= 0) {
             return 0d;
@@ -1255,14 +1417,23 @@ public class ExamServiceImpl implements ExamService {
         return roundTwoDecimals(raw);
     }
 
+    /**
+     * 执行核心业务处理流程。
+     */
     private double roundTwoDecimals(double value) {
         return Math.round(value * 100.0) / 100.0;
     }
 
+    /**
+     * 判断当前条件是否满足。
+     */
     private boolean isEnabled(Integer status) {
         return Objects.equals(status, STATUS_ENABLED);
     }
 
+    /**
+     * 判断当前条件是否满足。
+     */
     private boolean isDisabled(Integer status) {
         return Objects.equals(status, STATUS_DISABLED);
     }

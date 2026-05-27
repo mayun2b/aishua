@@ -8,6 +8,9 @@ import jakarta.validation.constraints.Pattern;
 import jakarta.validation.constraints.Size;
 import lombok.Data;
 
+/**
+ * 学科数据传输对象，负责相关业务逻辑与流程处理。
+ */
 @Data
 public class SubjectUpsertDTO {
     @NotBlank(message = "学科名称不能为空")

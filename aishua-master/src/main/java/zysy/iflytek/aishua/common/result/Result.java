@@ -2,12 +2,18 @@ package zysy.iflytek.aishua.common.result;
 
 import lombok.Data;
 
+/**
+ * 通用基础统一返回结果，负责相关业务逻辑与流程处理。
+ */
 @Data
 public class Result<T> {
     private Integer code;
     private String message;
     private T data;
 
+    /**
+     * 处理当前业务逻辑。
+     */
     public static <T> Result<T> success(T data) {
         Result<T> result = new Result<>();
         result.setCode(200);
@@ -16,10 +22,16 @@ public class Result<T> {
         return result;
     }
 
+    /**
+     * 处理当前业务逻辑。
+     */
     public static <T> Result<T> success() {
         return success(null);
     }
 
+    /**
+     * 处理当前业务逻辑。
+     */
     public static <T> Result<T> fail(int code, String message) {
         Result<T> result = new Result<>();
         result.setCode(code);
@@ -28,10 +40,16 @@ public class Result<T> {
         return result;
     }
 
+    /**
+     * 处理当前业务逻辑。
+     */
     public static <T> Result<T> fail(String message) {
         return fail(500, message);
     }
 
+    /**
+     * 处理当前业务逻辑。
+     */
     public static <T> Result<T> unauth(String message) {
         return fail(401, message);
     }

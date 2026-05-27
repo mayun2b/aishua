@@ -29,6 +29,9 @@ import java.util.ArrayList;
 import java.util.List;
 import java.util.function.Consumer;
 
+/**
+ * 智能问答支撑组件，负责相关业务逻辑与流程处理。
+ */
 @Slf4j
 @Component
 public class QwenChatClient {
@@ -40,6 +43,9 @@ public class QwenChatClient {
     private final QwenAiProperties qwenAiProperties;
     private final HttpClient httpClient;
 
+    /**
+     * 构造方法，负责注入依赖组件。
+     */
     public QwenChatClient(RestTemplate restTemplate, QwenAiProperties qwenAiProperties) {
         this.restTemplate = restTemplate;
         this.qwenAiProperties = qwenAiProperties;
@@ -48,10 +54,16 @@ public class QwenChatClient {
                 .build();
     }
 
+    /**
+     * 提供通用支撑处理能力。
+     */
     public ChatResult chat(List<ChatMessage> messages, boolean jsonResponse) {
         return chat(messages, jsonResponse, null);
     }
 
+    /**
+     * 提供通用支撑处理能力。
+     */
     public ChatResult chat(List<ChatMessage> messages, boolean jsonResponse, Integer maxTokens) {
         String apiKey = requireApiKey();
         String chatApi = requireChatApi();
@@ -65,7 +77,7 @@ public class QwenChatClient {
         try {
             ResponseEntity<String> response = restTemplate.postForEntity(chatApi, entity, String.class);
             if (!response.getStatusCode().is2xxSuccessful() || !StringUtils.hasText(response.getBody())) {
-                throw new BusinessException("AI 服务响应异常", 502);
+                throw new BusinessException("智能服务响应异常", 502);
             }
 
             JSONObject root = JSON.parseObject(response.getBody());
@@ -76,15 +88,18 @@ public class QwenChatClient {
             String providerMessage = extractProviderErrorMessage(exception.getResponseBodyAsString());
             log.warn("调用 AI 聊天接口失败: status={}, providerMessage={}",
                     exception.getStatusCode().value(), providerMessage);
-            throw new BusinessException("调用 AI 服务失败: " + providerMessage, 502);
+            throw new BusinessException("调用智能服务失败：" + providerMessage, 502);
         } catch (BusinessException exception) {
             throw exception;
         } catch (Exception exception) {
             log.error("调用 AI 聊天接口失败", exception);
-            throw new BusinessException("调用 AI 服务失败，请稍后重试", 502);
+            throw new BusinessException("调用智能服务失败，请稍后重试", 502);
         }
     }
 
+    /**
+     * 提供通用支撑处理能力。
+     */
     public ChatResult chatStream(
             List<ChatMessage> messages,
             boolean jsonResponse,
@@ -109,7 +124,7 @@ public class QwenChatClient {
                 String errorBody = readBodyAsString(response.body());
                 String providerMessage = extractProviderErrorMessage(errorBody);
                 log.warn("调用 AI 流式接口失败: status={}, providerMessage={}", response.statusCode(), providerMessage);
-                throw new BusinessException("调用 AI 服务失败: " + providerMessage, 502);
+                throw new BusinessException("调用智能服务失败：" + providerMessage, 502);
             }
 
             StringBuilder fullContent = new StringBuilder();
@@ -123,10 +138,13 @@ public class QwenChatClient {
             throw exception;
         } catch (Exception exception) {
             log.error("调用 AI 流式接口失败", exception);
-            throw new BusinessException("调用 AI 服务失败，请稍后重试", 502);
+            throw new BusinessException("调用智能服务失败，请稍后重试", 502);
         }
     }
 
+    /**
+     * 解析并转换支撑数据。
+     */
     private String resolveChatModel() {
         String configured = qwenAiProperties.getChatModel();
         if (StringUtils.hasText(configured)) {
@@ -135,22 +153,31 @@ public class QwenChatClient {
         return DEFAULT_CHAT_MODEL;
     }
 
+    /**
+     * 提供通用支撑处理能力。
+     */
     private String requireApiKey() {
         String apiKey = qwenAiProperties.getApiKey();
         if (!StringUtils.hasText(apiKey)) {
-            throw new BusinessException("AI 服务未配置 API Key", 500);
+            throw new BusinessException("智能服务未配置访问密钥", 500);
         }
         return apiKey;
     }
 
+    /**
+     * 提供通用支撑处理能力。
+     */
     private String requireChatApi() {
         String chatApi = qwenAiProperties.getChatApi();
         if (!StringUtils.hasText(chatApi)) {
-            throw new BusinessException("AI 服务未配置聊天接口地址", 500);
+            throw new BusinessException("智能服务未配置会话接口地址", 500);
         }
         return chatApi;
     }
 
+    /**
+     * 构建支撑处理所需数据。
+     */
     private JSONObject buildPayload(List<ChatMessage> messages, boolean jsonResponse, Integer maxTokens, boolean stream) {
         JSONObject payload = new JSONObject();
         String model = resolveChatModel();
@@ -162,7 +189,7 @@ public class QwenChatClient {
             payload.put("stream_options", streamOptions);
         }
         if (model.toLowerCase().startsWith("qwen")) {
-            // Disable thinking mode to reduce latency.
+            // 关闭深度思考模式以降低响应延迟。
             payload.put("enable_thinking", false);
         }
 
@@ -172,7 +199,7 @@ public class QwenChatClient {
                     .anyMatch(message -> StringUtils.hasText(message.content())
                             && message.content().toLowerCase().contains("json"));
             if (!hasJsonHint) {
-                requestMessages.add(0, new ChatMessage("system", "Return a valid JSON object only."));
+                requestMessages.add(0, new ChatMessage("system", "仅返回合法的结构化文本对象，不要输出额外内容。"));
             }
         }
 
@@ -196,27 +223,33 @@ public class QwenChatClient {
         return payload;
     }
 
+    /**
+     * 解析并转换支撑数据。
+     */
     private String extractAssistantContent(JSONObject root) {
         JSONArray choices = root.getJSONArray("choices");
         if (choices == null || choices.isEmpty()) {
-            throw new BusinessException("AI 服务返回内容为空", 502);
+            throw new BusinessException("智能服务返回内容为空", 502);
         }
         JSONObject firstChoice = choices.getJSONObject(0);
         if (firstChoice == null) {
-            throw new BusinessException("AI 服务返回内容为空", 502);
+            throw new BusinessException("智能服务返回内容为空", 502);
         }
         JSONObject message = firstChoice.getJSONObject("message");
         if (message == null) {
-            throw new BusinessException("AI 服务返回内容为空", 502);
+            throw new BusinessException("智能服务返回内容为空", 502);
         }
 
         Object contentObject = message.get("content");
         if (contentObject == null) {
-            throw new BusinessException("AI 服务返回内容为空", 502);
+            throw new BusinessException("智能服务返回内容为空", 502);
         }
         return extractContentText(contentObject);
     }
 
+    /**
+     * 解析并转换支撑数据。
+     */
     private Usage extractUsage(JSONObject root) {
         JSONObject usageObject = root.getJSONObject("usage");
         if (usageObject == null) {
@@ -228,6 +261,9 @@ public class QwenChatClient {
         return new Usage(promptTokens, completionTokens, totalTokens);
     }
 
+    /**
+     * 提供通用支撑处理能力。
+     */
     private Usage consumeStreamingBody(
             InputStream stream,
             Consumer<String> chunkConsumer,
@@ -290,6 +326,9 @@ public class QwenChatClient {
         return new Usage(promptTokens, completionTokens, totalTokens);
     }
 
+    /**
+     * 解析并转换支撑数据。
+     */
     private String extractDeltaContent(JSONObject chunk) {
         JSONArray choices = chunk.getJSONArray("choices");
         if (choices == null || choices.isEmpty()) {
@@ -310,6 +349,9 @@ public class QwenChatClient {
         return "";
     }
 
+    /**
+     * 解析并转换支撑数据。
+     */
     private String extractContentText(Object contentObject) {
         if (contentObject == null) {
             return "";
@@ -339,6 +381,9 @@ public class QwenChatClient {
         return String.valueOf(contentObject);
     }
 
+    /**
+     * 解析并转换支撑数据。
+     */
     private String resolveStreamDelta(String incoming, String currentContent) {
         if (!StringUtils.hasText(incoming)) {
             return "";
@@ -355,6 +400,9 @@ public class QwenChatClient {
         return incoming;
     }
 
+    /**
+     * 提供通用支撑处理能力。
+     */
     private String readBodyAsString(InputStream stream) {
         if (stream == null) {
             return "";
@@ -366,6 +414,9 @@ public class QwenChatClient {
         }
     }
 
+    /**
+     * 解析并转换支撑数据。
+     */
     private String extractProviderErrorMessage(String body) {
         if (!StringUtils.hasText(body)) {
             return "模型服务无响应体";

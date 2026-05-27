@@ -4,6 +4,9 @@ import lombok.Data;
 
 import java.time.LocalDateTime;
 
+/**
+ * 智能问答视图对象，负责相关业务逻辑与流程处理。
+ */
 @Data
 public class PracticeQuestionAiChatSessionVO {
     private Long sessionId;

@@ -5,6 +5,9 @@ import lombok.Data;
 import java.math.BigDecimal;
 import java.time.LocalDateTime;
 
+/**
+ * 练习视图对象，负责相关业务逻辑与流程处理。
+ */
 @Data
 public class PracticeSessionSummaryVO {
     private Long sessionId;
