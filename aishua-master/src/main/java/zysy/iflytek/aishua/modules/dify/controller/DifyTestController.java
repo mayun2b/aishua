@@ -30,9 +30,6 @@ public class DifyTestController {
      */
     @PostMapping("/dify-test")
     public Map<String, Object> testDify(@RequestBody DifyTestRequest request) {
-        return difyTestService.testDify(
-                request.getQuery(),
-                request.getStudentId()
-        );
+        return difyTestService.testDify(request.getQuery());
     }
 }

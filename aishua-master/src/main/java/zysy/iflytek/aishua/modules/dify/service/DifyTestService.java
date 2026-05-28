@@ -2,33 +2,42 @@ package zysy.iflytek.aishua.modules.dify.service;
 
 import org.springframework.stereotype.Service;
 import org.springframework.util.StringUtils;
+import zysy.iflytek.aishua.common.context.UserContext;
 import zysy.iflytek.aishua.common.exception.BusinessException;
 import zysy.iflytek.aishua.modules.dify.client.DifyClient;
 
 import java.util.Map;
 
-/**
- * 流程编排测试服务，负责入参校验与客户端调用。
- */
 @Service
 public class DifyTestService {
+    private static final String BEARER_PREFIX = "Bearer ";
 
     private final DifyClient difyClient;
 
-    /**
-     * 构造方法，负责注入依赖组件。
-     */
     public DifyTestService(DifyClient difyClient) {
         this.difyClient = difyClient;
     }
 
-    /**
-     * 定义业务能力接口。
-     */
-    public Map<String, Object> testDify(String query, String studentId) {
+    public Map<String, Object> testDify(String query) {
         if (!StringUtils.hasText(query)) {
-            throw new BusinessException("查询内容不能为空", 400);
+            throw new BusinessException("Query cannot be empty", 400);
         }
-        return difyClient.runWorkflow(query.trim(), studentId);
+
+        Long userId = UserContext.requireUserId();
+        String authorization = UserContext.requireAuthorization();
+        String plainToken = resolvePlainToken(authorization);
+        String resolvedStudentId = String.valueOf(userId);
+        return difyClient.runWorkflow(query.trim(), resolvedStudentId, String.valueOf(userId), plainToken);
+    }
+
+    /**
+     * Normalize token value by stripping optional Bearer prefix.
+     */
+    private String resolvePlainToken(String authorization) {
+        if (!StringUtils.hasText(authorization)) {
+            throw new BusinessException("Login token missing", 401);
+        }
+        String value = authorization.trim();
+        return value.startsWith(BEARER_PREFIX) ? value.substring(BEARER_PREFIX.length()).trim() : value;
     }
 }

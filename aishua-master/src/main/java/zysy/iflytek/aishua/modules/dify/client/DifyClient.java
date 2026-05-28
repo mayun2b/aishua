@@ -21,7 +21,7 @@ import java.util.Map;
 public class DifyClient {
     private static final String WORKFLOW_RUN_PATH = "/v1/workflows/run";
     private static final String RESPONSE_MODE_BLOCKING = "blocking";
-    private static final String DEFAULT_DIFY_USER = "test-user-001";
+    private static final String INPUT_KEY_USER_AUTHORIZATION = "user_authorization";
 
     private final RestTemplate restTemplate;
     private final String difyBaseUrl;
@@ -43,8 +43,8 @@ public class DifyClient {
     /**
      * 处理当前业务逻辑。
      */
-    public Map<String, Object> runWorkflow(String query, String studentId) {
-        DifyWorkflowRequest request = buildRequest(query, studentId);
+    public Map<String, Object> runWorkflow(String query, String studentId, String userId, String userAuthorization) {
+        DifyWorkflowRequest request = buildRequest(query, studentId, userId, userAuthorization);
 
         HttpHeaders headers = new HttpHeaders();
         headers.setContentType(MediaType.APPLICATION_JSON);
@@ -66,17 +66,25 @@ public class DifyClient {
     /**
      * 构建处理所需数据结构。
      */
-    private DifyWorkflowRequest buildRequest(String query, String studentId) {
+    private DifyWorkflowRequest buildRequest(
+            String query,
+            String studentId,
+            String userId,
+            String userAuthorization
+    ) {
         Map<String, Object> inputs = new HashMap<>();
         inputs.put("query", query);
         if (StringUtils.hasText(studentId)) {
             inputs.put("student_id", studentId.trim());
         }
+        if (StringUtils.hasText(userAuthorization)) {
+            inputs.put(INPUT_KEY_USER_AUTHORIZATION, userAuthorization.trim());
+        }
 
         DifyWorkflowRequest request = new DifyWorkflowRequest();
         request.setInputs(inputs);
         request.setResponseMode(RESPONSE_MODE_BLOCKING);
-        request.setUser(DEFAULT_DIFY_USER);
+        request.setUser(userId);
         return request;
     }
 

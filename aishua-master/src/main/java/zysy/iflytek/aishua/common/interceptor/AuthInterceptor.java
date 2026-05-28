@@ -24,8 +24,7 @@ public class AuthInterceptor implements HandlerInterceptor {
      */
     private static final List<String> PUBLIC_PATH_PREFIXES = List.of(
             "/api/user/login",
-            "/api/user/register",
-            "/api/ai/dify-test"
+            "/api/user/register"
     );
 
     private final JwtService jwtService;
@@ -78,6 +77,7 @@ public class AuthInterceptor implements HandlerInterceptor {
         }
 
         UserContext.setUserId(userId);
+        UserContext.setAuthorization(realToken);
         return true;
     }
 
