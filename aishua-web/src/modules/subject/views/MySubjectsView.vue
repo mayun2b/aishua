@@ -58,6 +58,12 @@
                   <router-link class="practice-link" :to="`/practice?subjectId=${subject.subjectId}`">
                     开始练习
                   </router-link>
+                  <router-link
+                    class="directory-link"
+                    :to="buildDirectoryLink(subject)"
+                  >
+                    目录考点
+                  </router-link>
                   <router-link class="analysis-link" :to="`/learning-analysis?subjectId=${subject.subjectId}`">
                     学情分析
                   </router-link>
@@ -119,6 +125,12 @@ const formatDateTime = (value) => {
     return '暂无记录'
   }
   return new Date(value).toLocaleString('zh-CN', { hour12: false })
+}
+
+const buildDirectoryLink = (subject) => {
+  const subjectId = Number(subject?.subjectId || 0)
+  const subjectName = encodeURIComponent(subject?.name || '')
+  return `/subjects/${subjectId}/directories?subjectName=${subjectName}`
 }
 
 onMounted(() => {
@@ -288,6 +300,17 @@ th {
   border-radius: 12px;
   padding: 8px 12px;
   background: #0f7a43;
+  color: #fff;
+  text-decoration: none;
+  font-size: 13px;
+}
+
+.directory-link {
+  display: inline-flex;
+  align-items: center;
+  border-radius: 12px;
+  padding: 8px 12px;
+  background: #1f5e8c;
   color: #fff;
   text-decoration: none;
   font-size: 13px;

@@ -1,7 +1,9 @@
 package zysy.iflytek.aishua.modules.subject.service;
 
 import zysy.iflytek.aishua.modules.subject.entity.vo.MySubjectVO;
+import zysy.iflytek.aishua.modules.subject.entity.vo.SubjectDirectoryTagVO;
 import zysy.iflytek.aishua.modules.subject.entity.vo.SubjectCatalogVO;
+import zysy.iflytek.aishua.modules.directory.entity.vo.DirectoryTreeVO;
 
 import java.util.List;
 
@@ -14,4 +16,8 @@ public interface UserSubjectService {
     List<MySubjectVO> listMySubjects(Long userId);
 
     MySubjectVO joinSubject(Long userId, Long subjectId);
+
+    List<DirectoryTreeVO> listSubjectDirectories(Long userId, Long subjectId);
+
+    List<SubjectDirectoryTagVO> listSubjectDirectoryTags(Long userId, Long subjectId, Long directoryId);
 }

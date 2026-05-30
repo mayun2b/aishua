@@ -119,14 +119,27 @@
               </label>
             </div>
 
-            <div v-else class="answer-block">
+            <div v-else class="answer-block" :class="currentQuestion.type === 5 ? 'essay-answer-block' : ''">
+              <div v-if="currentQuestion.type === 5" class="essay-toolbar">
+                <span class="essay-tip">支持多行输入，建议分点作答；按 Ctrl + Enter 可快速进入下一题。</span>
+                <span class="essay-count">已输入 {{ textAnswerLength }} 字</span>
+              </div>
               <textarea
-                v-model.trim="textAnswer"
-                rows="5"
+                v-model="textAnswer"
+                :rows="currentQuestion.type === 5 ? 10 : 5"
                 maxlength="2000"
                 :disabled="isSubmitted"
                 :placeholder="currentQuestion.type === 4 ? '请输入填空答案' : '请输入你的作答内容'"
+                @keydown.ctrl.enter.prevent="handleTextAnswerCtrlEnter"
               ></textarea>
+              <div v-if="currentQuestion.type === 5" class="essay-actions">
+                <button type="button" class="secondary-button small-button" :disabled="isSubmitted || !textAnswerLength" @click="clearTextAnswer">
+                  清空
+                </button>
+                <button type="button" class="secondary-button small-button" :disabled="isSubmitted" @click="handleTextAnswerCtrlEnter">
+                  下一题
+                </button>
+              </div>
             </div>
 
             <div class="question-actions">
@@ -581,6 +594,32 @@ const textAnswer = computed({
     markDraftChanged(currentQuestion.value.questionId)
   }
 })
+
+const textAnswerLength = computed(() => {
+  if (!currentQuestion.value) {
+    return 0
+  }
+  const answer = answers.value[currentQuestion.value.questionId]
+  return typeof answer === 'string' ? answer.length : 0
+})
+
+const clearTextAnswer = () => {
+  if (!currentQuestion.value || isSubmitted.value) {
+    return
+  }
+  textAnswer.value = ''
+}
+
+const handleTextAnswerCtrlEnter = () => {
+  if (!currentQuestion.value || isSubmitted.value) {
+    return
+  }
+  if (currentIndex.value >= questions.value.length - 1) {
+    showToast('已是最后一题，可点击“统一提交”完成练习')
+    return
+  }
+  goToNextQuestion()
+}
 
 const resolveTypeLabel = (type) => {
   switch (type) {
@@ -1904,6 +1943,43 @@ onBeforeUnmount(() => {
   box-sizing: border-box;
   resize: vertical;
   background: #fff;
+}
+
+.essay-answer-block textarea {
+  min-height: 220px;
+  line-height: 1.7;
+}
+
+.essay-toolbar {
+  display: flex;
+  justify-content: space-between;
+  align-items: center;
+  gap: 12px;
+  margin-bottom: 10px;
+}
+
+.essay-tip {
+  color: #617386;
+  font-size: 13px;
+}
+
+.essay-count {
+  color: #17324d;
+  font-size: 13px;
+  font-weight: 600;
+  white-space: nowrap;
+}
+
+.essay-actions {
+  margin-top: 10px;
+  display: flex;
+  gap: 8px;
+  justify-content: flex-end;
+}
+
+.small-button {
+  padding: 8px 12px;
+  font-size: 13px;
 }
 
 .question-actions {

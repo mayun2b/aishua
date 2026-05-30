@@ -14,6 +14,7 @@ import AdminExamManagementView from '../modules/admin/views/AdminExamManagementV
 import AdminExamQuestionConfigView from '../modules/admin/views/AdminExamQuestionConfigView.vue'
 import SubjectCatalogView from '../modules/subject/views/SubjectCatalogView.vue'
 import MySubjectsView from '../modules/subject/views/MySubjectsView.vue'
+import SubjectDirectoryView from '../modules/subject/views/SubjectDirectoryView.vue'
 import PracticeView from '../modules/practice/views/PracticeView.vue'
 import PracticeSessionView from '../modules/practice/views/PracticeSessionView.vue'
 import PracticeRecordsView from '../modules/practice/views/PracticeRecordsView.vue'
@@ -72,6 +73,14 @@ const routes = [
     path: '/my-subjects',
     name: 'MySubjects',
     component: MySubjectsView,
+    meta: {
+      requiresAuth: true
+    }
+  },
+  {
+    path: '/subjects/:subjectId/directories',
+    name: 'SubjectDirectories',
+    component: SubjectDirectoryView,
     meta: {
       requiresAuth: true
     }
