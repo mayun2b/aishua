@@ -85,7 +85,7 @@ import java.util.function.Function;
 import java.util.stream.Collectors;
 
 /**
- * 练习服务实现，负责相关业务逻辑与流程处理。
+ * 说明：见实现逻辑。
  */
 @Slf4j
 @Service
@@ -128,7 +128,7 @@ public class PracticeServiceImpl implements PracticeService {
     private int draftSyncBatchSize;
 
     /**
-     * 构造方法，负责注入依赖组件。
+     * 说明：见实现逻辑。
      */
     public PracticeServiceImpl(
             PracticeSessionMapper practiceSessionMapper,
@@ -169,7 +169,7 @@ public class PracticeServiceImpl implements PracticeService {
     }
 
     /**
-     * 构建业务处理所需数据。
+     * 说明：见实现逻辑。
      */
     private static DefaultRedisScript<Long> buildReleaseDraftSaveLockScript() {
         DefaultRedisScript<Long> script = new DefaultRedisScript<>();
@@ -179,7 +179,7 @@ public class PracticeServiceImpl implements PracticeService {
     }
 
     /**
-     * 执行创建业务流程并返回结果。
+     * 说明：见实现逻辑。
      */
     @Override
     @Transactional
@@ -226,7 +226,7 @@ public class PracticeServiceImpl implements PracticeService {
     }
 
     /**
-     * 执行查询业务流程并返回结果。
+     * 说明：见实现逻辑。
      */
     @Override
     public PracticeQuestionSheetVO getPracticeQuestions(Long userId, Long sessionId) {
@@ -275,7 +275,7 @@ public class PracticeServiceImpl implements PracticeService {
     }
 
     /**
-     * 执行查询业务流程并返回结果。
+     * 说明：见实现逻辑。
      */
     @Override
     public PracticeDraftSnapshotVO getPracticeDraft(Long userId, Long sessionId) {
@@ -306,7 +306,7 @@ public class PracticeServiceImpl implements PracticeService {
     }
 
     /**
-     * 执行保存与更新业务流程。
+     * 说明：见实现逻辑。
      */
     @Override
     public PracticeDraftSnapshotVO savePracticeDraft(Long userId, Long sessionId, PracticeDraftSaveDTO practiceDraftSaveDTO) {
@@ -315,7 +315,7 @@ public class PracticeServiceImpl implements PracticeService {
             throw new BusinessException("当前练习已结束，无法继续保存草稿", 400);
         }
 
-        // 对每个会话的草稿写入串行化，避免并发保存导致更新丢失。
+        // 说明：见实现逻辑。
         String lockToken = UUID.randomUUID().toString();
         if (!tryAcquireDraftSaveLock(practiceSession.getId(), lockToken)) {
             throw new BusinessException("草稿保存过于频繁，请稍后再试", 429);
@@ -380,7 +380,7 @@ public class PracticeServiceImpl implements PracticeService {
                 markDraftSessionDirty(practiceSession.getId());
             } catch (RuntimeException exception) {
                 log.warn("Draft cache write failed. sessionId={}", practiceSession.getId(), exception);
-                // 兜底路径：若缓存不可用，则直接将同一快照落库。
+                // 说明：见实现逻辑。
                 syncDraftSnapshotToDatabase(practiceSession, snapshot);
             }
             return snapshot;
@@ -390,7 +390,7 @@ public class PracticeServiceImpl implements PracticeService {
     }
 
     /**
-     * 执行查询业务流程并返回结果。
+     * 说明：见实现逻辑。
      */
     @Override
     public List<PracticeSessionSummaryVO> listPracticeSessions(Long userId, Long subjectId) {
@@ -420,7 +420,7 @@ public class PracticeServiceImpl implements PracticeService {
     }
 
     /**
-     * 执行查询业务流程并返回结果。
+     * 说明：见实现逻辑。
      */
     @Override
     public PracticeSessionDetailVO getPracticeSessionDetail(Long userId, Long sessionId) {
@@ -449,7 +449,7 @@ public class PracticeServiceImpl implements PracticeService {
     }
 
     /**
-     * 执行查询业务流程并返回结果。
+     * 说明：见实现逻辑。
      */
     @Override
     public List<PracticeExerciseRecordVO> listExerciseRecords(Long userId, Long subjectId) {
@@ -517,7 +517,7 @@ public class PracticeServiceImpl implements PracticeService {
     }
 
     /**
-     * 执行查询业务流程并返回结果。
+     * 说明：见实现逻辑。
      */
     @Override
     public List<PracticeWrongQuestionVO> listWrongQuestions(Long userId, Long subjectId, Long directoryId, Integer masterStatus) {
@@ -562,7 +562,7 @@ public class PracticeServiceImpl implements PracticeService {
     }
 
     /**
-     * 执行保存与更新业务流程。
+     * 说明：见实现逻辑。
      */
     @Override
     @Transactional
@@ -580,7 +580,7 @@ public class PracticeServiceImpl implements PracticeService {
     }
 
     /**
-     * 执行查询业务流程并返回结果。
+     * 说明：见实现逻辑。
      */
     @Override
     public List<PracticeWrongTrendVO> getWrongQuestionTrends(Long userId, Long subjectId, Long directoryId, Integer days) {
@@ -655,29 +655,39 @@ public class PracticeServiceImpl implements PracticeService {
     }
 
     /**
-     * 执行查询业务流程并返回结果。
+     * 说明：见实现逻辑。
      */
     @Override
-    public PracticeStatsVO getPracticeStats(Long userId, Integer days) {
+    public PracticeStatsVO getPracticeStats(Long userId, Long subjectId, Integer days) {
+        validateSubjectFilter(subjectId);
+
         int statsDays = normalizeStatsDays(days);
         LocalDate today = LocalDate.now();
         LocalDate startDate = today.minusDays(statsDays - 1L);
 
-        UserStats userStats = userStatsMapper.selectOne(new LambdaQueryWrapper<UserStats>()
-                .eq(UserStats::getUserId, userId)
-                .last("LIMIT 1"));
-        List<DailyStats> allDailyStats = dailyStatsMapper.selectList(new LambdaQueryWrapper<DailyStats>()
-                .eq(DailyStats::getUserId, userId)
-                .orderByDesc(DailyStats::getStatDate));
+        UserStats userStats = null;
+        List<DailyStats> allDailyStats;
+        if (subjectId == null) {
+            userStats = userStatsMapper.selectOne(new LambdaQueryWrapper<UserStats>()
+                    .eq(UserStats::getUserId, userId)
+                    .last("LIMIT 1"));
+            allDailyStats = dailyStatsMapper.selectList(new LambdaQueryWrapper<DailyStats>()
+                    .eq(DailyStats::getUserId, userId)
+                    .orderByDesc(DailyStats::getStatDate));
+        } else {
+            allDailyStats = listSubjectDailyStats(userId, subjectId);
+        }
         List<DailyStats> windowDailyStats = allDailyStats.stream()
                 .filter(stats -> stats.getStatDate() != null && !stats.getStatDate().isBefore(startDate))
                 .toList();
         List<UserSubjectStats> subjectStats = userSubjectStatsMapper.selectList(new LambdaQueryWrapper<UserSubjectStats>()
                 .eq(UserSubjectStats::getUserId, userId)
+                .eq(subjectId != null, UserSubjectStats::getSubjectId, subjectId)
                 .orderByDesc(UserSubjectStats::getTotalCount)
                 .orderByDesc(UserSubjectStats::getLastPracticeDate));
         List<UserKnowledgeMastery> knowledgeMasteries = userKnowledgeMasteryMapper.selectList(new LambdaQueryWrapper<UserKnowledgeMastery>()
                 .eq(UserKnowledgeMastery::getUserId, userId)
+                .eq(subjectId != null, UserKnowledgeMastery::getSubjectId, subjectId)
                 .orderByAsc(UserKnowledgeMastery::getMasteryLevel)
                 .orderByDesc(UserKnowledgeMastery::getWrongCount)
                 .orderByDesc(UserKnowledgeMastery::getTotalCount));
@@ -687,13 +697,18 @@ public class PracticeServiceImpl implements PracticeService {
         statsVO.setSubjectStats(buildSubjectStats(subjectStats));
         statsVO.setKnowledgeMasteries(buildKnowledgeMasteries(knowledgeMasteries, 30));
         statsVO.setWeakPoints(buildWeakPoints(knowledgeMasteries, 8));
-        statsVO.setRecentSessions(listRecentPracticeSessions(userId, 5));
-        statsVO.setOverview(buildOverview(userId, userStats, allDailyStats, subjectStats, today));
+        statsVO.setRecentSessions(listRecentPracticeSessions(userId, subjectId, 5));
+        if (subjectId == null) {
+            statsVO.setOverview(buildOverview(userId, userStats, allDailyStats, subjectStats, today));
+        } else {
+            UserSubjectStats currentSubjectStats = subjectStats.stream().findFirst().orElse(null);
+            statsVO.setOverview(buildSubjectOverview(userId, subjectId, currentSubjectStats, allDailyStats, today));
+        }
         return statsVO;
     }
 
     /**
-     * 执行查询业务流程并返回结果。
+     * 说明：见实现逻辑。
      */
     @Override
     public List<ExamTagVO> listPracticeTags(Long userId, Long subjectId) {
@@ -710,7 +725,7 @@ public class PracticeServiceImpl implements PracticeService {
     }
 
     /**
-     * 执行保存与更新业务流程。
+     * 说明：见实现逻辑。
      */
     @Override
     @Transactional
@@ -824,7 +839,7 @@ public class PracticeServiceImpl implements PracticeService {
     }
 
     /**
-     * 执行创建业务流程并返回结果。
+     * 说明：见实现逻辑。
      */
     private void createSessionPlan(Long userId, PracticeSession practiceSession, List<Question> selectedQuestions) {
         for (Question question : selectedQuestions) {
@@ -842,7 +857,7 @@ public class PracticeServiceImpl implements PracticeService {
     }
 
     /**
-     * 构建业务处理所需数据。
+     * 说明：见实现逻辑。
      */
     private PracticeStartVO buildStartVO(PracticeSession practiceSession, Subject subject) {
         PracticeStartVO practiceStartVO = new PracticeStartVO();
@@ -861,7 +876,7 @@ public class PracticeServiceImpl implements PracticeService {
     }
 
     /**
-     * 构建业务处理所需数据。
+     * 说明：见实现逻辑。
      */
     private PracticeSessionSummaryVO buildPracticeSessionSummary(PracticeSession session, Subject subject) {
         PracticeSessionSummaryVO summaryVO = new PracticeSessionSummaryVO();
@@ -882,7 +897,7 @@ public class PracticeServiceImpl implements PracticeService {
     }
 
     /**
-     * 构建业务处理所需数据。
+     * 说明：见实现逻辑。
      */
     private PracticeAnswerResultVO buildAnswerResult(Question question, String submittedAnswer, boolean isCorrect, int timeCost) {
         PracticeAnswerResultVO resultVO = new PracticeAnswerResultVO();
@@ -897,7 +912,7 @@ public class PracticeServiceImpl implements PracticeService {
     }
 
     /**
-     * 构建业务处理所需数据。
+     * 说明：见实现逻辑。
      */
     private PracticeStatsVO.OverviewVO buildOverview(
             Long userId,
@@ -951,7 +966,89 @@ public class PracticeServiceImpl implements PracticeService {
     }
 
     /**
-     * 构建业务处理所需数据。
+     * 说明：见实现逻辑。     */
+    private PracticeStatsVO.OverviewVO buildSubjectOverview(
+            Long userId,
+            Long subjectId,
+            UserSubjectStats subjectStats,
+            List<DailyStats> dailyStatsList,
+            LocalDate today
+    ) {
+        PracticeStatsVO.OverviewVO overviewVO = new PracticeStatsVO.OverviewVO();
+
+        int totalCountFromDaily = dailyStatsList.stream()
+                .map(DailyStats::getDoCount)
+                .mapToInt(this::defaultNumber)
+                .sum();
+        int correctCountFromDaily = dailyStatsList.stream()
+                .map(DailyStats::getCorrectCount)
+                .mapToInt(this::defaultNumber)
+                .sum();
+        int wrongCountFromDaily = Math.max(totalCountFromDaily - correctCountFromDaily, 0);
+        int totalTimeCostFromDaily = dailyStatsList.stream()
+                .map(DailyStats::getTimeCost)
+                .mapToInt(this::defaultNumber)
+                .sum();
+        LocalDate lastExerciseDateFromDaily = dailyStatsList.stream()
+                .map(DailyStats::getStatDate)
+                .filter(statDate -> statDate != null)
+                .max(LocalDate::compareTo)
+                .orElse(null);
+
+        if (subjectStats != null) {
+            overviewVO.setTotalCount(defaultNumber(subjectStats.getTotalCount()));
+            overviewVO.setCorrectCount(defaultNumber(subjectStats.getCorrectCount()));
+            overviewVO.setWrongCount(defaultNumber(subjectStats.getWrongCount()));
+            overviewVO.setCorrectRate(defaultDecimal(subjectStats.getCorrectRate()));
+            overviewVO.setLastExerciseDate(subjectStats.getLastPracticeDate() == null
+                    ? lastExerciseDateFromDaily
+                    : subjectStats.getLastPracticeDate());
+            int subjectTotalTime = defaultNumber(subjectStats.getTotalTimeCost());
+            overviewVO.setTotalTimeCost(subjectTotalTime > 0 ? subjectTotalTime : totalTimeCostFromDaily);
+        } else {
+            overviewVO.setTotalCount(totalCountFromDaily);
+            overviewVO.setCorrectCount(correctCountFromDaily);
+            overviewVO.setWrongCount(wrongCountFromDaily);
+            overviewVO.setCorrectRate(calculateRate(correctCountFromDaily, totalCountFromDaily));
+            overviewVO.setTotalTimeCost(totalTimeCostFromDaily);
+            overviewVO.setLastExerciseDate(lastExerciseDateFromDaily);
+        }
+
+        overviewVO.setActiveDays((int) dailyStatsList.stream()
+                .filter(stats -> defaultNumber(stats.getDoCount()) > 0)
+                .count());
+        overviewVO.setContinuousDays(calculateContinuousDays(dailyStatsList, today));
+        overviewVO.setMaxContinuousDays(calculateMaxContinuousDays(dailyStatsList));
+
+        DailyStats todayStats = dailyStatsList.stream()
+                .filter(stats -> today.equals(stats.getStatDate()))
+                .findFirst()
+                .orElse(null);
+        if (todayStats != null) {
+            overviewVO.setTodayCount(defaultNumber(todayStats.getDoCount()));
+            overviewVO.setTodayTimeCost(defaultNumber(todayStats.getTimeCost()));
+        }
+
+        Long wrongQuestionCount = wrongQuestionMapper.selectCount(new LambdaQueryWrapper<WrongQuestion>()
+                .eq(WrongQuestion::getUserId, userId)
+                .eq(WrongQuestion::getSubjectId, subjectId));
+        Long masteredWrongQuestionCount = wrongQuestionMapper.selectCount(new LambdaQueryWrapper<WrongQuestion>()
+                .eq(WrongQuestion::getUserId, userId)
+                .eq(WrongQuestion::getSubjectId, subjectId)
+                .eq(WrongQuestion::getMasterStatus, 1));
+        Long finishedSessionCount = practiceSessionMapper.selectCount(new LambdaQueryWrapper<PracticeSession>()
+                .eq(PracticeSession::getUserId, userId)
+                .eq(PracticeSession::getSubjectId, subjectId)
+                .eq(PracticeSession::getStatus, PracticeModeConstants.STATUS_FINISHED));
+
+        overviewVO.setWrongQuestionCount(toInt(wrongQuestionCount));
+        overviewVO.setMasteredWrongQuestionCount(toInt(masteredWrongQuestionCount));
+        overviewVO.setFinishedSessionCount(toInt(finishedSessionCount));
+        return overviewVO;
+    }
+
+    /**
+     * 说明：见实现逻辑。
      */
     private List<PracticeStatsVO.DailyTrendVO> buildDailyTrends(LocalDate startDate, LocalDate today, List<DailyStats> dailyStatsList) {
         Map<LocalDate, DailyStats> dailyStatsMap = dailyStatsList.stream()
@@ -980,7 +1077,7 @@ public class PracticeServiceImpl implements PracticeService {
     }
 
     /**
-     * 构建业务处理所需数据。
+     * 说明：见实现逻辑。
      */
     private List<PracticeStatsVO.SubjectStatsVO> buildSubjectStats(List<UserSubjectStats> subjectStatsList) {
         Map<Long, Subject> subjectMap = loadSubjectMap(subjectStatsList.stream()
@@ -1007,7 +1104,7 @@ public class PracticeServiceImpl implements PracticeService {
     }
 
     /**
-     * 构建业务处理所需数据。
+     * 说明：见实现逻辑。
      */
     private List<PracticeStatsVO.KnowledgeMasteryVO> buildKnowledgeMasteries(List<UserKnowledgeMastery> knowledgeMasteries, int limit) {
         if (knowledgeMasteries.isEmpty()) {
@@ -1033,7 +1130,7 @@ public class PracticeServiceImpl implements PracticeService {
     }
 
     /**
-     * 构建业务处理所需数据。
+     * 说明：见实现逻辑。
      */
     private List<PracticeStatsVO.KnowledgeMasteryVO> buildWeakPoints(List<UserKnowledgeMastery> knowledgeMasteries, int limit) {
         if (knowledgeMasteries.isEmpty()) {
@@ -1059,7 +1156,7 @@ public class PracticeServiceImpl implements PracticeService {
     }
 
     /**
-     * 执行核心业务处理流程。
+     * 说明：见实现逻辑。
      */
     private PracticeStatsVO.KnowledgeMasteryVO toKnowledgeMasteryVO(
             UserKnowledgeMastery mastery,
@@ -1084,11 +1181,12 @@ public class PracticeServiceImpl implements PracticeService {
     }
 
     /**
-     * 执行查询业务流程并返回结果。
+     * 说明：见实现逻辑。
      */
-    private List<PracticeSessionSummaryVO> listRecentPracticeSessions(Long userId, int limit) {
+    private List<PracticeSessionSummaryVO> listRecentPracticeSessions(Long userId, Long subjectId, int limit) {
         List<PracticeSession> sessions = practiceSessionMapper.selectList(new LambdaQueryWrapper<PracticeSession>()
                 .eq(PracticeSession::getUserId, userId)
+                .eq(subjectId != null, PracticeSession::getSubjectId, subjectId)
                 .orderByDesc(PracticeSession::getStartedAt)
                 .orderByDesc(PracticeSession::getId)
                 .last("LIMIT " + limit));
@@ -1110,7 +1208,7 @@ public class PracticeServiceImpl implements PracticeService {
     }
 
     /**
-     * 计算并返回处理结果。
+     * 说明：见实现逻辑。
      */
     private int calculateContinuousDays(List<DailyStats> dailyStatsList, LocalDate today) {
         Set<LocalDate> activeDates = toActiveDateSet(dailyStatsList);
@@ -1124,7 +1222,7 @@ public class PracticeServiceImpl implements PracticeService {
     }
 
     /**
-     * 计算并返回处理结果。
+     * 说明：见实现逻辑。
      */
     private int calculateMaxContinuousDays(List<DailyStats> dailyStatsList) {
         List<LocalDate> activeDates = new ArrayList<>(toActiveDateSet(dailyStatsList));
@@ -1146,7 +1244,7 @@ public class PracticeServiceImpl implements PracticeService {
     }
 
     /**
-     * 执行核心业务处理流程。
+     * 说明：见实现逻辑。
      */
     private Set<LocalDate> toActiveDateSet(List<DailyStats> dailyStatsList) {
         Set<LocalDate> activeDates = new HashSet<>();
@@ -1159,7 +1257,7 @@ public class PracticeServiceImpl implements PracticeService {
     }
 
     /**
-     * 执行参数与状态校验。
+     * 说明：见实现逻辑。
      */
     private Subject requireEnabledSubject(Long subjectId) {
         if (subjectId == null || subjectId <= 0) {
@@ -1176,7 +1274,7 @@ public class PracticeServiceImpl implements PracticeService {
     }
 
     /**
-     * 执行参数与状态校验。
+     * 说明：见实现逻辑。
      */
     private UserSubject requireJoinedSubject(Long userId, Long subjectId) {
         UserSubject userSubject = userSubjectMapper.selectOne(new LambdaQueryWrapper<UserSubject>()
@@ -1193,7 +1291,7 @@ public class PracticeServiceImpl implements PracticeService {
     }
 
     /**
-     * 执行参数与状态校验。
+     * 说明：见实现逻辑。
      */
     private PracticeSession requireSession(Long userId, Long sessionId) {
         if (sessionId == null || sessionId <= 0) {
@@ -1210,7 +1308,7 @@ public class PracticeServiceImpl implements PracticeService {
     }
 
     /**
-     * 执行核心业务处理流程。
+     * 说明：见实现逻辑。
      */
     private List<Question> selectSessionQuestions(Long userId, Long subjectId, int practiceMode, int questionCount, List<Long> tagIds) {
         if (practiceMode == PracticeModeConstants.KNOWLEDGE_POINT) {
@@ -1237,7 +1335,7 @@ public class PracticeServiceImpl implements PracticeService {
     }
 
     /**
-     * 执行核心业务处理流程。
+     * 说明：见实现逻辑。
      */
     private List<Question> selectWrongRetryQuestions(Long userId, Long subjectId, int questionCount) {
         List<WrongQuestion> wrongQuestions = wrongQuestionMapper.selectList(new LambdaQueryWrapper<WrongQuestion>()
@@ -1272,7 +1370,7 @@ public class PracticeServiceImpl implements PracticeService {
     }
 
     /**
-     * 执行核心业务处理流程。
+     * 说明：见实现逻辑。
      */
     private List<Question> selectTaggedQuestions(Long subjectId, List<Long> tagIds, int questionCount) {
         ensureTagsBelongToSubject(subjectId, tagIds);
@@ -1312,7 +1410,7 @@ public class PracticeServiceImpl implements PracticeService {
     }
 
     /**
-     * 执行参数与状态校验。
+     * 说明：见实现逻辑。
      */
     private void ensureTagsBelongToSubject(Long subjectId, List<Long> tagIds) {
         if (tagIds.isEmpty()) {
@@ -1330,7 +1428,7 @@ public class PracticeServiceImpl implements PracticeService {
     }
 
     /**
-     * 执行查询业务流程并返回结果。
+     * 说明：见实现逻辑。
      */
     private List<ExerciseRecord> listSessionRecords(Long sessionId) {
         return exerciseRecordMapper.selectList(new LambdaQueryWrapper<ExerciseRecord>()
@@ -1339,7 +1437,7 @@ public class PracticeServiceImpl implements PracticeService {
     }
 
     /**
-     * 执行查询业务流程并返回结果。
+     * 说明：见实现逻辑。
      */
     private List<PracticeExerciseRecordVO> listSessionExerciseRecordDetails(Long sessionId, boolean revealCorrectAnswer) {
         List<ExerciseRecord> records = listSessionRecords(sessionId).stream()
@@ -1377,8 +1475,49 @@ public class PracticeServiceImpl implements PracticeService {
     }
 
     /**
-     * 执行查询业务流程并返回结果。
-     */
+     * 说明：见实现逻辑。     */
+    private List<DailyStats> listSubjectDailyStats(Long userId, Long subjectId) {
+        List<Long> sessionIds = listFilteredSessionIds(userId, subjectId);
+        if (sessionIds.isEmpty()) {
+            return Collections.emptyList();
+        }
+
+        List<ExerciseRecord> answeredRecords = exerciseRecordMapper.selectList(new LambdaQueryWrapper<ExerciseRecord>()
+                .eq(ExerciseRecord::getUserId, userId)
+                .in(ExerciseRecord::getSessionRefId, sessionIds)
+                .isNotNull(ExerciseRecord::getExerciseTime)
+                .isNotNull(ExerciseRecord::getIsCorrect)
+                .orderByDesc(ExerciseRecord::getExerciseTime)
+                .orderByDesc(ExerciseRecord::getId));
+        if (answeredRecords.isEmpty()) {
+            return Collections.emptyList();
+        }
+
+        Map<LocalDate, DailyStats> dailyStatsMap = new LinkedHashMap<>();
+        for (ExerciseRecord record : answeredRecords) {
+            if (record.getExerciseTime() == null) {
+                continue;
+            }
+            LocalDate statDate = record.getExerciseTime().toLocalDate();
+            DailyStats dailyStats = dailyStatsMap.computeIfAbsent(statDate, key -> {
+                DailyStats stats = new DailyStats();
+                stats.setStatDate(key);
+                stats.setDoCount(0);
+                stats.setCorrectCount(0);
+                stats.setTimeCost(0);
+                return stats;
+            });
+            dailyStats.setDoCount(defaultNumber(dailyStats.getDoCount()) + 1);
+            if (Integer.valueOf(1).equals(record.getIsCorrect())) {
+                dailyStats.setCorrectCount(defaultNumber(dailyStats.getCorrectCount()) + 1);
+            }
+            dailyStats.setTimeCost(defaultNumber(dailyStats.getTimeCost()) + defaultNumber(record.getTimeCost()));
+        }
+        return dailyStatsMap.values().stream()
+                .sorted(Comparator.comparing(DailyStats::getStatDate).reversed())
+                .toList();
+    }
+
     private List<Long> listFilteredSessionIds(Long userId, Long subjectId) {
         LambdaQueryWrapper<PracticeSession> queryWrapper = new LambdaQueryWrapper<PracticeSession>()
                 .eq(PracticeSession::getUserId, userId);
@@ -1392,7 +1531,7 @@ public class PracticeServiceImpl implements PracticeService {
     }
 
     /**
-     * 执行核心业务处理流程。
+     * 说明：见实现逻辑。
      */
     private Map<Long, PracticeSession> loadSessionMap(List<Long> sessionIds) {
         if (sessionIds.isEmpty()) {
@@ -1404,7 +1543,7 @@ public class PracticeServiceImpl implements PracticeService {
     }
 
     /**
-     * 执行核心业务处理流程。
+     * 说明：见实现逻辑。
      */
     private Map<Long, Question> loadQuestionMap(List<Long> questionIds) {
         if (questionIds.isEmpty()) {
@@ -1416,7 +1555,7 @@ public class PracticeServiceImpl implements PracticeService {
     }
 
     /**
-     * 执行核心业务处理流程。
+     * 说明：见实现逻辑。
      */
     private Map<Long, Subject> loadSubjectMap(List<Long> subjectIds) {
         if (subjectIds.isEmpty()) {
@@ -1428,7 +1567,7 @@ public class PracticeServiceImpl implements PracticeService {
     }
 
     /**
-     * 执行核心业务处理流程。
+     * 说明：见实现逻辑。
      */
     private Map<Long, TextbookDirectory> loadDirectoryMap(List<Long> directoryIds) {
         if (directoryIds.isEmpty()) {
@@ -1440,7 +1579,7 @@ public class PracticeServiceImpl implements PracticeService {
     }
 
     /**
-     * 执行核心业务处理流程。
+     * 说明：见实现逻辑。
      */
     private Map<Long, ExamTag> loadTagMap(List<Long> tagIds) {
         if (tagIds.isEmpty()) {
@@ -1452,7 +1591,7 @@ public class PracticeServiceImpl implements PracticeService {
     }
 
     /**
-     * 执行核心业务处理流程。
+     * 说明：见实现逻辑。
      */
     private ExamTagVO toExamTagVO(ExamTag tag, String subjectName) {
         ExamTagVO tagVO = new ExamTagVO();
@@ -1467,7 +1606,7 @@ public class PracticeServiceImpl implements PracticeService {
     }
 
     /**
-     * 执行核心业务处理流程。
+     * 说明：见实现逻辑。
      */
     private PracticeWrongQuestionVO toWrongQuestionVO(
             WrongQuestion wrongQuestion,
@@ -1499,7 +1638,7 @@ public class PracticeServiceImpl implements PracticeService {
     }
 
     /**
-     * 执行核心业务处理流程。
+     * 说明：见实现逻辑。
      */
     private Map<Long, PracticeAnswerItemDTO> toAnswerMap(List<PracticeAnswerItemDTO> answers) {
         if (answers == null || answers.isEmpty()) {
@@ -1519,7 +1658,7 @@ public class PracticeServiceImpl implements PracticeService {
     }
 
     /**
-     * 构建业务处理所需数据。
+     * 说明：见实现逻辑。
      */
     private PracticeDraftSnapshotVO buildDraftSnapshotFromRecords(PracticeSession practiceSession, List<ExerciseRecord> sessionRecords) {
         Map<Long, DraftAnswerState> answerStateMap = new LinkedHashMap<>();
@@ -1547,14 +1686,13 @@ public class PracticeServiceImpl implements PracticeService {
     }
 
     /**
-     * 执行核心业务处理流程。
+     * 说明：见实现逻辑。
      */
     private Map<Long, DraftAnswerState> loadDraftAnswerState(
             PracticeDraftSnapshotVO cachedSnapshot,
             List<ExerciseRecord> sessionRecords
     ) {
         if (cachedSnapshot != null) {
-            // 进行中的会话以缓存快照为准。
             Map<Long, DraftAnswerState> answerStateMap = new LinkedHashMap<>();
             for (PracticeDraftAnswerVO answer : cachedSnapshot.getAnswers()) {
                 if (answer == null || answer.getQuestionId() == null || answer.getQuestionId() <= 0) {
@@ -1583,7 +1721,7 @@ public class PracticeServiceImpl implements PracticeService {
     }
 
     /**
-     * 执行核心业务处理流程。
+     * 说明：见实现逻辑。
      */
     private PracticeDraftSnapshotVO readDraftSnapshotFromRedis(Long userId, Long sessionId, Integer expectedVersion) {
         try {
@@ -1640,7 +1778,7 @@ public class PracticeServiceImpl implements PracticeService {
     }
 
     /**
-     * 执行核心业务处理流程。
+     * 说明：见实现逻辑。
      */
     private void writeDraftSnapshotToRedis(Long userId, PracticeDraftSnapshotVO snapshot) {
         HashOperations<String, Object, Object> hashOps = stringRedisTemplate.opsForHash();
@@ -1684,7 +1822,7 @@ public class PracticeServiceImpl implements PracticeService {
     }
 
     /**
-     * 执行删除与清理业务流程。
+     * 说明：见实现逻辑。
      */
     private void clearDraftSnapshotCache(Long sessionId) {
         try {
@@ -1696,7 +1834,7 @@ public class PracticeServiceImpl implements PracticeService {
     }
 
     /**
-     * 执行保存与更新业务流程。
+     * 说明：见实现逻辑。
      */
     private void markDraftSessionDirty(Long sessionId) {
         if (sessionId == null || sessionId <= 0) {
@@ -1710,7 +1848,7 @@ public class PracticeServiceImpl implements PracticeService {
     }
 
     /**
-     * 执行删除与清理业务流程。
+     * 说明：见实现逻辑。
      */
     private void removeDraftSessionDirty(Long sessionId) {
         if (sessionId == null || sessionId <= 0) {
@@ -1723,13 +1861,13 @@ public class PracticeServiceImpl implements PracticeService {
         }
     }
 
-    // 定时将缓存优先的草稿快照刷入数据库，降低请求链路写入压力。
+    // 说明：见实现逻辑。
     @Scheduled(
             fixedDelayString = "${practice.draft.db-sync-interval-ms:300000}",
             initialDelayString = "${practice.draft.db-sync-initial-delay-ms:300000}"
     )
     /**
-     * 执行保存与更新业务流程。
+     * 说明：见实现逻辑。
      */
     public void syncDraftCacheToDatabase() {
         List<Long> dirtySessionIds = listDirtyDraftSessionIds(Math.max(draftSyncBatchSize, 1));
@@ -1750,7 +1888,7 @@ public class PracticeServiceImpl implements PracticeService {
     }
 
     /**
-     * 执行查询业务流程并返回结果。
+     * 说明：见实现逻辑。
      */
     private List<Long> listDirtyDraftSessionIds(int limit) {
         try {
@@ -1771,7 +1909,7 @@ public class PracticeServiceImpl implements PracticeService {
     }
 
     /**
-     * 执行保存与更新业务流程。
+     * 说明：见实现逻辑。
      */
     private void syncDraftSnapshotToDatabase(PracticeSession practiceSession, PracticeDraftSnapshotVO cachedSnapshot) {
         if (practiceSession == null || cachedSnapshot == null) {
@@ -1803,7 +1941,7 @@ public class PracticeServiceImpl implements PracticeService {
     }
 
     /**
-     * 执行保存与更新业务流程。
+     * 说明：见实现逻辑。
      */
     private void syncDraftSessionToDatabase(Long sessionId) {
         PracticeSession practiceSession = practiceSessionMapper.selectById(sessionId);
@@ -1826,7 +1964,7 @@ public class PracticeServiceImpl implements PracticeService {
     }
 
     /**
-     * 执行保存与更新业务流程。
+     * 说明：见实现逻辑。
      */
     private void persistDraftSnapshotAnswersToDatabase(List<ExerciseRecord> sessionRecords, PracticeDraftSnapshotVO snapshot) {
         long fallbackUpdatedAt = snapshot.getSavedAt() == null || snapshot.getSavedAt() <= 0
@@ -1875,7 +2013,7 @@ public class PracticeServiceImpl implements PracticeService {
     }
 
     /**
-     * 计算并返回处理结果。
+     * 说明：见实现逻辑。
      */
     private DraftStats calculateDraftStats(Map<Long, DraftAnswerState> answerStateMap) {
         int answeredCount = 0;
@@ -1892,7 +2030,7 @@ public class PracticeServiceImpl implements PracticeService {
     }
 
     /**
-     * 构建业务处理所需数据。
+     * 说明：见实现逻辑。
      */
     private PracticeDraftSnapshotVO buildDraftSnapshot(
             Long sessionId,
@@ -1930,7 +2068,7 @@ public class PracticeServiceImpl implements PracticeService {
     }
 
     /**
-     * 解析并转换输入数据。
+     * 说明：见实现逻辑。
      */
     private DraftAnswerState parseDraftAnswerState(Object rawValue) {
         if (!(rawValue instanceof String rawText) || rawText.isBlank()) {
@@ -1955,7 +2093,7 @@ public class PracticeServiceImpl implements PracticeService {
     }
 
     /**
-     * 解析并转换输入数据。
+     * 说明：见实现逻辑。
      */
     private Integer parseIntValue(Object value, Integer defaultValue) {
         if (value == null) {
@@ -1969,7 +2107,7 @@ public class PracticeServiceImpl implements PracticeService {
     }
 
     /**
-     * 解析并转换输入数据。
+     * 说明：见实现逻辑。
      */
     private Long parseLongValue(Object value, Long defaultValue) {
         if (value == null) {
@@ -1983,7 +2121,7 @@ public class PracticeServiceImpl implements PracticeService {
     }
 
     /**
-     * 执行核心业务处理流程。
+     * 说明：见实现逻辑。
      */
     private long toEpochMilli(LocalDateTime value) {
         if (value == null) {
@@ -1993,7 +2131,7 @@ public class PracticeServiceImpl implements PracticeService {
     }
 
     /**
-     * 执行核心业务处理流程。
+     * 说明：见实现逻辑。
      */
     private boolean equalsNullable(String left, String right) {
         if (left == null && right == null) {
@@ -2006,7 +2144,7 @@ public class PracticeServiceImpl implements PracticeService {
     }
 
     /**
-     * 解析并转换输入数据。
+     * 说明：见实现逻辑。
      */
     private String normalizeStoredAnswer(String value) {
         if (value == null) {
@@ -2017,28 +2155,28 @@ public class PracticeServiceImpl implements PracticeService {
     }
 
     /**
-     * 构建业务处理所需数据。
+     * 说明：见实现逻辑。
      */
     private String buildDraftMetaRedisKey(Long sessionId) {
         return DRAFT_REDIS_KEY_PREFIX + sessionId + ":meta";
     }
 
     /**
-     * 构建业务处理所需数据。
+     * 说明：见实现逻辑。
      */
     private String buildDraftAnswersRedisKey(Long sessionId) {
         return DRAFT_REDIS_KEY_PREFIX + sessionId + ":answers";
     }
 
     /**
-     * 构建业务处理所需数据。
+     * 说明：见实现逻辑。
      */
     private String buildDraftSaveLockRedisKey(Long sessionId) {
         return DRAFT_SAVE_LOCK_REDIS_KEY_PREFIX + sessionId;
     }
 
     /**
-     * 执行核心业务处理流程。
+     * 说明：见实现逻辑。
      */
     private boolean tryAcquireDraftSaveLock(Long sessionId, String lockToken) {
         if (sessionId == null || sessionId <= 0 || lockToken == null || lockToken.isBlank()) {
@@ -2058,7 +2196,7 @@ public class PracticeServiceImpl implements PracticeService {
     }
 
     /**
-     * 执行核心业务处理流程。
+     * 说明：见实现逻辑。
      */
     private void releaseDraftSaveLock(Long sessionId, String lockToken) {
         if (sessionId == null || sessionId <= 0 || lockToken == null || lockToken.isBlank()) {
@@ -2076,7 +2214,7 @@ public class PracticeServiceImpl implements PracticeService {
     }
 
     /**
-     * 执行保存与更新业务流程。
+     * 说明：见实现逻辑。
      */
     private void updateUserSubjectLastPracticeTime(Long userId, Long subjectId, LocalDateTime practiceTime) {
         UserSubject userSubject = userSubjectMapper.selectOne(new LambdaQueryWrapper<UserSubject>()
@@ -2091,7 +2229,7 @@ public class PracticeServiceImpl implements PracticeService {
     }
 
     /**
-     * 执行参数与状态校验。
+     * 说明：见实现逻辑。
      */
     private void validateSubjectFilter(Long subjectId) {
         if (subjectId == null) {
@@ -2103,7 +2241,7 @@ public class PracticeServiceImpl implements PracticeService {
     }
 
     /**
-     * 执行参数与状态校验。
+     * 说明：见实现逻辑。
      */
     private void validateDirectoryFilter(Long directoryId, Long subjectId) {
         if (directoryId == null) {
@@ -2123,7 +2261,7 @@ public class PracticeServiceImpl implements PracticeService {
     }
 
     /**
-     * 执行参数与状态校验。
+     * 说明：见实现逻辑。
      */
     private void validateMasterStatusFilter(Integer masterStatus) {
         if (masterStatus == null) {
@@ -2135,7 +2273,7 @@ public class PracticeServiceImpl implements PracticeService {
     }
 
     /**
-     * 解析并转换输入数据。
+     * 说明：见实现逻辑。
      */
     private int normalizeMasterStatus(Integer masterStatus) {
         if (masterStatus == null || (masterStatus != 0 && masterStatus != 1)) {
@@ -2145,7 +2283,7 @@ public class PracticeServiceImpl implements PracticeService {
     }
 
     /**
-     * 执行参数与状态校验。
+     * 说明：见实现逻辑。
      */
     private WrongQuestion requireWrongQuestion(Long userId, Long wrongQuestionId) {
         if (wrongQuestionId == null || wrongQuestionId <= 0) {
@@ -2162,7 +2300,7 @@ public class PracticeServiceImpl implements PracticeService {
     }
 
     /**
-     * 构建业务处理所需数据。
+     * 说明：见实现逻辑。
      */
     private List<PracticeWrongTrendVO> buildEmptyWrongTrends(LocalDate startDate, LocalDate endDate) {
         List<PracticeWrongTrendVO> result = new ArrayList<>();
@@ -2179,7 +2317,7 @@ public class PracticeServiceImpl implements PracticeService {
     }
 
     /**
-     * 执行保存与更新业务流程。
+     * 说明：见实现逻辑。
      */
     private void updateQuestionStats(Question question, boolean isCorrect) {
         int previousDoCount = defaultNumber(question.getDoCount());
@@ -2200,7 +2338,7 @@ public class PracticeServiceImpl implements PracticeService {
     }
 
     /**
-     * 执行保存与更新业务流程。
+     * 说明：见实现逻辑。
      */
     private void updateUserStats(Long userId, boolean isCorrect) {
         UserStats userStats = userStatsMapper.selectOne(new LambdaQueryWrapper<UserStats>()
@@ -2229,7 +2367,7 @@ public class PracticeServiceImpl implements PracticeService {
     }
 
     /**
-     * 执行保存与更新业务流程。
+     * 说明：见实现逻辑。
      */
     private void updateUserSubjectStats(Long userId, Long subjectId, boolean isCorrect, int timeCost) {
         UserSubjectStats subjectStats = userSubjectStatsMapper.selectOne(new LambdaQueryWrapper<UserSubjectStats>()
@@ -2262,7 +2400,7 @@ public class PracticeServiceImpl implements PracticeService {
     }
 
     /**
-     * 执行保存与更新业务流程。
+     * 说明：见实现逻辑。
      */
     private void updateDailyStats(Long userId, boolean isCorrect, int timeCost) {
         LocalDate today = LocalDate.now();
@@ -2291,7 +2429,7 @@ public class PracticeServiceImpl implements PracticeService {
     }
 
     /**
-     * 执行保存与更新业务流程。
+     * 说明：见实现逻辑。
      */
     private void updateKnowledgeMastery(Long userId, Long subjectId, List<Long> tagIds, boolean isCorrect) {
         if (tagIds.isEmpty()) {
@@ -2330,7 +2468,7 @@ public class PracticeServiceImpl implements PracticeService {
     }
 
     /**
-     * 执行核心业务处理流程。
+     * 说明：见实现逻辑。
      */
     private void upsertWrongQuestion(Long userId, Question question, List<String> tagNames, LocalDateTime wrongTime) {
         WrongQuestion wrongQuestion = wrongQuestionMapper.selectOne(new LambdaQueryWrapper<WrongQuestion>()
@@ -2363,7 +2501,7 @@ public class PracticeServiceImpl implements PracticeService {
     }
 
     /**
-     * 执行核心业务处理流程。
+     * 说明：见实现逻辑。
      */
     private TagSnapshot loadTagSnapshot(Long questionId) {
         List<QuestionTagRelation> relations = questionTagRelationMapper.selectList(new LambdaQueryWrapper<QuestionTagRelation>()
@@ -2392,7 +2530,7 @@ public class PracticeServiceImpl implements PracticeService {
     }
 
     /**
-     * 解析并转换输入数据。
+     * 说明：见实现逻辑。
      */
     private int normalizePracticeMode(Integer practiceMode) {
         int mode = practiceMode == null ? PracticeModeConstants.SEQUENTIAL : practiceMode;
@@ -2406,20 +2544,20 @@ public class PracticeServiceImpl implements PracticeService {
     }
 
     /**
-     * 解析并转换输入数据。
+     * 说明：见实现逻辑。
      */
     private int normalizeQuestionCount(Integer questionCount) {
         if (questionCount == null) {
             return DEFAULT_QUESTION_COUNT;
         }
         if (questionCount < 1 || questionCount > MAX_QUESTION_COUNT) {
-            throw new BusinessException("题目数量必须在 1 到 50 之间", 400);
+            throw new BusinessException("题目数量范围应为 1 到 50", 400);
         }
         return questionCount;
     }
 
     /**
-     * 解析并转换输入数据。
+     * 说明：见实现逻辑。
      */
     private List<Long> normalizeTagIds(List<Long> tagIds) {
         if (tagIds == null || tagIds.isEmpty()) {
@@ -2437,7 +2575,7 @@ public class PracticeServiceImpl implements PracticeService {
     }
 
     /**
-     * 解析并转换输入数据。
+     * 说明：见实现逻辑。
      */
     private int normalizeStatsDays(Integer days) {
         if (days == null) {
@@ -2450,7 +2588,7 @@ public class PracticeServiceImpl implements PracticeService {
     }
 
     /**
-     * 解析并转换输入数据。
+     * 说明：见实现逻辑。
      */
     private int normalizeTimeCost(Integer timeCost) {
         if (timeCost == null) {
@@ -2460,7 +2598,7 @@ public class PracticeServiceImpl implements PracticeService {
     }
 
     /**
-     * 解析并转换输入数据。
+     * 说明：见实现逻辑。
      */
     private int normalizeDraftVersion(Integer baseVersion) {
         if (baseVersion == null || baseVersion < 0) {
@@ -2470,14 +2608,14 @@ public class PracticeServiceImpl implements PracticeService {
     }
 
     /**
-     * 执行核心业务处理流程。
+     * 说明：见实现逻辑。
      */
     private void throwDraftConflict(Long sessionId) {
         throwDraftConflict(sessionId, null);
     }
 
     /**
-     * 执行核心业务处理流程。
+     * 说明：见实现逻辑。
      */
     private void throwDraftConflict(Long sessionId, Integer latestVersionHint) {
         int latestVersion = latestVersionHint == null ? 0 : Math.max(latestVersionHint, 0);
@@ -2499,7 +2637,7 @@ public class PracticeServiceImpl implements PracticeService {
     }
 
     /**
-     * 解析并转换输入数据。
+     * 说明：见实现逻辑。
      */
     private String normalizeSubmittedAnswer(String userAnswer) {
         if (userAnswer == null) {
@@ -2509,7 +2647,7 @@ public class PracticeServiceImpl implements PracticeService {
     }
 
     /**
-     * 解析并转换输入数据。
+     * 说明：见实现逻辑。
      */
     private int resolveMasteryLevel(BigDecimal correctRate, Integer totalCount) {
         int answeredCount = defaultNumber(totalCount);
@@ -2525,16 +2663,16 @@ public class PracticeServiceImpl implements PracticeService {
         int warmupLevelCap = resolveConfiguredWarmupLevelCap();
 
         if (answeredCount < minSampleCount) {
-            // 预热阶段：避免因样本过少而高估掌握度。
+            // 说明：见实现逻辑。
             return Math.min(resolveMasteryLevelByRate(rate, level1Rate, level2Rate, level3Rate), warmupLevelCap);
         }
 
-        // 稳定阶段：仅按正确率分层。
+        // 说明：见实现逻辑。
         return resolveMasteryLevelByRate(rate, level1Rate, level2Rate, level3Rate);
     }
 
     /**
-     * 解析并转换输入数据。
+     * 说明：见实现逻辑。
      */
     private int resolveMasteryLevelByRate(BigDecimal rate, int level1Rate, int level2Rate, int level3Rate) {
         if (rate.compareTo(BigDecimal.valueOf(level3Rate)) >= 0) {
@@ -2550,7 +2688,7 @@ public class PracticeServiceImpl implements PracticeService {
     }
 
     /**
-     * 解析并转换输入数据。
+     * 说明：见实现逻辑。
      */
     private int resolveConfiguredMinSampleCount() {
         Integer configured = practiceMasteryProperties.getMinSampleCount();
@@ -2558,14 +2696,14 @@ public class PracticeServiceImpl implements PracticeService {
     }
 
     /**
-     * 解析并转换输入数据。
+     * 说明：见实现逻辑。
      */
     private int resolveConfiguredRateLevel1() {
         return clampRate(practiceMasteryProperties.getRateLevel1(), DEFAULT_MASTERY_RATE_LEVEL_1);
     }
 
     /**
-     * 解析并转换输入数据。
+     * 说明：见实现逻辑。
      */
     private int resolveConfiguredRateLevel2(int level1Rate) {
         int level2Rate = clampRate(practiceMasteryProperties.getRateLevel2(), DEFAULT_MASTERY_RATE_LEVEL_2);
@@ -2573,7 +2711,7 @@ public class PracticeServiceImpl implements PracticeService {
     }
 
     /**
-     * 解析并转换输入数据。
+     * 说明：见实现逻辑。
      */
     private int resolveConfiguredRateLevel3(int level2Rate) {
         int level3Rate = clampRate(practiceMasteryProperties.getRateLevel3(), DEFAULT_MASTERY_RATE_LEVEL_3);
@@ -2581,7 +2719,7 @@ public class PracticeServiceImpl implements PracticeService {
     }
 
     /**
-     * 解析并转换输入数据。
+     * 说明：见实现逻辑。
      */
     private int resolveConfiguredWarmupLevelCap() {
         Integer configured = practiceMasteryProperties.getWarmupLevelCap();
@@ -2593,7 +2731,7 @@ public class PracticeServiceImpl implements PracticeService {
     }
 
     /**
-     * 执行核心业务处理流程。
+     * 说明：见实现逻辑。
      */
     private int clampRate(Integer configured, int defaultValue) {
         int rate = configured == null ? defaultValue : configured;
@@ -2604,7 +2742,7 @@ public class PracticeServiceImpl implements PracticeService {
     }
 
     /**
-     * 计算并返回处理结果。
+     * 说明：见实现逻辑。
      */
     private BigDecimal calculateRate(Integer correctCount, Integer totalCount) {
         int total = defaultNumber(totalCount);
@@ -2617,14 +2755,14 @@ public class PracticeServiceImpl implements PracticeService {
     }
 
     /**
-     * 执行核心业务处理流程。
+     * 说明：见实现逻辑。
      */
     private int defaultNumber(Integer value) {
         return value == null ? 0 : value;
     }
 
     /**
-     * 执行核心业务处理流程。
+     * 说明：见实现逻辑。
      */
     private int toInt(Long value) {
         if (value == null) {
@@ -2637,14 +2775,14 @@ public class PracticeServiceImpl implements PracticeService {
     }
 
     /**
-     * 执行核心业务处理流程。
+     * 说明：见实现逻辑。
      */
     private BigDecimal defaultDecimal(BigDecimal value) {
         return value == null ? BigDecimal.ZERO : value;
     }
 
     /**
-     * 判断当前条件是否满足。
+     * 说明：见实现逻辑。
      */
     private boolean isSessionOngoing(PracticeSession practiceSession) {
         return Integer.valueOf(PracticeModeConstants.STATUS_ONGOING).equals(practiceSession.getStatus());
@@ -2657,56 +2795,56 @@ public class PracticeServiceImpl implements PracticeService {
         private Long updatedAt;
 
         /**
-         * 执行查询业务流程并返回结果。
+         * 说明：见实现逻辑。
          */
         public Long getQuestionId() {
             return questionId;
         }
 
         /**
-         * 执行保存与更新业务流程。
+         * 说明：见实现逻辑。
          */
         public void setQuestionId(Long questionId) {
             this.questionId = questionId;
         }
 
         /**
-         * 执行查询业务流程并返回结果。
+         * 说明：见实现逻辑。
          */
         public String getUserAnswer() {
             return userAnswer;
         }
 
         /**
-         * 执行保存与更新业务流程。
+         * 说明：见实现逻辑。
          */
         public void setUserAnswer(String userAnswer) {
             this.userAnswer = userAnswer;
         }
 
         /**
-         * 执行查询业务流程并返回结果。
+         * 说明：见实现逻辑。
          */
         public Integer getTimeCost() {
             return timeCost;
         }
 
         /**
-         * 执行保存与更新业务流程。
+         * 说明：见实现逻辑。
          */
         public void setTimeCost(Integer timeCost) {
             this.timeCost = timeCost;
         }
 
         /**
-         * 执行查询业务流程并返回结果。
+         * 说明：见实现逻辑。
          */
         public Long getUpdatedAt() {
             return updatedAt;
         }
 
         /**
-         * 执行保存与更新业务流程。
+         * 说明：见实现逻辑。
          */
         public void setUpdatedAt(Long updatedAt) {
             this.updatedAt = updatedAt;

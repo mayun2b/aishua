@@ -168,7 +168,7 @@
           <div class="row-grid">
             <label>
               <span>题型</span>
-              <select v-model.number="form.type">
+              <select v-model.number="form.type" @change="handleFormTypeChange">
                 <option v-for="item in QUESTION_TYPES" :key="item.value" :value="item.value">
                   {{ item.label }}
                 </option>
@@ -205,13 +205,48 @@
             ></textarea>
           </label>
 
-          <label>
-            <span>选项 JSON（单选/多选必填）</span>
+          <div v-if="isChoiceQuestionType(form.type)" class="choice-options-field">
+            <span>选项（单选/多选必填）</span>
+            <div class="choice-options-box">
+              <div v-for="(option, index) in choiceOptions" :key="`choice-${index}`" class="choice-option-row">
+                <input
+                  v-model.trim="option.label"
+                  class="choice-option-label"
+                  type="text"
+                  maxlength="12"
+                  :placeholder="`标识（如${String.fromCharCode(65 + index)}）`"
+                />
+                <input
+                  v-model.trim="option.value"
+                  class="choice-option-value"
+                  type="text"
+                  maxlength="2000"
+                  :placeholder="`请输入选项${index + 1}内容`"
+                />
+                <button
+                  type="button"
+                  class="ghost small"
+                  :disabled="choiceOptions.length <= MIN_CHOICE_OPTIONS"
+                  @click="removeChoiceOption(index)"
+                >
+                  删除
+                </button>
+              </div>
+              <div class="choice-options-actions">
+                <button type="button" class="ghost small" @click="addChoiceOption">新增选项</button>
+                <button type="button" class="ghost small" @click="normalizeChoiceOptionLabels">自动排序标识</button>
+              </div>
+            </div>
+            <p class="field-tip">系统会自动生成 JSON 结构，无需手写。</p>
+          </div>
+
+          <label v-else>
+            <span>选项 JSON（非选择题可选）</span>
             <textarea
               v-model.trim="form.options"
               rows="4"
               maxlength="10000"
-              placeholder='例如：[{"label":"A","value":"选项一"},{"label":"B","value":"选项二"}]'
+              placeholder='如需保留结构化信息，可填写 JSON 数组'
             ></textarea>
           </label>
 
@@ -223,6 +258,9 @@
               maxlength="10000"
               placeholder="请输入标准答案"
             ></textarea>
+            <p v-if="isChoiceQuestionType(form.type)" class="field-tip">
+              单选填写一个选项标识（如 A）；多选可用逗号分隔（如 A,C）。
+            </p>
           </label>
 
           <label>
@@ -305,6 +343,8 @@ const DIFFICULTY_OPTIONS = [
   { value: 2, label: '中等' },
   { value: 3, label: '困难' }
 ]
+const MIN_CHOICE_OPTIONS = 2
+const MAX_CHOICE_OPTIONS = 12
 
 const loading = ref(false)
 const submitting = ref(false)
@@ -317,6 +357,7 @@ const { currentPage, pagedItems: pagedQuestions, resetPage } = useClientPaginati
 const filterDirectoryOptions = ref([])
 const formDirectoryOptions = ref([])
 const formTagOptions = ref([])
+const choiceOptions = ref([])
 
 const filters = reactive({
   subjectId: '',
@@ -344,6 +385,133 @@ const createEmptyForm = (subjectId = filters.subjectId || '') => ({
 const initialForm = ref(createEmptyForm())
 const form = reactive(createEmptyForm())
 
+const isChoiceQuestionType = (type) => Number(type) === 1 || Number(type) === 2
+
+const normalizeOptionField = (value) => {
+  if (value == null) {
+    return ''
+  }
+  return String(value).trim()
+}
+
+const defaultChoiceOptionLabel = (index) => {
+  return index < 26 ? String.fromCharCode(65 + index) : `选项${index + 1}`
+}
+
+const normalizeChoiceOptionLabel = (value, index) => {
+  const normalized = normalizeOptionField(value).replace(/\s+/g, '')
+  if (!normalized) {
+    return defaultChoiceOptionLabel(index)
+  }
+  return normalized.toUpperCase()
+}
+
+const createDefaultChoiceOptions = () => ([
+  { label: defaultChoiceOptionLabel(0), value: '' },
+  { label: defaultChoiceOptionLabel(1), value: '' }
+])
+
+const parseChoiceOptions = (optionsText) => {
+  const normalizedText = normalizeOptionField(optionsText)
+  if (!normalizedText) {
+    return []
+  }
+
+  try {
+    const parsed = JSON.parse(normalizedText)
+    if (!Array.isArray(parsed)) {
+      return []
+    }
+
+    return parsed.map((item, index) => {
+      if (item && typeof item === 'object' && !Array.isArray(item)) {
+        return {
+          label: normalizeChoiceOptionLabel(
+            item.label ?? item.key ?? item.optionKey ?? item.code,
+            index
+          ),
+          value: normalizeOptionField(
+            item.value
+            ?? item.text
+            ?? item.optionText
+            ?? item.content
+            ?? item.title
+            ?? item.desc
+            ?? item.description
+            ?? item.name
+          )
+        }
+      }
+      return {
+        label: normalizeChoiceOptionLabel('', index),
+        value: normalizeOptionField(item)
+      }
+    })
+  } catch (error) {
+    return []
+  }
+}
+
+const syncChoiceOptionsFromText = (optionsText) => {
+  const parsedOptions = parseChoiceOptions(optionsText)
+  choiceOptions.value = parsedOptions.length ? parsedOptions : createDefaultChoiceOptions()
+}
+
+const addChoiceOption = () => {
+  if (choiceOptions.value.length >= MAX_CHOICE_OPTIONS) {
+    showToast(`单题最多支持 ${MAX_CHOICE_OPTIONS} 个选项`)
+    return
+  }
+  choiceOptions.value = [
+    ...choiceOptions.value,
+    { label: defaultChoiceOptionLabel(choiceOptions.value.length), value: '' }
+  ]
+}
+
+const removeChoiceOption = (index) => {
+  if (choiceOptions.value.length <= MIN_CHOICE_OPTIONS) {
+    showToast(`单选/多选题至少保留 ${MIN_CHOICE_OPTIONS} 个选项`)
+    return
+  }
+  choiceOptions.value = choiceOptions.value.filter((_, rowIndex) => rowIndex !== index)
+}
+
+const normalizeChoiceOptionLabels = () => {
+  choiceOptions.value = choiceOptions.value.map((item, index) => ({
+    ...item,
+    label: defaultChoiceOptionLabel(index)
+  }))
+}
+
+const buildChoiceOptionsText = () => {
+  if (choiceOptions.value.length < MIN_CHOICE_OPTIONS) {
+    showToast(`单选/多选题至少需要 ${MIN_CHOICE_OPTIONS} 个选项`)
+    return false
+  }
+
+  const normalizedOptions = choiceOptions.value.map((item, index) => ({
+    label: normalizeChoiceOptionLabel(item.label, index),
+    value: normalizeOptionField(item.value)
+  }))
+
+  if (normalizedOptions.some((item) => !item.value)) {
+    showToast('请填写完整的选项内容')
+    return false
+  }
+
+  const deduplicatedLabels = new Set()
+  for (const option of normalizedOptions) {
+    const labelKey = option.label.toUpperCase()
+    if (deduplicatedLabels.has(labelKey)) {
+      showToast('选项标识不能重复')
+      return false
+    }
+    deduplicatedLabels.add(labelKey)
+  }
+
+  return JSON.stringify(normalizedOptions)
+}
+
 const fillForm = (payload) => {
   form.subjectId = payload.subjectId
   form.directoryId = payload.directoryId
@@ -357,6 +525,7 @@ const fillForm = (payload) => {
   form.imageUrls = payload.imageUrls
   form.imageDesc = payload.imageDesc
   form.tagIds = [...payload.tagIds]
+  syncChoiceOptionsFromText(form.options)
 }
 
 const useFormPayload = (payload) => {
@@ -482,25 +651,49 @@ const resetForm = () => {
   fillForm(initialForm.value)
 }
 
-const parseOptionsText = () => {
-  const optionsText = form.options?.trim()
-  if (!optionsText) {
+const parseOptionsText = (optionsText) => {
+  const normalizedOptionsText = normalizeOptionField(optionsText)
+  if (!normalizedOptionsText) {
     return null
   }
   try {
-    const parsed = JSON.parse(optionsText)
+    const parsed = JSON.parse(normalizedOptionsText)
     if (!Array.isArray(parsed)) {
       showToast('选项JSON必须是数组格式')
       return false
     }
-    return optionsText
+    return normalizedOptionsText
   } catch (error) {
     showToast('选项JSON格式错误')
     return false
   }
 }
 
-const validateForm = () => {
+const resolveOptionsTextForSubmit = () => {
+  if (isChoiceQuestionType(form.type)) {
+    return buildChoiceOptionsText()
+  }
+  return parseOptionsText(form.options)
+}
+
+const handleFormTypeChange = () => {
+  if (!isChoiceQuestionType(form.type)) {
+    return
+  }
+  if (!choiceOptions.value.length) {
+    choiceOptions.value = createDefaultChoiceOptions()
+  }
+  if (choiceOptions.value.length < MIN_CHOICE_OPTIONS) {
+    while (choiceOptions.value.length < MIN_CHOICE_OPTIONS) {
+      choiceOptions.value.push({
+        label: defaultChoiceOptionLabel(choiceOptions.value.length),
+        value: ''
+      })
+    }
+  }
+}
+
+const validateForm = (optionsText) => {
   if (!form.subjectId) {
     showToast('请选择所属学科')
     return false
@@ -522,18 +715,18 @@ const validateForm = () => {
     return false
   }
 
-  const parsedOptions = parseOptionsText()
-  if (parsedOptions === false) {
+  if (optionsText === false) {
     return false
   }
-  if ((form.type === 1 || form.type === 2) && !parsedOptions) {
-    showToast('单选/多选题必须填写选项JSON')
+  if (isChoiceQuestionType(form.type) && !optionsText) {
+    showToast('单选/多选题必须填写选项')
     return false
   }
-  if (parsedOptions) {
-    const parsedArray = JSON.parse(parsedOptions)
-    if ((form.type === 1 || form.type === 2) && parsedArray.length < 2) {
-      showToast('单选/多选题至少需要 2 个选项')
+
+  if (optionsText) {
+    const parsedArray = JSON.parse(optionsText)
+    if (isChoiceQuestionType(form.type) && parsedArray.length < MIN_CHOICE_OPTIONS) {
+      showToast(`单选/多选题至少需要 ${MIN_CHOICE_OPTIONS} 个选项`)
       return false
     }
   }
@@ -542,11 +735,11 @@ const validateForm = () => {
 }
 
 const submitForm = async () => {
-  if (!validateForm()) {
+  const optionsText = resolveOptionsTextForSubmit()
+  if (!validateForm(optionsText)) {
     return
   }
 
-  const optionsText = form.options?.trim() ? form.options.trim() : null
   const tagIds = [...new Set((form.tagIds || []).map((id) => Number(id)).filter((id) => id > 0))]
 
   const payload = {
@@ -720,7 +913,8 @@ onMounted(async () => {
 }
 
 .filter-card label,
-.question-form label {
+.question-form label,
+.choice-options-field {
   display: grid;
   gap: 8px;
   color: #17324d;
@@ -739,6 +933,33 @@ onMounted(async () => {
   font-size: 14px;
   box-sizing: border-box;
   resize: vertical;
+}
+
+.choice-options-box {
+  display: grid;
+  gap: 10px;
+  padding: 12px;
+  border-radius: 14px;
+  border: 1px solid #d8e1eb;
+  background: #f8fbff;
+}
+
+.choice-option-row {
+  display: grid;
+  grid-template-columns: minmax(90px, 120px) 1fr auto;
+  gap: 10px;
+  align-items: center;
+}
+
+.choice-option-label,
+.choice-option-value {
+  margin: 0;
+}
+
+.choice-options-actions {
+  display: flex;
+  gap: 10px;
+  flex-wrap: wrap;
 }
 
 .filter-actions,
@@ -941,6 +1162,10 @@ button {
   }
 
   .row-grid {
+    grid-template-columns: 1fr;
+  }
+
+  .choice-option-row {
     grid-template-columns: 1fr;
   }
 }

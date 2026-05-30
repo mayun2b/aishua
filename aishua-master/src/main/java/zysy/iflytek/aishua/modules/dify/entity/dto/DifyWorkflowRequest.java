@@ -6,7 +6,8 @@ import lombok.Data;
 import java.util.Map;
 
 /**
- * 流程编排工作流调用请求体。
+ * Dify 工作流运行接口请求体。
+ * 对应 POST /v1/workflows/run。
  */
 @Data
 public class DifyWorkflowRequest {
@@ -17,7 +18,7 @@ public class DifyWorkflowRequest {
     private Map<String, Object> inputs;
 
     /**
-     * 平台要求的响应模式（流式或阻塞）。
+     * 响应模式（如 blocking / streaming）。
      */
     @JsonProperty("response_mode")
     private String responseMode;

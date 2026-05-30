@@ -43,7 +43,7 @@ public interface PracticeService {
 
     List<PracticeWrongTrendVO> getWrongQuestionTrends(Long userId, Long subjectId, Long directoryId, Integer days);
 
-    PracticeStatsVO getPracticeStats(Long userId, Integer days);
+    PracticeStatsVO getPracticeStats(Long userId, Long subjectId, Integer days);
 
     List<ExamTagVO> listPracticeTags(Long userId, Long subjectId);
 }

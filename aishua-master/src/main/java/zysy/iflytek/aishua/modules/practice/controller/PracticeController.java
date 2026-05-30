@@ -152,12 +152,13 @@ public class PracticeController {
      */
     @GetMapping("/stats")
     public Result<PracticeStatsVO> getPracticeStats(
+            @RequestParam(required = false) Long subjectId,
             @RequestParam(required = false) Integer days
     ) {
         // 从用户上下文获取当前登录用户编号。
         Long userId = UserContext.requireUserId();
         // 调用服务层处理业务并封装统一响应。
-        return Result.success(practiceService.getPracticeStats(userId, days));
+        return Result.success(practiceService.getPracticeStats(userId, subjectId, days));
     }
 
     /**

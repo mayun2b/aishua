@@ -615,7 +615,7 @@ public class PracticeQuestionAiServiceImpl implements PracticeQuestionAiService 
     private String normalizeInputContent(String content) {
         String normalized = content == null ? "" : content.trim();
         if (normalized.isEmpty()) {
-            throw new BusinessException("閹绘劙妫堕崘鍛啇娑撳秷鍏樻稉铏光敄", 400);
+            throw new BusinessException("输入内容不能为空", 400);
         }
         return normalized;
     }

@@ -23,6 +23,7 @@ import ExamCenterView from '../modules/exam/views/ExamCenterView.vue'
 import ExamSessionView from '../modules/exam/views/ExamSessionView.vue'
 import ExamRecordListView from '../modules/exam/views/ExamRecordListView.vue'
 import ExamRecordDetailView from '../modules/exam/views/ExamRecordDetailView.vue'
+import LearningAnalysisView from '../modules/ai/views/LearningAnalysisView.vue'
 
 const routes = [
   {
@@ -143,6 +144,14 @@ const routes = [
     path: '/exercise/exam/records/:recordId',
     name: 'ExamRecordDetail',
     component: ExamRecordDetailView,
+    meta: {
+      requiresAuth: true
+    }
+  },
+  {
+    path: '/learning-analysis',
+    name: 'LearningAnalysis',
+    component: LearningAnalysisView,
     meta: {
       requiresAuth: true
     }

@@ -220,13 +220,13 @@ public class QuestionServiceImpl implements QuestionService {
         Set<Long> questionIds = questions.stream().map(Question::getId).collect(Collectors.toSet());
 
         Map<Long, Subject> subjectMap = subjectIds.isEmpty()
-                ? Map.of()
+                ? Collections.emptyMap()
                 : subjectMapper.selectBatchIds(subjectIds).stream()
                 .filter(subject -> subject != null && !Integer.valueOf(1).equals(subject.getDeleted()))
                 .collect(Collectors.toMap(Subject::getId, Function.identity(), (left, right) -> left));
 
         Map<Long, TextbookDirectory> directoryMap = directoryIds.isEmpty()
-                ? Map.of()
+                ? Collections.emptyMap()
                 : textbookDirectoryMapper.selectBatchIds(directoryIds).stream()
                 .filter(directory -> directory != null && !Integer.valueOf(1).equals(directory.getDeleted()))
                 .collect(Collectors.toMap(TextbookDirectory::getId, Function.identity(), (left, right) -> left));
@@ -235,7 +235,7 @@ public class QuestionServiceImpl implements QuestionService {
                 .in(QuestionTagRelation::getQuestionId, questionIds));
         Set<Long> tagIds = relations.stream().map(QuestionTagRelation::getTagId).collect(Collectors.toSet());
         Map<Long, ExamTag> tagMap = tagIds.isEmpty()
-                ? Map.of()
+                ? Collections.emptyMap()
                 : examTagMapper.selectBatchIds(tagIds).stream()
                 .filter(tag -> tag != null)
                 .collect(Collectors.toMap(ExamTag::getId, Function.identity(), (left, right) -> left));
@@ -264,8 +264,8 @@ public class QuestionServiceImpl implements QuestionService {
         for (Question question : questions) {
             List<QuestionTagVO> tags = questionTagMap.getOrDefault(question.getId(), Collections.emptyList());
             List<Long> questionTagIds = tags.stream().map(QuestionTagVO::getId).toList();
-            Subject subject = subjectMap.get(question.getSubjectId());
-            TextbookDirectory directory = directoryMap.get(question.getDirectoryId());
+            Subject subject = question.getSubjectId() == null ? null : subjectMap.get(question.getSubjectId());
+            TextbookDirectory directory = question.getDirectoryId() == null ? null : directoryMap.get(question.getDirectoryId());
 
             QuestionVO questionVO = new QuestionVO();
             questionVO.setId(question.getId());

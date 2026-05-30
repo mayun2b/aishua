@@ -36,6 +36,10 @@ const TEXT_EXTENSIONS = new Set([
 ]);
 
 const MOJIBAKE_MARKERS = [
+  "\u7487\u5b58\u69d1",
+  "\u95ab\u660f\u7deb",
+  "\u951b",
+  "\u9286",
   "\u7487",
   "\u9359",
   "\u7f01",

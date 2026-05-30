@@ -14,14 +14,12 @@ import java.io.PrintWriter;
 import java.util.List;
 
 /**
- * 接口路由令牌鉴权拦截器。
+ * API 鉴权拦截器。
+ * 职责：校验 JWT，解析 userId，并写入 UserContext 供后续业务层使用。
  */
 @Component
 public class AuthInterceptor implements HandlerInterceptor {
-    // 显式开放的公开接口路径。
-    /**
-     * 处理当前业务逻辑。
-     */
+    // 无需登录即可访问的接口前缀
     private static final List<String> PUBLIC_PATH_PREFIXES = List.of(
             "/api/user/login",
             "/api/user/register"
@@ -31,7 +29,7 @@ public class AuthInterceptor implements HandlerInterceptor {
     private final JwtProperties jwtProperties;
 
     /**
-     * 构造方法，负责注入依赖组件。
+     * 注入 JWT 服务与配置。
      */
     public AuthInterceptor(JwtService jwtService, JwtProperties jwtProperties) {
         this.jwtService = jwtService;
@@ -39,15 +37,18 @@ public class AuthInterceptor implements HandlerInterceptor {
     }
 
     /**
-     * 处理当前业务逻辑。
+     * 请求进入 Controller 前执行鉴权。
+     * 仅拦截 /api/**，并排除登录注册接口。
      */
     @Override
     public boolean preHandle(HttpServletRequest request, HttpServletResponse response, Object handler) throws Exception {
+        // 预检请求直接放行
         if ("OPTIONS".equalsIgnoreCase(request.getMethod())) {
             return true;
         }
 
         String requestUri = request.getRequestURI();
+        // 公开接口放行
         if (isPublicPath(requestUri)) {
             return true;
         }
@@ -59,11 +60,13 @@ public class AuthInterceptor implements HandlerInterceptor {
 
         String token = request.getHeader(jwtProperties.getTokenHeader());
         String tokenPrefix = jwtProperties.getTokenPrefix();
+        // 请求头格式必须是 "Bearer <token>"
         if (token == null || !token.startsWith(tokenPrefix)) {
             writeUnauth(response, "Please login first");
             return false;
         }
 
+        // 去掉 Bearer 前缀后校验 token
         String realToken = token.substring(tokenPrefix.length());
         if (!jwtService.validateToken(realToken)) {
             writeUnauth(response, "Login token is invalid or expired");
@@ -82,7 +85,7 @@ public class AuthInterceptor implements HandlerInterceptor {
     }
 
     /**
-     * 处理当前业务逻辑。
+     * 请求完成后清理线程上下文，避免线程复用造成用户信息串线。
      */
     @Override
     public void afterCompletion(HttpServletRequest request, HttpServletResponse response, Object handler, Exception ex) {
@@ -90,7 +93,7 @@ public class AuthInterceptor implements HandlerInterceptor {
     }
 
     /**
-     * 处理当前业务逻辑。
+     * 统一输出 401 响应体。
      */
     private void writeUnauth(HttpServletResponse response, String message) throws Exception {
         response.setStatus(HttpServletResponse.SC_UNAUTHORIZED);
@@ -101,7 +104,7 @@ public class AuthInterceptor implements HandlerInterceptor {
     }
 
     /**
-     * 判断当前条件是否满足。
+     * 判断当前请求是否属于公开接口。
      */
     private boolean isPublicPath(String requestUri) {
         for (String prefix : PUBLIC_PATH_PREFIXES) {

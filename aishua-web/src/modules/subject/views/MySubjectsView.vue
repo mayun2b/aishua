@@ -11,6 +11,7 @@
 
       <div class="hero-actions">
         <router-link class="ghost" to="/subjects">去加入学科</router-link>
+        <router-link class="ghost" to="/learning-analysis">学情分析</router-link>
         <router-link class="ghost" to="/dashboard">返回工作台</router-link>
       </div>
     </section>
@@ -53,9 +54,14 @@
               <td>{{ formatDateTime(subject.joinedAt) }}</td>
               <td>{{ formatDateTime(subject.lastPracticeAt) }}</td>
               <td>
-                <router-link class="practice-link" :to="`/practice?subjectId=${subject.subjectId}`">
-                  开始练习
-                </router-link>
+                <div class="action-stack">
+                  <router-link class="practice-link" :to="`/practice?subjectId=${subject.subjectId}`">
+                    开始练习
+                  </router-link>
+                  <router-link class="analysis-link" :to="`/learning-analysis?subjectId=${subject.subjectId}`">
+                    学情分析
+                  </router-link>
+                </div>
               </td>
             </tr>
           </tbody>
@@ -274,6 +280,23 @@ th {
   color: #fff;
   text-decoration: none;
   font-size: 13px;
+}
+
+.analysis-link {
+  display: inline-flex;
+  align-items: center;
+  border-radius: 12px;
+  padding: 8px 12px;
+  background: #0f7a43;
+  color: #fff;
+  text-decoration: none;
+  font-size: 13px;
+}
+
+.action-stack {
+  display: flex;
+  gap: 8px;
+  flex-wrap: wrap;
 }
 
 @media (max-width: 768px) {
