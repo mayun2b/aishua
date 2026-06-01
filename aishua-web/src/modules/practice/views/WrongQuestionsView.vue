@@ -280,6 +280,7 @@ import { useRoute } from 'vue-router'
 import { showToast } from 'vant'
 import BasePagination from '@/components/BasePagination.vue'
 import useClientPagination from '@/composables/useClientPagination'
+import { hasEssayCanvasMarker, stripEssayCanvasMarker } from '../../common/utils/essayCanvasAnswer'
 import subjectApi from '../../subject/api/subject'
 import practiceApi from '../api/practice'
 
@@ -765,12 +766,14 @@ const trendDayLabel = (index, value) => {
 }
 
 const formatAnswerDisplay = (value) => {
-  if (value == null || String(value).trim() === '') {
-    return '暂无答案'
+  const hasCanvasAnswer = hasEssayCanvasMarker(value)
+  const plainAnswer = stripEssayCanvasMarker(value)
+  const normalized = String(plainAnswer ?? '').trim()
+  if (!normalized) {
+    return hasCanvasAnswer ? '已提交手写作答' : '暂无答案'
   }
-  return String(value).trim()
+  return normalized
 }
-
 const normalizeLatexFractions = (rawText) => {
   let text = rawText
   let guard = 0

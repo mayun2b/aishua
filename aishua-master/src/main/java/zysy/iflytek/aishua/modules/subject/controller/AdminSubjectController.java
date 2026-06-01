@@ -22,7 +22,7 @@ import zysy.iflytek.aishua.modules.subject.service.SubjectService;
 import java.util.List;
 
 /**
- * 学科控制器，负责相关业务逻辑与流程处理。
+ * 学科控制器，提供该领域对外接口入口。
  */
 @Validated
 @RestController
@@ -32,7 +32,7 @@ public class AdminSubjectController {
     private final AdminAccess adminAccess;
 
     /**
-     * 构造方法，负责注入依赖组件。
+     * 构造方法，注入当前类所需依赖。
      */
     public AdminSubjectController(SubjectService subjectService, AdminAccess adminAccess) {
         this.subjectService = subjectService;
@@ -92,7 +92,7 @@ public class AdminSubjectController {
     }
 
     /**
-     * 处理删除请求并返回结果。
+     * 删除接口入口，负责资源删除与结果返回。
      */
     @DeleteMapping("/{id}")
     public Result<Void> delete(@PathVariable Long id) {

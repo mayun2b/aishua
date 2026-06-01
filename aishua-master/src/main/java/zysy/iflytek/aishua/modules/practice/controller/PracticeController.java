@@ -30,7 +30,7 @@ import zysy.iflytek.aishua.modules.tag.entity.vo.ExamTagVO;
 import java.util.List;
 
 /**
- * 练习控制器，负责相关业务逻辑与流程处理。
+ * 练习控制器，提供该领域对外接口入口。
  */
 @RestController
 @RequestMapping("/api/practice")
@@ -38,7 +38,7 @@ public class PracticeController {
     private final PracticeService practiceService;
 
     /**
-     * 构造方法，负责注入依赖组件。
+     * 构造方法，注入当前类所需依赖。
      */
     public PracticeController(PracticeService practiceService) {
         this.practiceService = practiceService;

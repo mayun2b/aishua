@@ -14,7 +14,7 @@ import zysy.iflytek.aishua.modules.user.entity.vo.UserProfileVO;
 import zysy.iflytek.aishua.modules.user.service.UserService;
 
 /**
- * 用户控制器，负责相关业务逻辑与流程处理。
+ * 用户控制器，提供该领域对外接口入口。
  */
 @RestController
 @RequestMapping("/api/user")
@@ -22,14 +22,14 @@ public class UserController {
     private final UserService userService;
 
     /**
-     * 构造方法，负责注入依赖组件。
+     * 构造方法，注入当前类所需依赖。
      */
     public UserController(UserService userService) {
         this.userService = userService;
     }
 
     /**
-     * 处理业务请求并返回结果。
+     * 接口处理入口，负责参数接收与服务调用。
      */
     @PostMapping("/login")
     public Result<LoginVO> login(@RequestBody LoginDTO loginDTO) {
@@ -38,7 +38,7 @@ public class UserController {
     }
 
     /**
-     * 处理业务请求并返回结果。
+     * 接口处理入口，负责参数接收与服务调用。
      */
     @PostMapping("/register")
     public Result<UserProfileVO> register(@RequestBody RegisterDTO registerDTO) {
@@ -47,7 +47,7 @@ public class UserController {
     }
 
     /**
-     * 处理业务请求并返回结果。
+     * 接口处理入口，负责参数接收与服务调用。
      */
     @GetMapping("/profile")
     public Result<UserProfileVO> profile() {

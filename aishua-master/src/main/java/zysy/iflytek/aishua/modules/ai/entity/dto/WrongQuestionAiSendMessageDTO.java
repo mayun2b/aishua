@@ -5,7 +5,7 @@ import jakarta.validation.constraints.Size;
 import lombok.Data;
 
 /**
- * 智能问答数据传输对象，负责相关业务逻辑与流程处理。
+ * 智能问答数据传输对象，用于接口入参封装。
  */
 @Data
 public class WrongQuestionAiSendMessageDTO {

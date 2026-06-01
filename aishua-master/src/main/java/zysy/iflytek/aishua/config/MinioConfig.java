@@ -7,7 +7,7 @@ import org.springframework.context.annotation.Configuration;
 import zysy.iflytek.aishua.config.properties.MinioProperties;
 
 /**
- * 系统配置配置类，负责相关业务逻辑与流程处理。
+ * 系统配置类，负责基础组件与第三方客户端装配。
  */
 @Configuration
 @EnableConfigurationProperties(MinioProperties.class)

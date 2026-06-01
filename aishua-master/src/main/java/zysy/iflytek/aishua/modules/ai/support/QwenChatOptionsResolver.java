@@ -16,7 +16,7 @@ public class QwenChatOptionsResolver {
     private final QwenAiProperties qwenAiProperties;
 
     /**
-     * 构造方法，负责注入依赖组件。
+     * 构造方法，注入当前类所需依赖。
      */
     public QwenChatOptionsResolver(QwenAiProperties qwenAiProperties) {
         this.qwenAiProperties = qwenAiProperties;
@@ -65,7 +65,7 @@ public class QwenChatOptionsResolver {
     }
 
     /**
-     * 解析并转换支撑数据。
+     * 读取配置中的最大令牌数，未配置时使用默认值。
      */
     private int resolveConfiguredChatMaxTokens() {
         return qwenAiProperties.getChatMaxTokens() == null

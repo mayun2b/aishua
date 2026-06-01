@@ -8,7 +8,7 @@ import lombok.Data;
 import java.util.List;
 
 /**
- * 练习数据传输对象，负责相关业务逻辑与流程处理。
+ * 练习数据传输对象，用于接口入参封装。
  */
 @Data
 public class PracticeStartDTO {

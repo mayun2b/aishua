@@ -3,7 +3,7 @@ package zysy.iflytek.aishua.common.result;
 import lombok.Data;
 
 /**
- * 通用基础统一返回结果，负责相关业务逻辑与流程处理。
+ * 通用基础统一返回结果对象，封装接口响应码、消息与数据体。
  */
 @Data
 public class Result<T> {

@@ -23,7 +23,7 @@ import zysy.iflytek.aishua.modules.question.service.QuestionService;
 import java.util.List;
 
 /**
- * 题目控制器，负责相关业务逻辑与流程处理。
+ * 题目控制器，提供该领域对外接口入口。
  */
 @Validated
 @RestController
@@ -33,7 +33,7 @@ public class AdminQuestionController {
     private final AdminAccess adminAccess;
 
     /**
-     * 构造方法，负责注入依赖组件。
+     * 构造方法，注入当前类所需依赖。
      */
     public AdminQuestionController(QuestionService questionService, AdminAccess adminAccess) {
         this.questionService = questionService;
@@ -59,7 +59,7 @@ public class AdminQuestionController {
     }
 
     /**
-     * 处理业务请求并返回结果。
+     * 接口处理入口，负责参数接收与服务调用。
      */
     @GetMapping("/{id}")
     public Result<QuestionVO> detail(@PathVariable Long id) {
@@ -92,7 +92,7 @@ public class AdminQuestionController {
     }
 
     /**
-     * 处理删除请求并返回结果。
+     * 删除接口入口，负责资源删除与结果返回。
      */
     @DeleteMapping("/{id}")
     public Result<Void> delete(@PathVariable Long id) {

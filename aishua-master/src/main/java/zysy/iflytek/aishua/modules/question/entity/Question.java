@@ -10,7 +10,7 @@ import java.math.BigDecimal;
 import java.time.LocalDateTime;
 
 /**
- * 题目实体对象，负责相关业务逻辑与流程处理。
+ * 题目实体对象，用于持久化字段映射与数据承载。
  */
 @Data
 @TableName("question")

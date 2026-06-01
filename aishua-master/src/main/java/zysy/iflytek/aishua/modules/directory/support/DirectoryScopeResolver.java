@@ -22,14 +22,14 @@ public class DirectoryScopeResolver {
     private final TextbookDirectoryMapper textbookDirectoryMapper;
 
     /**
-     * 构造方法，负责注入依赖组件。
+     * 构造方法，注入当前类所需依赖。
      */
     public DirectoryScopeResolver(TextbookDirectoryMapper textbookDirectoryMapper) {
         this.textbookDirectoryMapper = textbookDirectoryMapper;
     }
 
     /**
-     * 解析并转换支撑数据。
+     * 解析目录筛选范围：返回“当前目录 + 全部子目录”ID 列表。
      */
     public List<Long> resolveSelfAndDescendants(Long directoryId, Long subjectId) {
         if (directoryId == null || directoryId <= 0) {

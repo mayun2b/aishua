@@ -4,7 +4,7 @@ import lombok.Data;
 import org.springframework.boot.context.properties.ConfigurationProperties;
 
 /**
- * 系统配置配置属性，负责相关业务逻辑与流程处理。
+ * 系统配置属性，承载外部配置项并提供类型化读取。
  */
 @Data
 @ConfigurationProperties(prefix = "practice.mastery")

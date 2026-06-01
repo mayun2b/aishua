@@ -121,20 +121,59 @@
 
             <div v-else class="answer-block" :class="currentQuestion.type === 5 ? 'essay-answer-block' : ''">
               <div v-if="currentQuestion.type === 5" class="essay-toolbar">
-                <span class="essay-tip">支持多行输入，建议分点作答；按 Ctrl + Enter 可快速进入下一题。</span>
-                <span class="essay-count">已输入 {{ textAnswerLength }} 字</span>
+                <div class="essay-mode-group">
+                  <button
+                    type="button"
+                    :class="['essay-mode-button', currentEssayMode === 'text' ? 'active' : '']"
+                    :disabled="isSubmitted"
+                    @click="currentEssayMode = 'text'"
+                  >
+                    文本
+                  </button>
+                  <button
+                    type="button"
+                    :class="['essay-mode-button', currentEssayMode === 'canvas' ? 'active' : '']"
+                    :disabled="isSubmitted"
+                    @click="currentEssayMode = 'canvas'"
+                  >
+                    手写
+                  </button>
+                </div>
+                <div class="essay-meta">
+                  <span class="essay-tip">支持多行输入，Ctrl + Enter 可快速进入下一题。</span>
+                  <span class="essay-count">已输入 {{ textAnswerLength }} 字</span>
+                  <span v-if="currentEssayCanvasObjectName" class="essay-upload-status">手写草稿已保存</span>
+                </div>
+              </div>
+              <div v-if="currentQuestion.type === 5 && currentEssayMode === 'canvas'" class="essay-canvas-wrap">
+                <AnswerCanvas v-model="currentEssayCanvasDraft" :disabled="isSubmitted" :height="300" />
+                <div class="essay-canvas-actions">
+                  <button
+                    type="button"
+                    class="secondary-button small-button"
+                    :disabled="isSubmitted || !currentEssayCanvasDraft"
+                    @click="clearEssayCanvasDraft"
+                  >
+                    清空手写
+                  </button>
+                </div>
               </div>
               <textarea
                 v-model="textAnswer"
-                :rows="currentQuestion.type === 5 ? 10 : 5"
+                :class="currentQuestion.type === 5 && currentEssayMode === 'canvas' ? 'essay-conclusion-textarea' : ''"
+                :rows="currentQuestion.type === 5 && currentEssayMode === 'canvas' ? 5 : currentQuestion.type === 5 ? 10 : 5"
                 maxlength="2000"
                 :disabled="isSubmitted"
-                :placeholder="currentQuestion.type === 4 ? '请输入填空答案' : '请输入你的作答内容'"
+                :placeholder="currentQuestion.type === 4
+                  ? '请输入填空答案'
+                  : currentQuestion.type === 5 && currentEssayMode === 'canvas'
+                    ? '可选：补充文字结论，便于系统判题'
+                    : '请输入你的作答内容'"
                 @keydown.ctrl.enter.prevent="handleTextAnswerCtrlEnter"
               ></textarea>
               <div v-if="currentQuestion.type === 5" class="essay-actions">
                 <button type="button" class="secondary-button small-button" :disabled="isSubmitted || !textAnswerLength" @click="clearTextAnswer">
-                  清空
+                  清空文本
                 </button>
                 <button type="button" class="secondary-button small-button" :disabled="isSubmitted" @click="handleTextAnswerCtrlEnter">
                   下一题
@@ -154,7 +193,7 @@
               >
                 下一题
               </button>
-              <button type="button" :disabled="submitting || !canSubmitAll" @click="submitAllAnswers">
+              <button type="button" :disabled="submitting || essayCanvasUploading || !canSubmitAll" @click="submitAllAnswers">
                 {{ submitting ? '正在提交...' : '统一提交' }}
               </button>
             </div>
@@ -283,6 +322,14 @@
 import { computed, nextTick, onBeforeUnmount, onMounted, ref, watch } from 'vue'
 import { useRoute, useRouter } from 'vue-router'
 import { showToast } from 'vant'
+import AnswerCanvas from '../../../components/AnswerCanvas.vue'
+import fileApi from '../../common/api/file'
+import {
+  buildEssayAnswerPayload,
+  hasEssayCanvasMarker,
+  parseEssayAnswerPayload,
+  stripEssayCanvasMarker
+} from '../../common/utils/essayCanvasAnswer'
 import practiceApi from '../api/practice'
 
 const route = useRoute()
@@ -311,6 +358,11 @@ const currentIndex = ref(0)
 const currentQuestionEnteredAt = ref(0)
 const answers = ref({})
 const timeSpentMs = ref({})
+const essayAnswerModes = ref({})
+const essayCanvasDrafts = ref({})
+const essayCanvasObjectNames = ref({})
+const essayCanvasUploading = ref(false)
+const essayCanvasLoading = ref({})
 const draftDirtyQuestionIds = new Set()
 const assistantLoading = ref(false)
 const assistantSending = ref(false)
@@ -328,6 +380,12 @@ let activeAssistantTypewriter = null
 const sessionId = computed(() => Number(route.params.sessionId || 0))
 const questions = computed(() => questionSheet.value?.questions || [])
 const currentQuestion = computed(() => questions.value[currentIndex.value] || null)
+const questionMapById = computed(() => {
+  const entries = questions.value
+    .filter((item) => item?.questionId)
+    .map((item) => [Number(item.questionId), item])
+  return Object.fromEntries(entries)
+})
 
 const configBackLink = computed(() => {
   const subjectId = session.value?.subjectId || route.query.subjectId
@@ -364,9 +422,148 @@ const canSendAssistantMessage = computed(() => {
   return assistantInput.value.trim().length > 0
 })
 
+const currentEssayMode = computed({
+  get() {
+    const questionId = Number(currentQuestion.value?.questionId || 0)
+    if (!questionId || Number(currentQuestion.value?.type) !== 5) {
+      return 'text'
+    }
+    return essayAnswerModes.value[questionId] === 'canvas' ? 'canvas' : 'text'
+  },
+  set(mode) {
+    const questionId = Number(currentQuestion.value?.questionId || 0)
+    if (!questionId || Number(currentQuestion.value?.type) !== 5 || isSubmitted.value) {
+      return
+    }
+    const nextMode = mode === 'canvas' ? 'canvas' : 'text'
+    if (essayAnswerModes.value[questionId] === nextMode) {
+      return
+    }
+    essayAnswerModes.value = {
+      ...essayAnswerModes.value,
+      [questionId]: nextMode
+    }
+    markDraftChanged(questionId)
+  }
+})
+
+const currentEssayCanvasDraft = computed({
+  get() {
+    const questionId = Number(currentQuestion.value?.questionId || 0)
+    if (!questionId || Number(currentQuestion.value?.type) !== 5) {
+      return ''
+    }
+    return essayCanvasDrafts.value[questionId] || ''
+  },
+  set(value) {
+    const questionId = Number(currentQuestion.value?.questionId || 0)
+    if (!questionId || Number(currentQuestion.value?.type) !== 5 || isSubmitted.value) {
+      return
+    }
+    const nextDraft = value ? String(value) : ''
+    const oldDraft = String(essayCanvasDrafts.value[questionId] || '')
+    const oldObjectName = String(essayCanvasObjectNames.value[questionId] || '')
+    if (nextDraft === oldDraft && !oldObjectName) {
+      return
+    }
+    essayCanvasDrafts.value = {
+      ...essayCanvasDrafts.value,
+      [questionId]: nextDraft
+    }
+    essayCanvasObjectNames.value = {
+      ...essayCanvasObjectNames.value,
+      [questionId]: ''
+    }
+    markDraftChanged(questionId)
+  }
+})
+
+const currentEssayCanvasObjectName = computed(() => {
+  const questionId = Number(currentQuestion.value?.questionId || 0)
+  if (!questionId || Number(currentQuestion.value?.type) !== 5) {
+    return ''
+  }
+  return String(essayCanvasObjectNames.value[questionId] || '').trim()
+})
+
+const blobToDataUrl = (blob) => {
+  return new Promise((resolve, reject) => {
+    const reader = new FileReader()
+    reader.onload = () => resolve(String(reader.result || ''))
+    reader.onerror = () => reject(new Error('手写草稿读取失败'))
+    reader.readAsDataURL(blob)
+  })
+}
+
+const loadEssayCanvasDraftFromObjectName = async (questionId, { silent = true } = {}) => {
+  const normalizedQuestionId = Number(questionId || 0)
+  if (!normalizedQuestionId) {
+    return ''
+  }
+  const objectName = String(essayCanvasObjectNames.value[normalizedQuestionId] || '').trim()
+  if (!objectName) {
+    return ''
+  }
+  const draft = String(essayCanvasDrafts.value[normalizedQuestionId] || '').trim()
+  if (draft) {
+    return draft
+  }
+  if (essayCanvasLoading.value[normalizedQuestionId]) {
+    return ''
+  }
+
+  essayCanvasLoading.value = {
+    ...essayCanvasLoading.value,
+    [normalizedQuestionId]: true
+  }
+
+  try {
+    const blob = await fileApi.download(objectName)
+    const dataUrl = await blobToDataUrl(blob)
+    if (!dataUrl) {
+      return ''
+    }
+    if (String(essayCanvasObjectNames.value[normalizedQuestionId] || '').trim() !== objectName) {
+      return ''
+    }
+    essayCanvasDrafts.value = {
+      ...essayCanvasDrafts.value,
+      [normalizedQuestionId]: dataUrl
+    }
+    return dataUrl
+  } catch (error) {
+    if (!silent) {
+      showToast(error.message || '手写草稿加载失败')
+    }
+    return ''
+  } finally {
+    essayCanvasLoading.value = {
+      ...essayCanvasLoading.value,
+      [normalizedQuestionId]: false
+    }
+  }
+}
+
+const ensureCurrentEssayCanvasDraftLoaded = async ({ silent = true } = {}) => {
+  const questionId = Number(currentQuestion.value?.questionId || 0)
+  if (!questionId || Number(currentQuestion.value?.type) !== 5) {
+    return
+  }
+  if (currentEssayMode.value !== 'canvas') {
+    return
+  }
+  await loadEssayCanvasDraftFromObjectName(questionId, { silent })
+}
+
 const draftStatusText = computed(() => {
   if (isSubmitted.value) {
     return '已提交，可查看结果'
+  }
+  if (Object.values(essayCanvasLoading.value).some(Boolean)) {
+    return `未作答 ${unansweredCount.value} 题 · 手写草稿加载中...`
+  }
+  if (essayCanvasUploading.value) {
+    return `未作答 ${unansweredCount.value} 题 · 手写草稿上传中...`
   }
   if (savingDraft.value) {
     return `未作答 ${unansweredCount.value} 题 · 草稿保存中...`
@@ -610,6 +807,25 @@ const clearTextAnswer = () => {
   textAnswer.value = ''
 }
 
+const clearEssayCanvasDraft = () => {
+  if (!currentQuestion.value || Number(currentQuestion.value.type) !== 5 || isSubmitted.value) {
+    return
+  }
+  const questionId = Number(currentQuestion.value.questionId || 0)
+  if (!questionId) {
+    return
+  }
+  essayCanvasDrafts.value = {
+    ...essayCanvasDrafts.value,
+    [questionId]: ''
+  }
+  essayCanvasObjectNames.value = {
+    ...essayCanvasObjectNames.value,
+    [questionId]: ''
+  }
+  markDraftChanged(questionId)
+}
+
 const handleTextAnswerCtrlEnter = () => {
   if (!currentQuestion.value || isSubmitted.value) {
     return
@@ -665,11 +881,12 @@ const resolveModeLabel = (mode) => {
 }
 
 const formatAnswerDisplay = (value) => {
-  if (value == null || String(value).trim() === '') {
-    return '未作答'
+  const hasCanvasAnswer = hasEssayCanvasMarker(value)
+  const plainAnswer = stripEssayCanvasMarker(value)
+  const normalized = String(plainAnswer ?? '').trim()
+  if (!normalized) {
+    return hasCanvasAnswer ? '已提交手写作答' : '未作答'
   }
-
-  const normalized = String(value).trim()
   if (normalized.startsWith('[') && normalized.endsWith(']')) {
     try {
       const parsed = JSON.parse(normalized)
@@ -688,7 +905,10 @@ const parseSavedAnswer = (question, rawAnswer) => {
     return question.type === 2 ? [] : ''
   }
 
-  const normalized = String(rawAnswer).trim()
+  const source = Number(question.type) === 5
+    ? parseEssayAnswerPayload(rawAnswer).text
+    : rawAnswer
+  const normalized = String(source).trim()
   if (!normalized) {
     return question.type === 2 ? [] : ''
   }
@@ -716,6 +936,15 @@ const parseSavedAnswer = (question, rawAnswer) => {
 }
 
 const isAnswered = (questionId) => {
+  const question = questionMapById.value[Number(questionId)]
+  if (Number(question?.type) === 5) {
+    const answer = answers.value[questionId]
+    const textAnswered = typeof answer === 'string' ? answer.trim().length > 0 : false
+    const canvasDraft = String(essayCanvasDrafts.value[questionId] || '').trim()
+    const canvasObjectName = String(essayCanvasObjectNames.value[questionId] || '').trim()
+    return textAnswered || canvasDraft.length > 0 || canvasObjectName.length > 0
+  }
+
   const answer = answers.value[questionId]
   if (Array.isArray(answer)) {
     return answer.length > 0
@@ -762,6 +991,8 @@ const applyDraftSnapshot = (draftSnapshot) => {
 
   const nextAnswers = { ...answers.value }
   const nextTimeSpentMs = { ...timeSpentMs.value }
+  const nextEssayAnswerModes = { ...essayAnswerModes.value }
+  const nextEssayCanvasObjectNames = { ...essayCanvasObjectNames.value }
   const draftAnswerMap = Object.fromEntries((draftSnapshot.answers || []).map((item) => [item.questionId, item]))
 
   questions.value.forEach((question) => {
@@ -770,7 +1001,22 @@ const applyDraftSnapshot = (draftSnapshot) => {
       return
     }
 
-    nextAnswers[question.questionId] = parseSavedAnswer(question, draftItem.userAnswer)
+    if (Number(question.type) === 5) {
+      const parsedEssayAnswer = parseEssayAnswerPayload(draftItem.userAnswer)
+      nextAnswers[question.questionId] = parsedEssayAnswer.text
+      if (parsedEssayAnswer.canvasObjectName) {
+        nextEssayCanvasObjectNames[question.questionId] = parsedEssayAnswer.canvasObjectName
+      } else {
+        delete nextEssayCanvasObjectNames[question.questionId]
+      }
+      if (!nextEssayAnswerModes[question.questionId]) {
+        nextEssayAnswerModes[question.questionId] = parsedEssayAnswer.canvasObjectName && !parsedEssayAnswer.text
+          ? 'canvas'
+          : 'text'
+      }
+    } else {
+      nextAnswers[question.questionId] = parseSavedAnswer(question, draftItem.userAnswer)
+    }
     if (draftItem.timeCost != null) {
       nextTimeSpentMs[question.questionId] = Math.max(Number(draftItem.timeCost), 0) * 1000
     }
@@ -778,6 +1024,8 @@ const applyDraftSnapshot = (draftSnapshot) => {
 
   answers.value = nextAnswers
   timeSpentMs.value = nextTimeSpentMs
+  essayAnswerModes.value = nextEssayAnswerModes
+  essayCanvasObjectNames.value = nextEssayCanvasObjectNames
   draftVersion.value = Math.max(Number(draftSnapshot.version) || 0, 0)
   const savedAt = Number(draftSnapshot.savedAt)
   draftSavedAt.value = savedAt > 0
@@ -825,6 +1073,10 @@ const loadPage = async () => {
   submitResult.value = null
   answers.value = {}
   timeSpentMs.value = {}
+  essayAnswerModes.value = {}
+  essayCanvasDrafts.value = {}
+  essayCanvasObjectNames.value = {}
+  essayCanvasLoading.value = {}
   draftSavedAt.value = ''
   draftVersion.value = 0
   draftDirtyQuestionIds.clear()
@@ -864,6 +1116,12 @@ const buildUserAnswer = (question) => {
   if (Array.isArray(answer)) {
     return JSON.stringify(answer)
   }
+  if (Number(question.type) === 5) {
+    return buildEssayAnswerPayload({
+      text: typeof answer === 'string' ? answer.trim() : '',
+      canvasObjectName: essayCanvasObjectNames.value[question.questionId] || ''
+    })
+  }
   if (typeof answer === 'string') {
     return answer.trim()
   }
@@ -873,6 +1131,91 @@ const buildUserAnswer = (question) => {
 const buildTimeCost = (questionId) => {
   const ms = timeSpentMs.value[questionId] || 0
   return Math.max(Math.round(ms / 1000), 0)
+}
+
+const dataUrlToFile = (dataUrl, fileName) => {
+  const normalized = String(dataUrl || '')
+  const [header, base64] = normalized.split(',')
+  if (!header || !base64) {
+    return null
+  }
+  const mimeMatch = header.match(/data:(.*?);base64/i)
+  const mimeType = mimeMatch?.[1] || 'image/png'
+  const binary = window.atob(base64)
+  const bytes = new Uint8Array(binary.length)
+  for (let index = 0; index < binary.length; index += 1) {
+    bytes[index] = binary.charCodeAt(index)
+  }
+  return new File([bytes], fileName, { type: mimeType })
+}
+
+const uploadEssayCanvasForQuestion = async (questionId) => {
+  const normalizedQuestionId = Number(questionId || 0)
+  if (!normalizedQuestionId) {
+    return ''
+  }
+
+  const existedObjectName = String(essayCanvasObjectNames.value[normalizedQuestionId] || '').trim()
+  if (existedObjectName) {
+    return existedObjectName
+  }
+
+  const dataUrl = String(essayCanvasDrafts.value[normalizedQuestionId] || '').trim()
+  if (!dataUrl) {
+    return ''
+  }
+
+  const file = dataUrlToFile(dataUrl, `practice-essay-canvas-${sessionId.value}-${normalizedQuestionId}.png`)
+  if (!file) {
+    return ''
+  }
+
+  const response = await fileApi.upload(file)
+  const objectName = String(response?.objectName || response?.data?.objectName || '').trim()
+  if (!objectName) {
+    throw new Error('手写草稿上传失败，请稍后重试')
+  }
+
+  essayCanvasObjectNames.value = {
+    ...essayCanvasObjectNames.value,
+    [normalizedQuestionId]: objectName
+  }
+  markDraftChanged(normalizedQuestionId)
+  return objectName
+}
+
+const ensureEssayCanvasUploaded = async ({ questionIds = [], silent = true, throwOnError = false } = {}) => {
+  const candidateQuestionIds = questionIds.length
+    ? questionIds.map((item) => Number(item)).filter((item) => item > 0)
+    : questions.value
+      .filter((question) => Number(question.type) === 5)
+      .map((question) => Number(question.questionId))
+
+  const pendingQuestionIds = candidateQuestionIds.filter((questionId) => {
+    const draft = String(essayCanvasDrafts.value[questionId] || '').trim()
+    const objectName = String(essayCanvasObjectNames.value[questionId] || '').trim()
+    return draft.length > 0 && !objectName
+  })
+
+  if (!pendingQuestionIds.length) {
+    return
+  }
+
+  essayCanvasUploading.value = true
+  try {
+    for (const questionId of pendingQuestionIds) {
+      await uploadEssayCanvasForQuestion(questionId)
+    }
+  } catch (error) {
+    if (!silent) {
+      showToast(error.message || '手写草稿上传失败')
+    }
+    if (throwOnError) {
+      throw error
+    }
+  } finally {
+    essayCanvasUploading.value = false
+  }
 }
 
 const isNotFoundError = (error) => {
@@ -1466,6 +1809,8 @@ const saveDraft = async ({ silent = true, force = false } = {}) => {
 
   savingDraft.value = true
   try {
+    await ensureEssayCanvasUploaded({ questionIds, silent, throwOnError: true })
+
     const payload = {
       baseVersion: draftVersion.value,
       changes: buildDraftChanges(questionIds)
@@ -1547,6 +1892,8 @@ const submitAllAnswers = async () => {
   stopAutoSaveTimer()
   submitting.value = true
   try {
+    await ensureEssayCanvasUploaded({ silent: false, throwOnError: true })
+
     const payload = {
       baseVersion: draftVersion.value,
       answers: questions.value.map((question) => ({
@@ -1603,6 +1950,10 @@ const reloadPage = () => {
   resetAssistantState()
   answers.value = {}
   timeSpentMs.value = {}
+  essayAnswerModes.value = {}
+  essayCanvasDrafts.value = {}
+  essayCanvasObjectNames.value = {}
+  essayCanvasLoading.value = {}
   currentIndex.value = 0
   currentQuestionEnteredAt.value = 0
   hasDraftChanges.value = false
@@ -1626,6 +1977,16 @@ watch(
 )
 
 watch(
+  () => [currentQuestion.value?.questionId, currentEssayMode.value, currentEssayCanvasObjectName.value, isSubmitted.value],
+  ([questionId, mode, objectName, submitted]) => {
+    if (submitted || !questionId || mode !== 'canvas' || !objectName) {
+      return
+    }
+    void ensureCurrentEssayCanvasDraftLoaded({ silent: true })
+  }
+)
+
+watch(
   () => assistantPanelVisible.value,
   (visible) => {
     if (!visible) {
@@ -1639,6 +2000,7 @@ watch(
 
 onMounted(async () => {
   await loadPage()
+  await ensureCurrentEssayCanvasDraftLoaded({ silent: true })
   if (!isSubmitted.value) {
     startAutoSaveTimer()
   }
@@ -1950,12 +2312,44 @@ onBeforeUnmount(() => {
   line-height: 1.7;
 }
 
+.essay-answer-block textarea.essay-conclusion-textarea {
+  min-height: 110px;
+}
+
 .essay-toolbar {
   display: flex;
   justify-content: space-between;
-  align-items: center;
+  align-items: flex-start;
   gap: 12px;
   margin-bottom: 10px;
+  flex-wrap: wrap;
+}
+
+.essay-mode-group {
+  display: inline-flex;
+  gap: 8px;
+}
+
+button.essay-mode-button {
+  border: 1px solid #cad7e3;
+  border-radius: 999px;
+  background: #fff;
+  color: #17324d;
+  padding: 6px 12px;
+  font-size: 12px;
+}
+
+button.essay-mode-button.active {
+  border-color: #17324d;
+  background: #17324d;
+  color: #fff;
+}
+
+.essay-meta {
+  display: flex;
+  align-items: center;
+  gap: 10px;
+  flex-wrap: wrap;
 }
 
 .essay-tip {
@@ -1968,6 +2362,21 @@ onBeforeUnmount(() => {
   font-size: 13px;
   font-weight: 600;
   white-space: nowrap;
+}
+
+.essay-upload-status {
+  color: #0f7a43;
+  font-size: 12px;
+}
+
+.essay-canvas-wrap {
+  margin-bottom: 10px;
+}
+
+.essay-canvas-actions {
+  margin-top: 8px;
+  display: flex;
+  justify-content: flex-end;
 }
 
 .essay-actions {
@@ -2232,4 +2641,3 @@ button:disabled {
   }
 }
 </style>
-

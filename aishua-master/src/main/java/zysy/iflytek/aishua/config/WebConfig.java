@@ -5,41 +5,33 @@ import org.springframework.web.servlet.config.annotation.CorsRegistry;
 import org.springframework.web.servlet.config.annotation.InterceptorRegistry;
 import org.springframework.web.servlet.config.annotation.WebMvcConfigurer;
 import zysy.iflytek.aishua.common.interceptor.AuthInterceptor;
+import zysy.iflytek.aishua.config.properties.CorsProperties;
 
 /**
- * 全局配置类，负责跨域规则和鉴权拦截器注册。
+ * Web MVC configuration.
  */
 @Configuration
 public class WebConfig implements WebMvcConfigurer {
     private final AuthInterceptor authInterceptor;
+    private final CorsProperties corsProperties;
 
-    /**
-     * 构造方法，负责注入依赖组件。
-     */
-    public WebConfig(AuthInterceptor authInterceptor) {
+    public WebConfig(AuthInterceptor authInterceptor, CorsProperties corsProperties) {
         this.authInterceptor = authInterceptor;
+        this.corsProperties = corsProperties;
     }
 
-    /**
-     * 处理当前业务逻辑。
-     */
     @Override
     public void addCorsMappings(CorsRegistry registry) {
-        // 仅对后端接口路由应用跨域策略。
-        registry.addMapping("/api/**")
-                .allowedOriginPatterns("*")
-                .allowedMethods("GET", "POST", "PUT", "DELETE", "OPTIONS")
-                .allowedHeaders("*")
-                .allowCredentials(false)
-                .maxAge(3600);
+        registry.addMapping(corsProperties.getPathPattern())
+                .allowedOriginPatterns(corsProperties.getAllowedOriginPatterns().toArray(new String[0]))
+                .allowedMethods(corsProperties.getAllowedMethods().toArray(new String[0]))
+                .allowedHeaders(corsProperties.getAllowedHeaders().toArray(new String[0]))
+                .allowCredentials(corsProperties.isAllowCredentials())
+                .maxAge(corsProperties.getMaxAgeSeconds());
     }
 
-    /**
-     * 处理当前业务逻辑。
-     */
     @Override
     public void addInterceptors(InterceptorRegistry registry) {
-        // 登录和注册接口保持公开，其余接口路由均需要令牌鉴权。
         registry.addInterceptor(authInterceptor)
                 .addPathPatterns("/api/**")
                 .excludePathPatterns(

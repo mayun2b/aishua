@@ -32,7 +32,7 @@ import java.time.LocalDate;
 import java.util.List;
 
 /**
- * 考试控制器，负责相关业务逻辑与流程处理。
+ * 考试控制器，提供该领域对外接口入口。
  */
 @Validated
 @RestController
@@ -42,7 +42,7 @@ public class AdminExamController {
     private final AdminAccess adminAccess;
 
     /**
-     * 构造方法，负责注入依赖组件。
+     * 构造方法，注入当前类所需依赖。
      */
     public AdminExamController(ExamService examService, AdminAccess adminAccess) {
         this.examService = examService;
@@ -100,7 +100,7 @@ public class AdminExamController {
     }
 
     /**
-     * 处理删除请求并返回结果。
+     * 删除接口入口，负责资源删除与结果返回。
      */
     @DeleteMapping("/papers/{id}")
     public Result<Void> deletePaper(@PathVariable Long id) {
@@ -175,7 +175,7 @@ public class AdminExamController {
     }
 
     /**
-     * 处理业务请求并返回结果。
+     * 接口处理入口，负责参数接收与服务调用。
      */
     @PutMapping("/papers/{id}/questions")
     public Result<List<ExamPaperQuestionVO>> assignPaperQuestions(
@@ -204,7 +204,7 @@ public class AdminExamController {
     }
 
     /**
-     * 处理业务请求并返回结果。
+     * 接口处理入口，负责参数接收与服务调用。
      */
     @GetMapping("/records/{id}")
     public Result<ExamRecordSummaryVO> recordDetail(@PathVariable Long id) {
@@ -214,7 +214,7 @@ public class AdminExamController {
     }
 
     /**
-     * 处理业务请求并返回结果。
+     * 接口处理入口，负责参数接收与服务调用。
      */
     @GetMapping("/records/{id}/questions")
     public Result<List<ExamRecordQuestionVO>> recordQuestions(@PathVariable Long id) {

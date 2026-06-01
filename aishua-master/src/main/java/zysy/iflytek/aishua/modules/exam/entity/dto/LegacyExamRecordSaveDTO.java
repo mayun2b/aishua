@@ -15,7 +15,7 @@ import java.time.LocalDateTime;
 import java.util.List;
 
 /**
- * 考试数据传输对象，负责相关业务逻辑与流程处理。
+ * 考试数据传输对象，用于接口入参封装。
  */
 @Data
 public class LegacyExamRecordSaveDTO {

@@ -8,7 +8,7 @@ public class BusinessException extends RuntimeException {
     private int code;
 
     /**
-     * 构造方法，负责注入依赖组件。
+     * 构造方法，注入当前类所需依赖。
      */
     public BusinessException(String message) {
         super(message);
@@ -17,7 +17,7 @@ public class BusinessException extends RuntimeException {
     }
 
     /**
-     * 构造方法，负责注入依赖组件。
+     * 构造方法，注入当前类所需依赖。
      */
     public BusinessException(String message, int code) {
         super(message);

@@ -30,39 +30,39 @@ import java.util.List;
 import java.util.function.Consumer;
 
 /**
- * 智能问答支撑组件，负责相关业务逻辑与流程处理。
+ * 通义千问会话客户端，封装同步/流式调用与响应解析。
  */
 @Slf4j
 @Component
 public class QwenChatClient {
     private static final String DEFAULT_CHAT_MODEL = "qwen3.6-plus";
-    private static final Duration STREAM_CONNECT_TIMEOUT = Duration.ofSeconds(8);
-    private static final Duration STREAM_REQUEST_TIMEOUT = Duration.ofSeconds(80);
+    private static final Duration DEFAULT_STREAM_CONNECT_TIMEOUT = Duration.ofSeconds(8);
+    private static final Duration DEFAULT_STREAM_REQUEST_TIMEOUT = Duration.ofSeconds(80);
 
     private final RestTemplate restTemplate;
     private final QwenAiProperties qwenAiProperties;
     private final HttpClient httpClient;
 
     /**
-     * 构造方法，负责注入依赖组件。
+     * 构造方法，注入当前类所需依赖。
      */
     public QwenChatClient(RestTemplate restTemplate, QwenAiProperties qwenAiProperties) {
         this.restTemplate = restTemplate;
         this.qwenAiProperties = qwenAiProperties;
         this.httpClient = HttpClient.newBuilder()
-                .connectTimeout(STREAM_CONNECT_TIMEOUT)
+                .connectTimeout(resolveStreamConnectTimeout())
                 .build();
     }
 
     /**
-     * 提供通用支撑处理能力。
+     * 同步会话调用（不显式限制 maxTokens）。
      */
     public ChatResult chat(List<ChatMessage> messages, boolean jsonResponse) {
         return chat(messages, jsonResponse, null);
     }
 
     /**
-     * 提供通用支撑处理能力。
+     * 同步会话调用，返回完整文本与令牌消耗。
      */
     public ChatResult chat(List<ChatMessage> messages, boolean jsonResponse, Integer maxTokens) {
         String apiKey = requireApiKey();
@@ -98,7 +98,7 @@ public class QwenChatClient {
     }
 
     /**
-     * 提供通用支撑处理能力。
+     * 流式会话调用：按增量片段回调，并返回最终聚合结果。
      */
     public ChatResult chatStream(
             List<ChatMessage> messages,
@@ -111,7 +111,7 @@ public class QwenChatClient {
         JSONObject payload = buildPayload(messages, jsonResponse, maxTokens, true);
 
         HttpRequest request = HttpRequest.newBuilder(URI.create(chatApi))
-                .timeout(STREAM_REQUEST_TIMEOUT)
+                .timeout(resolveStreamRequestTimeout())
                 .header("Authorization", "Bearer " + apiKey)
                 .header("Content-Type", MediaType.APPLICATION_JSON_VALUE)
                 .header("X-DashScope-SSE", "enable")
@@ -143,7 +143,7 @@ public class QwenChatClient {
     }
 
     /**
-     * 解析并转换支撑数据。
+     * 解析实际生效模型名，未配置则回退默认模型。
      */
     private String resolveChatModel() {
         String configured = qwenAiProperties.getChatModel();
@@ -154,7 +154,7 @@ public class QwenChatClient {
     }
 
     /**
-     * 提供通用支撑处理能力。
+     * 读取并校验模型服务 API Key。
      */
     private String requireApiKey() {
         String apiKey = qwenAiProperties.getApiKey();
@@ -165,7 +165,7 @@ public class QwenChatClient {
     }
 
     /**
-     * 提供通用支撑处理能力。
+     * 读取并校验会话接口地址。
      */
     private String requireChatApi() {
         String chatApi = qwenAiProperties.getChatApi();
@@ -178,6 +178,21 @@ public class QwenChatClient {
     /**
      * 构建支撑处理所需数据。
      */
+    private Duration resolveStreamConnectTimeout() {
+        return resolveDuration(qwenAiProperties.getStreamConnectTimeout(), DEFAULT_STREAM_CONNECT_TIMEOUT);
+    }
+
+    private Duration resolveStreamRequestTimeout() {
+        return resolveDuration(qwenAiProperties.getStreamRequestTimeout(), DEFAULT_STREAM_REQUEST_TIMEOUT);
+    }
+
+    private Duration resolveDuration(Duration configured, Duration defaultValue) {
+        if (configured == null || configured.isNegative() || configured.isZero()) {
+            return defaultValue;
+        }
+        return configured;
+    }
+
     private JSONObject buildPayload(List<ChatMessage> messages, boolean jsonResponse, Integer maxTokens, boolean stream) {
         JSONObject payload = new JSONObject();
         String model = resolveChatModel();
@@ -224,7 +239,7 @@ public class QwenChatClient {
     }
 
     /**
-     * 解析并转换支撑数据。
+     * 从同步响应中提取助手文本。
      */
     private String extractAssistantContent(JSONObject root) {
         JSONArray choices = root.getJSONArray("choices");
@@ -248,7 +263,7 @@ public class QwenChatClient {
     }
 
     /**
-     * 解析并转换支撑数据。
+     * 从响应体中提取令牌消耗信息。
      */
     private Usage extractUsage(JSONObject root) {
         JSONObject usageObject = root.getJSONObject("usage");
@@ -262,7 +277,7 @@ public class QwenChatClient {
     }
 
     /**
-     * 提供通用支撑处理能力。
+     * 消费流式响应体：累计文本、回调增量并提取最终 usage。
      */
     private Usage consumeStreamingBody(
             InputStream stream,
@@ -327,7 +342,7 @@ public class QwenChatClient {
     }
 
     /**
-     * 解析并转换支撑数据。
+     * 从流式分片中提取本次返回的内容字段。
      */
     private String extractDeltaContent(JSONObject chunk) {
         JSONArray choices = chunk.getJSONArray("choices");
@@ -350,7 +365,7 @@ public class QwenChatClient {
     }
 
     /**
-     * 解析并转换支撑数据。
+     * 统一兼容字符串与数组两种 content 结构。
      */
     private String extractContentText(Object contentObject) {
         if (contentObject == null) {
@@ -382,7 +397,7 @@ public class QwenChatClient {
     }
 
     /**
-     * 解析并转换支撑数据。
+     * 根据当前累计文本计算本次增量，避免重复推送。
      */
     private String resolveStreamDelta(String incoming, String currentContent) {
         if (!StringUtils.hasText(incoming)) {
@@ -401,7 +416,7 @@ public class QwenChatClient {
     }
 
     /**
-     * 提供通用支撑处理能力。
+     * 将响应输入流读取为 UTF-8 文本。
      */
     private String readBodyAsString(InputStream stream) {
         if (stream == null) {
@@ -415,7 +430,7 @@ public class QwenChatClient {
     }
 
     /**
-     * 解析并转换支撑数据。
+     * 提取服务端错误信息，优先返回结构化 message 字段。
      */
     private String extractProviderErrorMessage(String body) {
         if (!StringUtils.hasText(body)) {

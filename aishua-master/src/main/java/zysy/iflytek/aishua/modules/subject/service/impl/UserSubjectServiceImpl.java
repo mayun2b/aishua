@@ -40,7 +40,7 @@ import java.util.function.Function;
 import java.util.stream.Collectors;
 
 /**
- * 学科服务实现，负责用户学科相关业务逻辑与流程处理。
+ * 学科服务实现，负责用户学科选择、状态维护与统计聚合。
  */
 @Slf4j
 @Service
@@ -56,7 +56,7 @@ public class UserSubjectServiceImpl implements UserSubjectService {
     private final QuestionTagRelationMapper questionTagRelationMapper;
 
     /**
-     * 构造方法，负责注入依赖组件。
+     * 构造方法，注入当前类所需依赖。
      */
     public UserSubjectServiceImpl(
             SubjectMapper subjectMapper,

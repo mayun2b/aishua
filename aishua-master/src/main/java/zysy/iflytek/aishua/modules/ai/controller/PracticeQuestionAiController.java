@@ -32,7 +32,7 @@ public class PracticeQuestionAiController {
     private final PracticeQuestionAiService practiceQuestionAiService;
 
     /**
-     * 构造方法，负责注入依赖组件。
+     * 构造方法，注入当前类所需依赖。
      */
     public PracticeQuestionAiController(PracticeQuestionAiService practiceQuestionAiService) {
         this.practiceQuestionAiService = practiceQuestionAiService;
@@ -84,7 +84,7 @@ public class PracticeQuestionAiController {
     }
 
     /**
-     * 处理业务请求并返回结果。
+     * 接口处理入口，负责参数接收与服务调用。
      */
     @PostMapping("/sessions/{assistantSessionId}/messages")
     public Result<PracticeQuestionAiChatMessageVO> sendMessage(
@@ -106,7 +106,7 @@ public class PracticeQuestionAiController {
     }
 
     /**
-     * 处理业务请求并返回结果。
+     * 接口处理入口，负责参数接收与服务调用。
      */
     @PostMapping(value = "/sessions/{assistantSessionId}/messages/stream", produces = MediaType.TEXT_EVENT_STREAM_VALUE)
     public SseEmitter sendMessageStream(
@@ -139,7 +139,7 @@ public class PracticeQuestionAiController {
     }
 
     /**
-     * 处理删除请求并返回结果。
+     * 删除接口入口，负责资源删除与结果返回。
      */
     @PutMapping("/sessions/{assistantSessionId}/close")
     public Result<PracticeQuestionAiChatSessionVO> closeSession(

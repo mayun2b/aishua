@@ -11,27 +11,27 @@ public final class AiServiceSupport {
     public static final int ROLE_ASSISTANT = 3;
 
     /**
-     * 构造方法，负责注入依赖组件。
+     * 构造方法，注入当前类所需依赖。
      */
     private AiServiceSupport() {
     }
 
     /**
-     * 提供通用支撑处理能力。
+     * 空值数字兜底，避免空指针分支散落在业务代码中。
      */
     public static Integer defaultNumber(Integer value) {
         return value == null ? 0 : value;
     }
 
     /**
-     * 提供通用支撑处理能力。
+     * 生成去横杠的随机编码，可用于会话号或消息号。
      */
     public static String newCode() {
         return UUID.randomUUID().toString().replace("-", "");
     }
 
     /**
-     * 提供通用支撑处理能力。
+     * 将本地角色枚举映射为模型接口角色名。
      */
     public static String mapRoleToOpenAiRole(Integer role) {
         if (ROLE_SYSTEM == role) {
@@ -47,7 +47,7 @@ public final class AiServiceSupport {
     }
 
     /**
-     * 提供通用支撑处理能力。
+     * 将本地角色枚举映射为可读角色名（兜底返回 unknown）。
      */
     public static String mapRoleName(Integer role) {
         if (ROLE_SYSTEM == role) {

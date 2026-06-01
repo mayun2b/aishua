@@ -77,6 +77,11 @@
               <td>
                 <div class="answer-cell">
                   <span>你的答案：{{ formatAnswerDisplay(record.userAnswer) }}</span>
+                  <AnswerCanvasPreview
+                    v-if="shouldShowUserAnswerCanvas(record)"
+                    :object-name="resolveUserAnswerCanvasObjectName(record)"
+                    :height="180"
+                  />
                   <span>标准答案：{{ formatAnswerDisplay(record.correctAnswer) }}</span>
                 </div>
               </td>
@@ -97,7 +102,13 @@ import { computed, onMounted, ref } from 'vue'
 import { useRoute } from 'vue-router'
 import { showToast } from 'vant'
 import BasePagination from '@/components/BasePagination.vue'
+import AnswerCanvasPreview from '@/components/AnswerCanvasPreview.vue'
 import useClientPagination from '@/composables/useClientPagination'
+import {
+  hasEssayCanvasMarker,
+  parseEssayAnswerPayload,
+  stripEssayCanvasMarker
+} from '../../common/utils/essayCanvasAnswer'
 import practiceApi from '../api/practice'
 
 const route = useRoute()
@@ -176,12 +187,28 @@ const formatDateTime = (value) => {
   return new Date(value).toLocaleString('zh-CN', { hour12: false })
 }
 
+const isEssayRecord = (record) => Number(record?.questionType) === 5
+
+const resolveUserAnswerCanvasObjectName = (record) => {
+  if (!isEssayRecord(record)) {
+    return ''
+  }
+  const { canvasObjectName } = parseEssayAnswerPayload(record?.userAnswer)
+  return String(canvasObjectName || '').trim()
+}
+
+const shouldShowUserAnswerCanvas = (record) => {
+  return resolveUserAnswerCanvasObjectName(record).length > 0
+}
+
 const formatAnswerDisplay = (value) => {
-  if (value == null || String(value).trim() === '') {
-    return '未作答'
+  const hasCanvasAnswer = hasEssayCanvasMarker(value)
+  const plainAnswer = stripEssayCanvasMarker(value)
+  const normalized = String(plainAnswer ?? '').trim()
+  if (!normalized) {
+    return hasCanvasAnswer ? '已提交手写作答' : '未作答'
   }
 
-  const normalized = String(value).trim()
   if (normalized.startsWith('[') && normalized.endsWith(']')) {
     try {
       const parsed = JSON.parse(normalized)
@@ -194,7 +221,6 @@ const formatAnswerDisplay = (value) => {
   }
   return normalized
 }
-
 onMounted(() => {
   loadSessionDetail()
 })

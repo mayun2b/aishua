@@ -25,7 +25,7 @@ public class JwtService {
     private SecretKey secretKey;
 
     /**
-     * 构造方法，负责注入依赖组件。
+     * 构造方法，注入当前类所需依赖。
      */
     public JwtService(JwtProperties jwtProperties) {
         this.jwtProperties = jwtProperties;

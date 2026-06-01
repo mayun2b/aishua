@@ -27,7 +27,7 @@ import java.time.LocalDate;
 import java.util.List;
 
 /**
- * 考试控制器，负责相关业务逻辑与流程处理。
+ * 考试控制器，提供该领域对外接口入口。
  */
 @Validated
 @RestController
@@ -36,7 +36,7 @@ public class ExamController {
     private final ExamService examService;
 
     /**
-     * 构造方法，负责注入依赖组件。
+     * 构造方法，注入当前类所需依赖。
      */
     public ExamController(ExamService examService) {
         this.examService = examService;

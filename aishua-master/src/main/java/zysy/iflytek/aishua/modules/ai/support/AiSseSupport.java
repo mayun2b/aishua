@@ -14,13 +14,13 @@ public final class AiSseSupport {
     public static final long DEFAULT_STREAM_TIMEOUT_MS = 120_000L;
 
     /**
-     * 构造方法，负责注入依赖组件。
+     * 构造方法，注入当前类所需依赖。
      */
     private AiSseSupport() {
     }
 
     /**
-     * 提供通用支撑处理能力。
+     * 发送单条 SSE 事件，统一做 JSON 序列化。
      */
     public static void emitEvent(SseEmitter emitter, String eventName, Object payload) {
         try {
@@ -31,7 +31,7 @@ public final class AiSseSupport {
     }
 
     /**
-     * 提供通用支撑处理能力。
+     * 统一处理流式异常并向前端回传错误事件。
      */
     public static void emitError(SseEmitter emitter, Exception exception, String defaultMessage) {
         Throwable rootCause = unwrapCause(exception);
@@ -52,7 +52,7 @@ public final class AiSseSupport {
     }
 
     /**
-     * 提供通用支撑处理能力。
+     * 解包运行时异常，尽量拿到根因异常类型。
      */
     private static Throwable unwrapCause(Throwable throwable) {
         if (throwable instanceof RuntimeException runtimeException && runtimeException.getCause() != null) {

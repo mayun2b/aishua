@@ -6,7 +6,7 @@ import java.util.Collections;
 import java.util.List;
 
 /**
- * 考试视图对象，负责相关业务逻辑与流程处理。
+ * 考试视图对象，用于接口出参封装。
  */
 @Data
 public class ExamAvailableQuestionPageVO {

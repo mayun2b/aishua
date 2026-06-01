@@ -16,7 +16,7 @@ import zysy.iflytek.aishua.modules.user.service.UserService;
 import zysy.iflytek.aishua.modules.user.support.PasswordCodec;
 
 /**
- * 用户服务实现，负责相关业务逻辑与流程处理。
+ * 用户服务实现，负责该领域业务流程编排。
  */
 @Slf4j
 @Service
@@ -26,7 +26,7 @@ public class UserServiceImpl implements UserService {
     private final PasswordCodec passwordCodec;
 
     /**
-     * 构造方法，负责注入依赖组件。
+     * 构造方法，注入当前类所需依赖。
      */
     public UserServiceImpl(UserMapper userMapper, JwtService jwtService, PasswordCodec passwordCodec) {
         this.userMapper = userMapper;

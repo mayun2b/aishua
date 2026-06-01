@@ -1,3 +1,5 @@
+import { hasEssayCanvasMarker, stripEssayCanvasMarker } from '../../common/utils/essayCanvasAnswer'
+
 const OPTION_LABEL_REGEX = /^\s*([A-Za-z])[.、)\]:：]\s*(.+)$/
 const BOOLEAN_TEXT_REGEX =
   /^(true|false|yes|no|y|n|1|0|dui|cuo|\u5bf9|\u9519|\u6b63\u786e|\u9519\u8bef|\u662f|\u5426)$/i
@@ -216,10 +218,15 @@ export function toAnswerTokens(answer) {
 }
 
 export function formatAnswerDisplay(answer) {
-  const tokens = toAnswerTokens(answer)
+  const hasCanvasDraft = hasEssayCanvasMarker(answer)
+  const plainAnswer = stripEssayCanvasMarker(answer)
+  const tokens = toAnswerTokens(plainAnswer)
   if (!tokens.length) {
-    const raw = String(answer ?? '').trim()
-    return raw || '\u672a\u4f5c\u7b54'
+    const raw = String(plainAnswer ?? '').trim()
+    if (raw) {
+      return raw
+    }
+    return hasCanvasDraft ? '已提交手写作答' : '\u672a\u4f5c\u7b54'
   }
   return tokens.join(', ')
 }

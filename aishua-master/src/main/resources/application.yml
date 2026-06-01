@@ -18,16 +18,46 @@ spring:
     date-format: yyyy-MM-dd HH:mm:ss
     time-zone: GMT+8
 
+app:
+  http:
+    client:
+      connect-timeout: 8s
+      read-timeout: 45s
+  cors:
+    path-pattern: /api/**
+    allowed-origin-patterns:
+      - "*"
+    allowed-methods:
+      - GET
+      - POST
+      - PUT
+      - DELETE
+      - OPTIONS
+    allowed-headers:
+      - "*"
+    allow-credentials: false
+    max-age-seconds: 3600
+  security:
+    jwt:
+      secret: change-me-with-a-32-byte-secret-value
+      expiration-ms: 86400000
+      token-header: Authorization
+      token-prefix: "Bearer "
+
 ai:
   qwen:
     chat-api: https://dashscope.aliyuncs.com/compatible-mode/v1/chat/completions
     api-key: sk-69500d5de19748ecac6d27d4a9083b30
     chat-model: qwen3.6-plus
     chat-max-tokens: 220
+    stream-connect-timeout: 8s
+    stream-request-timeout: 80s
 
 dify:
   base-url: http://localhost
   api-key: app-brUWNXBqSB0sM0w5VfKDTTG7
+  workflow-run-path: /v1/workflows/run
+  response-mode: blocking
 
 mybatis-plus:
   configuration:
@@ -43,24 +73,22 @@ mybatis-plus:
 
 minio:
   endpoint: http://localhost:9000
-  accesskey: minioadmin
-  secretkey: minioadmin
+  access-key: minioadmin
+  secret-key: minioadmin
   bucket-name: subject
+  preview-expiry-days: 7
 
 practice:
   mastery:
-    # 样本量达到该阈值后，按正确率稳定分级
     min-sample-count: 20
-    # 正确率阈值（百分比）
     rate-level-1: 60
     rate-level-2: 75
     rate-level-3: 90
-    # 小样本阶段的最高等级限制（0-3）
     warmup-level-cap: 2
   draft:
-    # 草稿从 Redis 落库间隔（毫秒）
-    db-sync-interval-ms: 300000
-    # 启动后首次执行落库任务的延迟（毫秒）
-    db-sync-initial-delay-ms: 300000
-    # 单次落库最多处理的会话数
+    redis-key-prefix: "practice:draft:v2:"
+    cache-ttl-days: 7
+    save-lock-ttl-seconds: 5
     sync-batch-size: 50
+    db-sync-interval-ms: 300000
+    db-sync-initial-delay-ms: 300000

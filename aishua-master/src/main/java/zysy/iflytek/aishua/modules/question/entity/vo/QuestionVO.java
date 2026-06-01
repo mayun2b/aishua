@@ -7,7 +7,7 @@ import java.time.LocalDateTime;
 import java.util.List;
 
 /**
- * 题目视图对象，负责相关业务逻辑与流程处理。
+ * 题目视图对象，用于接口出参封装。
  */
 @Data
 public class QuestionVO {

@@ -68,7 +68,7 @@ import java.util.function.Function;
 import java.util.stream.Collectors;
 
 /**
- * 考试服务实现，负责相关业务逻辑与流程处理。
+ * 考试服务实现，负责该领域业务流程编排。
  */
 @Slf4j
 @Service
@@ -96,7 +96,7 @@ public class ExamServiceImpl implements ExamService {
     private final AnswerJudgeSupport answerJudgeSupport;
 
     /**
-     * 构造方法，负责注入依赖组件。
+     * 构造方法，注入当前类所需依赖。
      */
     public ExamServiceImpl(
             ExamPaperMapper examPaperMapper,

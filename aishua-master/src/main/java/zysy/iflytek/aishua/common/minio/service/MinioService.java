@@ -11,7 +11,7 @@ import java.util.UUID;
 import java.util.concurrent.TimeUnit;
 
 /**
- * 通用基础服务组件，负责相关业务逻辑与流程处理。
+ * MinIO 文件服务，封装对象存储的上传、下载、删除与预签名访问能力。
  */
 @Service
 public class MinioService {
@@ -20,7 +20,7 @@ public class MinioService {
     private final MinioProperties properties;
 
     /**
-     * 构造方法，负责注入依赖组件。
+     * 构造方法，注入当前类所需依赖。
      */
     public MinioService(MinioClient minioClient, MinioProperties properties) {
         this.minioClient = minioClient;
@@ -28,7 +28,7 @@ public class MinioService {
     }
 
     /**
-     * 定义业务能力接口。
+     * 创建存储桶（若不存在）。
      */
     public void createBucketIfNotExists() {
         try {
@@ -53,7 +53,7 @@ public class MinioService {
     }
 
     /**
-     * 定义业务能力接口。
+     * 上传文件并返回对象名。
      */
     public String upload(MultipartFile file) {
         try {
@@ -84,7 +84,7 @@ public class MinioService {
     }
 
     /**
-     * 定义业务能力接口。
+     * 下载对象并返回输入流。
      */
     public InputStream download(String objectName) {
         try {
@@ -100,7 +100,7 @@ public class MinioService {
     }
 
     /**
-     * 定义业务能力接口。
+     * 查询对象元信息。
      */
     public StatObjectResponse getObjectInfo(String objectName) {
         try {
@@ -116,7 +116,7 @@ public class MinioService {
     }
 
     /**
-     * 定义业务能力接口。
+     * 删除指定对象。
      */
     public void remove(String objectName) {
         try {
@@ -132,7 +132,7 @@ public class MinioService {
     }
 
     /**
-     * 定义业务能力接口。
+     * 生成对象预览链接。
      */
     public String getPreviewUrl(String objectName) {
         try {
@@ -141,11 +141,22 @@ public class MinioService {
                             .method(Http.Method.GET)
                             .bucket(properties.getBucketName())
                             .object(objectName)
-                            .expiry(7, TimeUnit.DAYS)
+                            .expiry(resolvePreviewExpiryDays(), TimeUnit.DAYS)
                             .build()
             );
         } catch (Exception e) {
             throw new RuntimeException("生成对象存储预览链接失败", e);
         }
+    }
+
+    /**
+     * MinIO 预签名链接最长建议 7 天，这里做上下界保护，避免配置异常导致运行时报错。
+     */
+    private int resolvePreviewExpiryDays() {
+        Integer configured = properties.getPreviewExpiryDays();
+        if (configured == null) {
+            return 7;
+        }
+        return Math.min(Math.max(configured, 1), 7);
     }
 }

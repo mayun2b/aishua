@@ -13,7 +13,7 @@ import java.nio.charset.StandardCharsets;
 import java.util.Map;
 
 /**
- * 通用基础控制器，负责相关业务逻辑与流程处理。
+ * 文件控制器，提供上传、下载、预览链接与删除接口。
  */
 @RestController
 @RequestMapping("/api/files")
@@ -22,14 +22,14 @@ public class FileController {
     private final MinioService minioService;
 
     /**
-     * 构造方法，负责注入依赖组件。
+     * 构造方法，注入当前类所需依赖。
      */
     public FileController(MinioService minioService) {
         this.minioService = minioService;
     }
 
     /**
-     * 处理业务请求并返回结果。
+     * 接口处理入口，负责参数接收与服务调用。
      */
     @PostMapping("/upload")
     public ResponseEntity<?> upload(@RequestParam("file") MultipartFile file) {
@@ -42,7 +42,7 @@ public class FileController {
     }
 
     /**
-     * 处理业务请求并返回结果。
+     * 接口处理入口，负责参数接收与服务调用。
      */
     @GetMapping("/download")
     public ResponseEntity<byte[]> download(@RequestParam String objectName) {
@@ -62,7 +62,7 @@ public class FileController {
     }
 
     /**
-     * 处理业务请求并返回结果。
+     * 接口处理入口，负责参数接收与服务调用。
      */
     @GetMapping("/preview-url")
     public ResponseEntity<?> previewUrl(@RequestParam String objectName) {
@@ -74,7 +74,7 @@ public class FileController {
     }
 
     /**
-     * 处理删除请求并返回结果。
+     * 删除接口入口，负责资源删除与结果返回。
      */
     @DeleteMapping
     public ResponseEntity<?> delete(@RequestParam String objectName) {

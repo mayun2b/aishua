@@ -10,15 +10,18 @@ import java.util.LinkedHashSet;
 import java.util.List;
 import java.util.Locale;
 import java.util.Set;
+import java.util.regex.Pattern;
 
 /**
- * 练习支撑组件，负责相关业务逻辑与流程处理。
+ * 答案判定通用支持组件。
  */
 @Component
 public class AnswerJudgeSupport {
     /**
-     * 判断支撑条件是否满足。
+     * 前端主观题画布模式会附带双中括号画布标记。
      */
+    private static final Pattern CANVAS_MARKER_PATTERN = Pattern.compile("\\[\\[canvas:[^\\]]*]]", Pattern.CASE_INSENSITIVE);
+
     public boolean isCorrect(Integer questionType, String standardAnswer, String userAnswer) {
         if (questionType == null) {
             return false;
@@ -33,52 +36,44 @@ public class AnswerJudgeSupport {
         };
     }
 
-    /**
-     * 提供通用支撑处理能力。
-     */
     private boolean judgeSingleChoice(String standardAnswer, String userAnswer) {
         return normalizeSimpleText(standardAnswer).equals(normalizeSimpleText(userAnswer));
     }
 
-    /**
-     * 提供通用支撑处理能力。
-     */
     private boolean judgeMultipleChoice(String standardAnswer, String userAnswer) {
         List<String> standardTokens = normalizeAnswerTokens(standardAnswer);
         List<String> userTokens = normalizeAnswerTokens(userAnswer);
         return standardTokens.equals(userTokens);
     }
 
-    /**
-     * 提供通用支撑处理能力。
-     */
     private boolean judgeJudgement(String standardAnswer, String userAnswer) {
         return normalizeBooleanText(standardAnswer).equals(normalizeBooleanText(userAnswer));
     }
 
-    /**
-     * 提供通用支撑处理能力。
-     */
     private boolean judgeText(String standardAnswer, String userAnswer) {
         return normalizeSimpleText(standardAnswer).equals(normalizeSimpleText(userAnswer));
     }
 
-    /**
-     * 解析并转换支撑数据。
-     */
     private String normalizeSimpleText(String value) {
         if (value == null) {
             return "";
         }
-        return value.trim()
+        return stripCanvasMarker(value).trim()
                 .replace('\u3000', ' ')
                 .replaceAll("\\s+", " ")
                 .toLowerCase(Locale.ROOT);
     }
 
     /**
-     * 解析并转换支撑数据。
+     * 去除画布标记，仅保留用户真实文本参与判分。
      */
+    private String stripCanvasMarker(String value) {
+        if (value == null || value.isBlank()) {
+            return value == null ? "" : value;
+        }
+        return CANVAS_MARKER_PATTERN.matcher(value).replaceAll(" ");
+    }
+
     private String normalizeBooleanText(String value) {
         String normalized = normalizeSimpleText(value);
         return switch (normalized) {
@@ -88,9 +83,6 @@ public class AnswerJudgeSupport {
         };
     }
 
-    /**
-     * 解析并转换支撑数据。
-     */
     private List<String> normalizeAnswerTokens(String value) {
         if (value == null || value.isBlank()) {
             return List.of();
@@ -118,9 +110,6 @@ public class AnswerJudgeSupport {
         return result;
     }
 
-    /**
-     * 提供通用支撑处理能力。
-     */
     private void splitAndAddTokens(Set<String> tokens, String value) {
         String normalized = value
                 .replace('，', ',')
@@ -132,9 +121,6 @@ public class AnswerJudgeSupport {
         }
     }
 
-    /**
-     * 提供通用支撑处理能力。
-     */
     private void addToken(Set<String> tokens, String raw) {
         if (raw == null) {
             return;
