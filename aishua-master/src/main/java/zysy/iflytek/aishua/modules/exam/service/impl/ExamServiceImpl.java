@@ -1170,6 +1170,8 @@ public class ExamServiceImpl implements ExamService {
             questionVO.setTitle(question.getTitle());
             questionVO.setType(question.getType());
             questionVO.setDifficulty(question.getDifficulty());
+            questionVO.setImageUrls(question.getImageUrls());
+            questionVO.setImageDesc(question.getImageDesc());
             questionVO.setOptions(question.getOptions());
             questionVO.setStandardAnswer(question.getAnswer());
             questionVO.setUserAnswer(detail.getUserAnswer());

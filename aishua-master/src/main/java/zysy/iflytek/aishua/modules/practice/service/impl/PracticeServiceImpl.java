@@ -474,6 +474,8 @@ public class PracticeServiceImpl implements PracticeService {
             recordVO.setQuestionTitle(question == null ? "题目已删除" : question.getTitle());
             recordVO.setQuestionType(question == null ? null : question.getType());
             recordVO.setDifficulty(question == null ? null : question.getDifficulty());
+            recordVO.setImageUrls(question == null ? null : question.getImageUrls());
+            recordVO.setImageDesc(question == null ? null : question.getImageDesc());
             recordVO.setUserAnswer(record.getUserAnswer());
             recordVO.setCorrectAnswer(question == null ? null : question.getAnswer());
             recordVO.setIsCorrect(record.getIsCorrect());
@@ -1346,6 +1348,8 @@ public class PracticeServiceImpl implements PracticeService {
             recordVO.setQuestionTitle(question == null ? "题目已删除" : question.getTitle());
             recordVO.setQuestionType(question == null ? null : question.getType());
             recordVO.setDifficulty(question == null ? null : question.getDifficulty());
+            recordVO.setImageUrls(question == null ? null : question.getImageUrls());
+            recordVO.setImageDesc(question == null ? null : question.getImageDesc());
             recordVO.setUserAnswer(record.getUserAnswer());
             recordVO.setCorrectAnswer(revealCorrectAnswer && question != null ? question.getAnswer() : null);
             recordVO.setIsCorrect(record.getIsCorrect());

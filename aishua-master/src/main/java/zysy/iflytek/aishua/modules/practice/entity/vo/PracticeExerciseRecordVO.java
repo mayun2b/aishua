@@ -27,6 +27,10 @@ public class PracticeExerciseRecordVO {
 
     private Integer difficulty;
 
+    private String imageUrls;
+
+    private String imageDesc;
+
     private String userAnswer;
 
     private String correctAnswer;

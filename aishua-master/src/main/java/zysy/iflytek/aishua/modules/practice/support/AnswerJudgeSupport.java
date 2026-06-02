@@ -21,6 +21,10 @@ public class AnswerJudgeSupport {
      * 前端主观题画布模式会附带双中括号画布标记。
      */
     private static final Pattern CANVAS_MARKER_PATTERN = Pattern.compile("\\[\\[canvas:[^\\]]*]]", Pattern.CASE_INSENSITIVE);
+    private static final Pattern IMAGE_ANNOTATION_MARKER_PATTERN = Pattern.compile(
+            "\\[\\[image-annotations:.*?\\]\\](?=\\s|$)",
+            Pattern.CASE_INSENSITIVE | Pattern.DOTALL
+    );
 
     public boolean isCorrect(Integer questionType, String standardAnswer, String userAnswer) {
         if (questionType == null) {
@@ -58,7 +62,7 @@ public class AnswerJudgeSupport {
         if (value == null) {
             return "";
         }
-        return stripCanvasMarker(value).trim()
+        return stripAnswerMarkers(value).trim()
                 .replace('\u3000', ' ')
                 .replaceAll("\\s+", " ")
                 .toLowerCase(Locale.ROOT);
@@ -67,11 +71,12 @@ public class AnswerJudgeSupport {
     /**
      * 去除画布标记，仅保留用户真实文本参与判分。
      */
-    private String stripCanvasMarker(String value) {
+    private String stripAnswerMarkers(String value) {
         if (value == null || value.isBlank()) {
             return value == null ? "" : value;
         }
-        return CANVAS_MARKER_PATTERN.matcher(value).replaceAll(" ");
+        String withoutImageAnnotations = IMAGE_ANNOTATION_MARKER_PATTERN.matcher(value).replaceAll(" ");
+        return CANVAS_MARKER_PATTERN.matcher(withoutImageAnnotations).replaceAll(" ");
     }
 
     private String normalizeBooleanText(String value) {
@@ -89,7 +94,7 @@ public class AnswerJudgeSupport {
         }
 
         Set<String> tokens = new LinkedHashSet<>();
-        String trimmed = value.trim();
+        String trimmed = stripAnswerMarkers(value).trim();
         if (trimmed.startsWith("[") && trimmed.endsWith("]")) {
             try {
                 JSONArray jsonArray = JSON.parseArray(trimmed);

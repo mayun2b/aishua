@@ -12,6 +12,8 @@ public class ExamRecordQuestionVO {
     private String title;
     private Integer type;
     private Integer difficulty;
+    private String imageUrls;
+    private String imageDesc;
     private String options;
     private String standardAnswer;
     private String userAnswer;
