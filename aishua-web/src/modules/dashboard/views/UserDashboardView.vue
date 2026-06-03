@@ -7,14 +7,9 @@
       </div>
 
       <div class="head-actions">
-        <router-link class="ghost" to="/my-subjects">开始练习</router-link>
-        <router-link class="ghost" to="/practice-records">练习记录</router-link>
-        <router-link class="ghost" to="/exercise/exam">模拟考试</router-link>
-        <router-link class="ghost" to="/exercise/exam/records">考试记录</router-link>
-        <router-link class="ghost" to="/wrong-questions">错题记录</router-link>
-        <router-link class="ghost" to="/learning-analysis">学情分析</router-link>
-        <router-link v-if="user?.isAdmin === 1" class="ghost" to="/admin">管理台</router-link>
-        <button type="button" @click="handleLogout">退出登录</button>
+        <router-link v-for="link in quickLinks" :key="link.to" class="ghost" :to="link.to">
+          {{ link.label }}
+        </router-link>
       </div>
     </header>
 
@@ -117,43 +112,6 @@
 
         <section class="panel">
           <div class="panel-head">
-            <h2>知识点掌握度</h2>
-            <span>展示最近 30 条</span>
-          </div>
-
-          <div v-if="masteryItems.length" class="mastery-table-wrap">
-            <table class="mastery-table">
-              <thead>
-                <tr>
-                  <th>考点</th>
-                  <th>学科</th>
-                  <th>作答</th>
-                  <th>正确率</th>
-                  <th>掌握等级</th>
-                  <th>更新时间</th>
-                </tr>
-              </thead>
-              <tbody>
-                <tr v-for="item in masteryItems" :key="`${item.subjectId}-${item.tagId}`">
-                  <td>{{ item.tagName || '-' }}</td>
-                  <td>{{ item.subjectName || '-' }}</td>
-                  <td>{{ item.correctCount || 0 }} / {{ item.totalCount || 0 }}</td>
-                  <td>{{ formatRate(item.correctRate) }}</td>
-                  <td>
-                    <span :class="['level-chip', masteryClass(item.masteryLevel)]">
-                      {{ masteryLabel(item.masteryLevel) }}
-                    </span>
-                  </td>
-                  <td>{{ formatDateTime(item.updateTime) }}</td>
-                </tr>
-              </tbody>
-            </table>
-          </div>
-          <div v-else class="empty-state">暂无知识点掌握度数据</div>
-        </section>
-
-        <section class="panel">
-          <div class="panel-head">
             <h2>最近练习</h2>
             <router-link to="/practice-records">全部记录</router-link>
           </div>
@@ -168,6 +126,7 @@
                   <th>正确率</th>
                   <th>耗时</th>
                   <th>状态</th>
+                  <th>操作</th>
                 </tr>
               </thead>
               <tbody>
@@ -178,9 +137,14 @@
                   <td>{{ formatRate(session.correctRate) }}</td>
                   <td>{{ formatTime(session.totalTimeCost) }}</td>
                   <td>
-                    <span :class="['status-chip', session.status === 2 ? 'done' : 'active']">
-                      {{ session.status === 2 ? '已完成' : '进行中' }}
+                    <span :class="['status-chip', Number(session.status) === 2 ? 'done' : 'active']">
+                      {{ Number(session.status) === 2 ? '已完成' : '进行中' }}
                     </span>
+                  </td>
+                  <td>
+                    <router-link class="session-link" :to="sessionDetailRoute(session)">
+                      {{ sessionDetailLabel(session) }}
+                    </router-link>
                   </td>
                 </tr>
               </tbody>
@@ -195,12 +159,10 @@
 
 <script setup>
 import { computed, onMounted, ref } from 'vue'
-import { useRouter } from 'vue-router'
 import { useStore } from 'vuex'
 import { showToast } from 'vant'
 import practiceApi from '../../practice/api/practice'
 
-const router = useRouter()
 const store = useStore()
 
 const dayOptions = [7, 30, 90]
@@ -218,12 +180,24 @@ const emptyStats = () => ({
 const stats = ref(emptyStats())
 
 const user = computed(() => store.getters['auth/currentUser'])
-const greeting = computed(() => `${user.value?.nickname || '同学'}，你的练习闭环`)
+const greeting = computed(() => `${user.value?.nickname || '同学'}，继续推进你的练习闭环`)
+const quickLinks = computed(() => {
+  const links = [
+    { to: '/my-subjects', label: '开始练习' },
+    { to: '/practice-records', label: '练习记录' },
+    { to: '/exercise/exam', label: '模拟考试' },
+    { to: '/learning-analysis', label: '学情分析' }
+  ]
+  if (user.value?.isAdmin === 1) {
+    links.push({ to: '/admin', label: '管理台' })
+  }
+  return links
+})
+
 const overview = computed(() => stats.value.overview || {})
 const trendItems = computed(() => stats.value.dailyTrends || [])
 const subjectItems = computed(() => (stats.value.subjectStats || []).slice(0, 6))
 const weakItems = computed(() => (stats.value.weakPoints || []).slice(0, 8))
-const masteryItems = computed(() => (stats.value.knowledgeMasteries || []).slice(0, 30))
 const recentSessions = computed(() => stats.value.recentSessions || [])
 const trendMax = computed(() => Math.max(...trendItems.value.map((item) => Number(item.doCount || 0)), 1))
 
@@ -257,11 +231,6 @@ const overviewItems = computed(() => [
     label: '练习场次',
     value: `${formatNumber(overview.value.finishedSessionCount)} 次`,
     meta: `累计用时 ${formatTime(overview.value.totalTimeCost)}`
-  },
-  {
-    label: '最近学习',
-    value: formatDate(overview.value.lastExerciseDate),
-    meta: `活跃 ${formatNumber(overview.value.activeDays)} 天`
   }
 ])
 
@@ -292,11 +261,6 @@ const changeDays = async (days) => {
   await loadStats()
 }
 
-const handleLogout = () => {
-  store.dispatch('auth/logout')
-  router.push('/login')
-}
-
 const formatNumber = (value) => {
   return Number(value || 0).toLocaleString('zh-CN')
 }
@@ -312,7 +276,6 @@ const formatTime = (value) => {
   if (seconds <= 0) {
     return '0 秒'
   }
-
   const hours = Math.floor(seconds / 3600)
   const minutes = Math.floor((seconds % 3600) / 60)
   if (hours > 0) {
@@ -325,17 +288,11 @@ const formatTime = (value) => {
 }
 
 const formatDate = (value) => {
-  if (!value) {
-    return '-'
-  }
-  return String(value).slice(0, 10)
+  return value ? String(value).slice(0, 10) : '-'
 }
 
 const formatDateTime = (value) => {
-  if (!value) {
-    return '-'
-  }
-  return String(value).replace('T', ' ').slice(0, 16)
+  return value ? String(value).replace('T', ' ').slice(0, 16) : '-'
 }
 
 const trendBarHeight = (item) => {
@@ -376,6 +333,18 @@ const masteryClass = (level) => {
   return `level-${Math.min(Math.max(Number(level || 0), 0), 3)}`
 }
 
+const sessionDetailRoute = (session) => {
+  const sessionId = Number(session?.sessionId || 0)
+  if (!sessionId) {
+    return '/practice-records'
+  }
+  return Number(session.status) === 2 ? `/practice-records/${sessionId}` : `/practice/session/${sessionId}`
+}
+
+const sessionDetailLabel = (session) => {
+  return Number(session?.status) === 2 ? '查看详情' : '继续作答'
+}
+
 onMounted(loadStats)
 </script>
 
@@ -383,7 +352,7 @@ onMounted(loadStats)
 .dashboard-page {
   min-height: 100vh;
   padding: 28px 24px 48px;
-  background: #f4f6f8;
+  background: transparent;
   color: #1f2933;
 }
 
@@ -422,7 +391,6 @@ onMounted(loadStats)
   flex-wrap: wrap;
 }
 
-.head-actions button,
 .head-actions .ghost,
 .range-control button {
   min-height: 40px;
@@ -434,12 +402,11 @@ onMounted(loadStats)
   font-size: 14px;
   text-decoration: none;
   cursor: pointer;
+  transition: all 0.2s ease;
 }
 
-.head-actions button {
-  border-color: #1f2937;
-  background: #1f2937;
-  color: #fff;
+.head-actions .ghost:hover {
+  transform: translateY(-1px);
 }
 
 .dashboard-shell {
@@ -722,11 +689,6 @@ onMounted(loadStats)
   overflow-x: auto;
 }
 
-.mastery-table-wrap {
-  margin-top: 14px;
-  overflow-x: auto;
-}
-
 table {
   width: 100%;
   min-width: 720px;
@@ -759,6 +721,12 @@ th {
   color: #1d4ed8;
 }
 
+.session-link {
+  color: #1d4ed8;
+  text-decoration: none;
+  font-weight: 600;
+}
+
 @media (max-width: 900px) {
   .page-head {
     display: grid;
@@ -785,7 +753,6 @@ th {
 
   .head-actions,
   .head-actions .ghost,
-  .head-actions button,
   .range-control,
   .range-control button {
     width: 100%;

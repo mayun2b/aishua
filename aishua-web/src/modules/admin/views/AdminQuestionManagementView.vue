@@ -273,15 +273,29 @@
             ></textarea>
           </label>
 
-          <label>
-            <span>图片URL（多张可用逗号分隔）</span>
-            <input
-              v-model.trim="form.imageUrls"
-              type="text"
-              maxlength="2000"
-              placeholder="例如：https://.../1.png,https://.../2.png"
-            />
-          </label>
+          <div class="image-upload-field">
+            <div class="field-heading">
+              <span>题目图片</span>
+              <label class="ghost small upload-button">
+                {{ imageUploading ? '上传中...' : '上传图片' }}
+                <input
+                  type="file"
+                  accept="image/*"
+                  multiple
+                  :disabled="imageUploading"
+                  @change="handleImageUpload"
+                />
+              </label>
+            </div>
+            <p class="field-tip">图片会上传至 MinIO，题目保存 MinIO 对象名。</p>
+            <div v-if="imageObjectNames.length" class="image-object-list">
+              <div v-for="objectName in imageObjectNames" :key="objectName" class="image-object-item">
+                <span :title="objectName">{{ objectName }}</span>
+                <button type="button" class="danger small" @click="removeImageObjectName(objectName)">移除</button>
+              </div>
+            </div>
+            <p v-else class="field-tip">暂未上传题目图片</p>
+          </div>
 
           <label>
             <span>图片描述</span>
@@ -310,7 +324,7 @@
 
           <div class="form-actions">
             <button type="button" class="ghost" @click="resetForm">重置</button>
-            <button type="submit" :disabled="submitting">
+            <button type="submit" :disabled="submitting || imageUploading">
               {{ submitting ? '提交中...' : editingId ? '保存修改' : '创建题目' }}
             </button>
           </div>
@@ -325,10 +339,17 @@ import { onMounted, reactive, ref } from 'vue'
 import BasePagination from '@/components/BasePagination.vue'
 import useClientPagination from '@/composables/useClientPagination'
 import { showToast } from 'vant'
+import fileApi from '../../common/api/file'
 import directoryApi from '../api/directory'
 import questionApi from '../api/question'
 import subjectApi from '../api/subject'
 import tagApi from '../api/tag'
+import {
+  appendImageObjectNames,
+  buildImageObjectNamesText,
+  parseImageObjectNames,
+  resolveUploadObjectName
+} from '../utils/questionImageObjects'
 
 const QUESTION_TYPES = [
   { value: 1, label: '单选题' },
@@ -348,6 +369,7 @@ const MAX_CHOICE_OPTIONS = 12
 
 const loading = ref(false)
 const submitting = ref(false)
+const imageUploading = ref(false)
 const modalVisible = ref(false)
 const editingId = ref(null)
 
@@ -358,6 +380,7 @@ const filterDirectoryOptions = ref([])
 const formDirectoryOptions = ref([])
 const formTagOptions = ref([])
 const choiceOptions = ref([])
+const imageObjectNames = ref([])
 
 const filters = reactive({
   subjectId: '',
@@ -523,6 +546,7 @@ const fillForm = (payload) => {
   form.answer = payload.answer
   form.analysis = payload.analysis
   form.imageUrls = payload.imageUrls
+  imageObjectNames.value = parseImageObjectNames(payload.imageUrls)
   form.imageDesc = payload.imageDesc
   form.tagIds = [...payload.tagIds]
   syncChoiceOptionsFromText(form.options)
@@ -734,13 +758,72 @@ const validateForm = (optionsText) => {
   return true
 }
 
+const handleImageUpload = async (event) => {
+  const files = Array.from(event.target.files || [])
+  event.target.value = ''
+
+  if (!files.length) {
+    return
+  }
+
+  const imageFiles = []
+  for (const file of files) {
+    if (!file.type || !file.type.startsWith('image/')) {
+      showToast('只能上传图片文件')
+      continue
+    }
+    imageFiles.push(file)
+  }
+
+  if (!imageFiles.length) {
+    return
+  }
+
+  imageUploading.value = true
+  const uploadedNames = []
+
+  try {
+    for (const file of imageFiles) {
+      const response = await fileApi.upload(file)
+      const objectName = resolveUploadObjectName(response)
+      if (!objectName) {
+        throw new Error('图片上传失败：未返回对象名')
+      }
+      uploadedNames.push(objectName)
+    }
+
+    imageObjectNames.value = appendImageObjectNames(imageObjectNames.value, uploadedNames)
+    form.imageUrls = buildImageObjectNamesText(imageObjectNames.value) || ''
+    showToast(uploadedNames.length > 1 ? `已上传 ${uploadedNames.length} 张图片` : '图片上传成功')
+  } catch (error) {
+    if (uploadedNames.length) {
+      imageObjectNames.value = appendImageObjectNames(imageObjectNames.value, uploadedNames)
+      form.imageUrls = buildImageObjectNamesText(imageObjectNames.value) || ''
+    }
+    showToast(error.message || '图片上传失败')
+  } finally {
+    imageUploading.value = false
+  }
+}
+
+const removeImageObjectName = (objectName) => {
+  imageObjectNames.value = imageObjectNames.value.filter((item) => item !== objectName)
+  form.imageUrls = buildImageObjectNamesText(imageObjectNames.value) || ''
+}
+
 const submitForm = async () => {
+  if (imageUploading.value) {
+    showToast('图片上传中，请稍后提交')
+    return
+  }
+
   const optionsText = resolveOptionsTextForSubmit()
   if (!validateForm(optionsText)) {
     return
   }
 
   const tagIds = [...new Set((form.tagIds || []).map((id) => Number(id)).filter((id) => id > 0))]
+  const imageUrlsText = buildImageObjectNamesText(imageObjectNames.value)
 
   const payload = {
     subjectId: Number(form.subjectId),
@@ -752,7 +835,7 @@ const submitForm = async () => {
     options: optionsText,
     answer: form.answer,
     analysis: form.analysis || null,
-    imageUrls: form.imageUrls || null,
+    imageUrls: imageUrlsText,
     imageDesc: form.imageDesc || null,
     tagIds
   }
@@ -914,7 +997,8 @@ onMounted(async () => {
 
 .filter-card label,
 .question-form label,
-.choice-options-field {
+.choice-options-field,
+.image-upload-field {
   display: grid;
   gap: 8px;
   color: #17324d;
@@ -1111,6 +1195,50 @@ th {
   margin: 0;
   color: #6c7a8d;
   font-size: 13px;
+}
+
+.field-heading {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 12px;
+}
+
+.upload-button {
+  position: relative;
+  overflow: hidden;
+  cursor: pointer;
+}
+
+.upload-button input {
+  position: absolute;
+  inset: 0;
+  opacity: 0;
+  cursor: pointer;
+}
+
+.image-object-list {
+  display: flex;
+  flex-direction: column;
+  gap: 8px;
+}
+
+.image-object-item {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 12px;
+  padding: 8px 10px;
+  border: 1px solid rgba(148, 163, 184, 0.24);
+  border-radius: 6px;
+  background: rgba(15, 23, 42, 0.06);
+}
+
+.image-object-item span {
+  min-width: 0;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
 }
 
 button,

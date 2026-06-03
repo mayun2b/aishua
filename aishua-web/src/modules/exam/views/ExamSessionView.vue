@@ -103,6 +103,13 @@
 
           <h3>{{ currentQuestion.title }}</h3>
           <p v-if="currentQuestion.content" class="content">{{ currentQuestion.content }}</p>
+          <QuestionImageList
+            v-model="currentImageAnnotationDrafts"
+            :image-urls="currentQuestion.imageUrls"
+            :image-desc="currentQuestion.imageDesc"
+            :annotation-object-names="currentImageAnnotationObjectNames"
+            @dirty="saveClientState"
+          />
 
           <div v-if="isChoiceQuestion(currentQuestion.type)" class="option-list">
             <button
@@ -171,7 +178,7 @@
             >
               下一题
             </button>
-            <button type="button" :disabled="submitting || essayCanvasUploading" @click="submitExam">
+            <button type="button" :disabled="submitting || essayCanvasUploading || imageAnnotationUploading" @click="submitExam">
               {{ submitting ? '交卷中...' : '提交试卷' }}
             </button>
           </div>
@@ -186,8 +193,14 @@ import { computed, onBeforeUnmount, onMounted, ref, watch } from 'vue'
 import { onBeforeRouteLeave, useRoute } from 'vue-router'
 import { showToast } from 'vant'
 import AnswerCanvas from '../../../components/AnswerCanvas.vue'
+import QuestionImageList from '../../../components/QuestionImageList.vue'
 import fileApi from '../../common/api/file'
 import { buildEssayAnswerPayload, parseEssayAnswerPayload } from '../../common/utils/essayCanvasAnswer'
+import {
+  buildImageAnnotationPayload,
+  parseImageAnnotationPayload
+} from '../../common/utils/imageAnnotationAnswer'
+import { parseQuestionImageRefs } from '../../common/utils/questionImages'
 import examApi from '../api/exam'
 import {
   buildSessionCacheKey,
@@ -213,6 +226,10 @@ const essayCanvasDrafts = ref({})
 const essayCanvasObjectNames = ref({})
 const essayCanvasUploading = ref(false)
 const essayCanvasLoading = ref({})
+const imageAnnotationDrafts = ref({})
+const imageAnnotationObjectNames = ref({})
+const imageAnnotationUploading = ref(false)
+const imageAnnotationLoading = ref({})
 const answerTimeSeconds = ref({})
 const enteredAt = ref(0)
 const remainingSeconds = ref(0)
@@ -294,6 +311,48 @@ const currentEssayCanvasObjectName = computed(() => {
   return String(essayCanvasObjectNames.value[questionId] || '').trim()
 })
 
+const currentImageAnnotationDrafts = computed({
+  get() {
+    const questionId = Number(currentQuestion.value?.questionId || 0)
+    if (!questionId) {
+      return {}
+    }
+    return imageAnnotationDrafts.value[questionId] || {}
+  },
+  set(value) {
+    const questionId = Number(currentQuestion.value?.questionId || 0)
+    if (!questionId) {
+      return
+    }
+    const nextDrafts = value || {}
+    const previousDrafts = imageAnnotationDrafts.value[questionId] || {}
+    const previousObjectNames = imageAnnotationObjectNames.value[questionId] || {}
+    const nextObjectNames = { ...previousObjectNames }
+    for (const [imageKey, dataUrl] of Object.entries(nextDrafts)) {
+      if (String(dataUrl || '') !== String(previousDrafts[imageKey] || '')) {
+        nextObjectNames[imageKey] = ''
+      }
+    }
+    imageAnnotationDrafts.value = {
+      ...imageAnnotationDrafts.value,
+      [questionId]: nextDrafts
+    }
+    imageAnnotationObjectNames.value = {
+      ...imageAnnotationObjectNames.value,
+      [questionId]: nextObjectNames
+    }
+    saveClientState()
+  }
+})
+
+const currentImageAnnotationObjectNames = computed(() => {
+  const questionId = Number(currentQuestion.value?.questionId || 0)
+  if (!questionId) {
+    return {}
+  }
+  return imageAnnotationObjectNames.value[questionId] || {}
+})
+
 const blobToDataUrl = (blob) => {
   return new Promise((resolve, reject) => {
     const reader = new FileReader()
@@ -361,6 +420,62 @@ const ensureCurrentEssayCanvasDraftLoaded = async ({ silent = true } = {}) => {
     return
   }
   await loadEssayCanvasDraftFromObjectName(questionId, { silent })
+}
+
+const loadImageAnnotationDraftsFromObjectNames = async (questionId, { silent = true } = {}) => {
+  const normalizedQuestionId = Number(questionId || 0)
+  if (!normalizedQuestionId) {
+    return {}
+  }
+  const objectMap = imageAnnotationObjectNames.value[normalizedQuestionId] || {}
+  const currentDrafts = imageAnnotationDrafts.value[normalizedQuestionId] || {}
+  const pendingEntries = Object.entries(objectMap)
+    .map(([imageKey, objectName]) => [imageKey, String(objectName || '').trim()])
+    .filter(([imageKey, objectName]) => objectName && !String(currentDrafts[imageKey] || '').trim())
+
+  if (!pendingEntries.length || imageAnnotationLoading.value[normalizedQuestionId]) {
+    return currentDrafts
+  }
+
+  imageAnnotationLoading.value = {
+    ...imageAnnotationLoading.value,
+    [normalizedQuestionId]: true
+  }
+
+  const nextDrafts = { ...currentDrafts }
+  try {
+    for (const [imageKey, objectName] of pendingEntries) {
+      const blob = await fileApi.download(objectName)
+      const dataUrl = await blobToDataUrl(blob)
+      if (dataUrl && String((imageAnnotationObjectNames.value[normalizedQuestionId] || {})[imageKey] || '').trim() === objectName) {
+        nextDrafts[imageKey] = dataUrl
+      }
+    }
+    imageAnnotationDrafts.value = {
+      ...imageAnnotationDrafts.value,
+      [normalizedQuestionId]: nextDrafts
+    }
+    saveClientState()
+    return nextDrafts
+  } catch (error) {
+    if (!silent) {
+      showToast(error.message || '图片辅助线加载失败')
+    }
+    return currentDrafts
+  } finally {
+    imageAnnotationLoading.value = {
+      ...imageAnnotationLoading.value,
+      [normalizedQuestionId]: false
+    }
+  }
+}
+
+const ensureCurrentImageAnnotationDraftsLoaded = async ({ silent = true } = {}) => {
+  const questionId = Number(currentQuestion.value?.questionId || 0)
+  if (!questionId) {
+    return
+  }
+  await loadImageAnnotationDraftsFromObjectNames(questionId, { silent })
 }
 
 const answeredCount = computed(() => {
@@ -432,6 +547,8 @@ const saveClientState = () => {
     essayAnswerModes: essayAnswerModes.value,
     essayCanvasDrafts: essayCanvasDrafts.value,
     essayCanvasObjectNames: essayCanvasObjectNames.value,
+    imageAnnotationDrafts: imageAnnotationDrafts.value,
+    imageAnnotationObjectNames: imageAnnotationObjectNames.value,
     answerTimeSeconds: answerTimeSeconds.value
   }
   sessionStorage.setItem(stateCacheKey.value, JSON.stringify(payload))
@@ -477,11 +594,21 @@ const initializeSession = () => {
     const nextAnswers = {}
     const nextEssayAnswerModes = { ...(state.essayAnswerModes || {}) }
     const nextEssayCanvasObjectNames = { ...(state.essayCanvasObjectNames || {}) }
+    const nextImageAnnotationObjectNames = { ...(state.imageAnnotationObjectNames || {}) }
 
     questions.value.forEach((question) => {
       const rawAnswer = stateAnswers[question.questionId]
+      const parsedImageAnnotations = typeof rawAnswer === 'string'
+        ? parseImageAnnotationPayload(rawAnswer)
+        : { text: rawAnswer, annotations: [] }
+      if (parsedImageAnnotations.annotations.length) {
+        nextImageAnnotationObjectNames[question.questionId] = parsedImageAnnotations.annotations.reduce((result, item) => {
+          result[item.imageObjectName] = item.annotationObjectName
+          return result
+        }, {})
+      }
       if (Number(question.type) === 5) {
-        const parsedEssayAnswer = parseEssayAnswerPayload(rawAnswer)
+        const parsedEssayAnswer = parseEssayAnswerPayload(parsedImageAnnotations.text)
         nextAnswers[question.questionId] = parsedEssayAnswer.text
         if (parsedEssayAnswer.canvasObjectName && !nextEssayCanvasObjectNames[question.questionId]) {
           nextEssayCanvasObjectNames[question.questionId] = parsedEssayAnswer.canvasObjectName
@@ -492,7 +619,7 @@ const initializeSession = () => {
             : 'text'
         }
       } else {
-        nextAnswers[question.questionId] = rawAnswer
+        nextAnswers[question.questionId] = parsedImageAnnotations.text
       }
     })
 
@@ -500,6 +627,8 @@ const initializeSession = () => {
     essayAnswerModes.value = nextEssayAnswerModes
     essayCanvasObjectNames.value = nextEssayCanvasObjectNames
     essayCanvasDrafts.value = state.essayCanvasDrafts || {}
+    imageAnnotationObjectNames.value = nextImageAnnotationObjectNames
+    imageAnnotationDrafts.value = state.imageAnnotationDrafts || {}
     answerTimeSeconds.value = state.answerTimeSeconds || {}
     currentIndex.value = Math.min(
       Math.max(Number(state.currentIndex || 0), 0),
@@ -721,6 +850,94 @@ const ensureEssayCanvasUploaded = async ({ silent = true, throwOnError = false }
   }
 }
 
+const buildImageAnnotationUploadFileName = (questionId, imageKey) => {
+  const safeKey = String(imageKey || 'image').replace(/[^a-zA-Z0-9_.-]/g, '-').slice(-80)
+  return `exam-image-annotation-${recordId.value}-${questionId}-${Date.now()}-${safeKey}.png`
+}
+
+const uploadImageAnnotationsForQuestion = async (question) => {
+  const questionId = Number(question?.questionId || 0)
+  if (!questionId) {
+    return {}
+  }
+
+  const drafts = imageAnnotationDrafts.value[questionId] || {}
+  const uploaded = imageAnnotationObjectNames.value[questionId] || {}
+  const nextUploaded = { ...uploaded }
+  const refs = parseQuestionImageRefs(question.imageUrls)
+
+  for (const item of refs) {
+    const imageKey = item.objectName || item.key
+    if (!imageKey) {
+      continue
+    }
+    const dataUrl = String(drafts[imageKey] || '').trim()
+    if (!dataUrl) {
+      delete nextUploaded[imageKey]
+      continue
+    }
+    if (String(nextUploaded[imageKey] || '').trim()) {
+      continue
+    }
+    const file = dataUrlToFile(dataUrl, buildImageAnnotationUploadFileName(questionId, imageKey))
+    if (!file) {
+      continue
+    }
+
+    const response = await fileApi.upload(file)
+    const objectName = String(response?.objectName || response?.data?.objectName || '').trim()
+    if (!objectName) {
+      throw new Error('图片辅助线保存失败，请稍后重试')
+    }
+    nextUploaded[imageKey] = objectName
+  }
+
+  imageAnnotationObjectNames.value = {
+    ...imageAnnotationObjectNames.value,
+    [questionId]: nextUploaded
+  }
+  saveClientState()
+  return nextUploaded
+}
+
+const ensureImageAnnotationsUploaded = async ({ silent = true, throwOnError = false } = {}) => {
+  const pendingQuestionIds = questions.value
+    .map((question) => Number(question.questionId))
+    .filter((questionId) => {
+      const question = questionMapById.value[Number(questionId)]
+      if (!question?.imageUrls) {
+        return false
+      }
+      const refs = parseQuestionImageRefs(question.imageUrls)
+      const drafts = imageAnnotationDrafts.value[questionId] || {}
+      const uploaded = imageAnnotationObjectNames.value[questionId] || {}
+      return refs.some((item) => {
+        const imageKey = item.objectName || item.key
+        return String(drafts[imageKey] || '').trim() && !String(uploaded[imageKey] || '').trim()
+      })
+    })
+
+  if (!pendingQuestionIds.length) {
+    return
+  }
+
+  imageAnnotationUploading.value = true
+  try {
+    for (const questionId of pendingQuestionIds) {
+      await uploadImageAnnotationsForQuestion(questionMapById.value[Number(questionId)])
+    }
+  } catch (error) {
+    if (!silent) {
+      showToast(error.message || '图片辅助线保存失败')
+    }
+    if (throwOnError) {
+      throw error
+    }
+  } finally {
+    imageAnnotationUploading.value = false
+  }
+}
+
 const goToQuestion = (index) => {
   if (index < 0 || index >= questions.value.length || index === currentIndex.value) {
     return
@@ -751,24 +968,36 @@ const resolveJudgementAnswer = (question, optionKey) => {
   return option.optionKey || text
 }
 
+const buildQuestionImageAnnotationPayload = (question, text) => {
+  const questionId = Number(question?.questionId || 0)
+  const objectMap = imageAnnotationObjectNames.value[questionId] || {}
+  const annotations = Object.entries(objectMap)
+    .map(([imageObjectName, annotationObjectName]) => ({
+      imageObjectName,
+      annotationObjectName
+    }))
+    .filter((item) => String(item.imageObjectName || '').trim() && String(item.annotationObjectName || '').trim())
+  return buildImageAnnotationPayload(text, annotations)
+}
+
 const buildUserAnswer = (question) => {
   const raw = answers.value[question.questionId]
+  let answerText = ''
   if (question.type === 2) {
-    return Array.isArray(raw) ? raw.slice().sort().join(',') : ''
-  }
-  if (question.type === 3) {
-    return resolveJudgementAnswer(question, String(raw || ''))
-  }
-  if (question.type === 5) {
-    return buildEssayAnswerPayload({
+    answerText = Array.isArray(raw) ? raw.slice().sort().join(',') : ''
+  } else if (question.type === 3) {
+    answerText = resolveJudgementAnswer(question, String(raw || ''))
+  } else if (question.type === 5) {
+    answerText = buildEssayAnswerPayload({
       text: typeof raw === 'string' ? raw.trim() : '',
       canvasObjectName: essayCanvasObjectNames.value[question.questionId] || ''
     })
+  } else if (question.type === 4) {
+    answerText = typeof raw === 'string' ? raw.trim() : ''
+  } else {
+    answerText = typeof raw === 'string' ? raw : ''
   }
-  if (question.type === 4) {
-    return typeof raw === 'string' ? raw.trim() : ''
-  }
-  return typeof raw === 'string' ? raw : ''
+  return buildQuestionImageAnnotationPayload(question, answerText)
 }
 
 const buildAnswerTime = (questionId) => {
@@ -786,6 +1015,7 @@ const submitExam = async () => {
 
   try {
     await ensureEssayCanvasUploaded({ silent: false, throwOnError: true })
+    await ensureImageAnnotationsUploaded({ silent: false, throwOnError: true })
 
     const usedSeconds = totalDurationSeconds.value - Math.max(remainingSeconds.value, 0)
     const payload = {
@@ -849,6 +1079,22 @@ watch(
   { deep: true }
 )
 
+watch(
+  imageAnnotationDrafts,
+  () => {
+    saveClientState()
+  },
+  { deep: true }
+)
+
+watch(
+  imageAnnotationObjectNames,
+  () => {
+    saveClientState()
+  },
+  { deep: true }
+)
+
 watch(currentIndex, () => {
   saveClientState()
 })
@@ -860,6 +1106,16 @@ watch(
       return
     }
     void ensureCurrentEssayCanvasDraftLoaded({ silent: true })
+  }
+)
+
+watch(
+  () => [currentQuestion.value?.questionId, currentQuestion.value?.imageUrls],
+  ([questionId, imageUrls]) => {
+    if (!questionId || !imageUrls) {
+      return
+    }
+    void ensureCurrentImageAnnotationDraftsLoaded({ silent: true })
   }
 )
 
@@ -886,6 +1142,7 @@ onMounted(() => {
     startTimer()
   }
   void ensureCurrentEssayCanvasDraftLoaded({ silent: true })
+  void ensureCurrentImageAnnotationDraftsLoaded({ silent: true })
 })
 
 onBeforeUnmount(() => {

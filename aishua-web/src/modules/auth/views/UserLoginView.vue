@@ -1,8 +1,9 @@
 <template>
   <div class="auth-page">
     <div class="auth-card">
+      <p class="eyebrow">Welcome Back</p>
       <h1>账号登录</h1>
-      <p class="subtitle">登录后会自动识别角色并进入用户工作台或管理控制台。</p>
+      <p class="subtitle">登录后会自动识别角色，并恢复你上次中断的学习路径。</p>
 
       <form class="auth-form" @submit.prevent="handleSubmit">
         <label>
@@ -10,8 +11,7 @@
           <input
             v-model.trim="form.phone"
             type="text"
-            maxlength="11"
-            placeholder="请输入手机号"
+            placeholder="请输入 11 位手机号"
           />
         </label>
 
@@ -21,6 +21,7 @@
             v-model="form.password"
             type="password"
             maxlength="32"
+            autocomplete="current-password"
             placeholder="请输入密码"
           />
         </label>
@@ -31,14 +32,15 @@
       </form>
 
       <div class="actions">
-        <router-link to="/register">没有账号？去注册</router-link>
+        <router-link :to="registerLink">没有账号？去注册</router-link>
+        <router-link to="/">返回首页</router-link>
       </div>
     </div>
   </div>
 </template>
 
 <script setup>
-import { reactive, ref } from 'vue'
+import { computed, reactive, ref } from 'vue'
 import { useRoute, useRouter } from 'vue-router'
 import { useStore } from 'vuex'
 import { showToast } from 'vant'
@@ -53,11 +55,32 @@ const form = reactive({
   password: ''
 })
 
-const handleSubmit = async () => {
-  if (!form.phone) {
-    showToast('请输入手机号')
-    return
+
+const resolveRedirectPath = (value) => {
+  if (typeof value !== 'string' || !value.startsWith('/')) {
+    return ''
   }
+  if (value.startsWith('/login') || value.startsWith('/register')) {
+    return ''
+  }
+  return value
+}
+
+const registerLink = computed(() => {
+  const redirect = resolveRedirectPath(route.query.redirect)
+  if (!redirect) {
+    return { path: '/register' }
+  }
+  return {
+    path: '/register',
+    query: {
+      redirect
+    }
+  }
+})
+
+const handleSubmit = async () => {
+
 
   if (!form.password) {
     showToast('请输入密码')
@@ -69,13 +92,13 @@ const handleSubmit = async () => {
     const auth = await store.dispatch('auth/login', { ...form })
     showToast('登录成功')
 
-    const redirect = route.query.redirect
-    if (typeof redirect === 'string' && redirect.startsWith('/')) {
-      router.push(redirect)
+    const redirect = resolveRedirectPath(route.query.redirect)
+    if (redirect) {
+      router.replace(redirect)
       return
     }
 
-    router.push(auth.user.isAdmin === 1 ? '/admin' : '/dashboard')
+    router.replace(auth.user.isAdmin === 1 ? '/admin' : '/dashboard')
   } catch (error) {
     showToast(error.message || '登录失败')
   } finally {
@@ -91,19 +114,30 @@ const handleSubmit = async () => {
   align-items: center;
   justify-content: center;
   padding: 24px;
-  background: linear-gradient(135deg, #f4efe6 0%, #dfe9f3 100%);
+  background:
+    radial-gradient(circle at top left, rgba(23, 50, 77, 0.18), transparent 34%),
+    radial-gradient(circle at top right, rgba(15, 122, 67, 0.15), transparent 30%),
+    linear-gradient(135deg, #f5f0e5 0%, #dfe9f3 100%);
 }
 
 .auth-card {
-  width: min(420px, 100%);
+  width: min(430px, 100%);
   padding: 36px 32px;
   border-radius: 24px;
   background: rgba(255, 255, 255, 0.94);
   box-shadow: 0 24px 60px rgba(38, 57, 77, 0.15);
 }
 
-.auth-card h1 {
+.eyebrow {
   margin: 0;
+  color: #64748b;
+  font-size: 12px;
+  text-transform: uppercase;
+  letter-spacing: 0.15em;
+}
+
+.auth-card h1 {
+  margin: 10px 0 0;
   font-size: 30px;
   color: #17324d;
 }
@@ -134,12 +168,20 @@ const handleSubmit = async () => {
   border-radius: 14px;
   font-size: 15px;
   box-sizing: border-box;
+  outline: none;
+  transition: border-color 0.2s ease, box-shadow 0.2s ease;
+}
+
+.auth-form input:focus {
+  border-color: #1d4ed8;
+  box-shadow: 0 0 0 3px rgba(29, 78, 216, 0.12);
 }
 
 .auth-form button {
   border: 0;
   border-radius: 14px;
-  padding: 14px 18px;
+  min-height: 46px;
+  padding: 12px 18px;
   background: #17324d;
   color: #fff;
   font-size: 16px;
@@ -153,11 +195,26 @@ const handleSubmit = async () => {
 
 .actions {
   margin-top: 20px;
+  display: flex;
+  justify-content: space-between;
+  gap: 10px;
+  flex-wrap: wrap;
 }
 
 .actions a {
   color: #17324d;
   text-decoration: none;
   font-weight: 600;
+}
+
+@media (max-width: 560px) {
+  .auth-page {
+    padding: 16px;
+  }
+
+  .auth-card {
+    padding: 28px 22px;
+    border-radius: 20px;
+  }
 }
 </style>

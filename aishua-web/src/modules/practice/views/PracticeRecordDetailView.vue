@@ -67,6 +67,13 @@
                 <div class="title-cell">
                   <strong>{{ record.questionTitle || '题目已删除' }}</strong>
                   <span>{{ resolveTypeLabel(record.questionType) }}</span>
+                  <QuestionImageList
+                    v-if="record.imageUrls"
+                    :image-urls="record.imageUrls"
+                    :image-desc="record.imageDesc"
+                    :annotation-object-names="resolveImageAnnotationObjectNames(record.userAnswer)"
+                    readonly
+                  />
                 </div>
               </td>
               <td>
@@ -103,12 +110,17 @@ import { useRoute } from 'vue-router'
 import { showToast } from 'vant'
 import BasePagination from '@/components/BasePagination.vue'
 import AnswerCanvasPreview from '@/components/AnswerCanvasPreview.vue'
+import QuestionImageList from '@/components/QuestionImageList.vue'
 import useClientPagination from '@/composables/useClientPagination'
 import {
   hasEssayCanvasMarker,
   parseEssayAnswerPayload,
   stripEssayCanvasMarker
 } from '../../common/utils/essayCanvasAnswer'
+import {
+  parseImageAnnotationPayload,
+  stripImageAnnotationMarkers
+} from '../../common/utils/imageAnnotationAnswer'
 import practiceApi from '../api/practice'
 
 const route = useRoute()
@@ -193,7 +205,8 @@ const resolveUserAnswerCanvasObjectName = (record) => {
   if (!isEssayRecord(record)) {
     return ''
   }
-  const { canvasObjectName } = parseEssayAnswerPayload(record?.userAnswer)
+  const { text } = parseImageAnnotationPayload(record?.userAnswer)
+  const { canvasObjectName } = parseEssayAnswerPayload(text)
   return String(canvasObjectName || '').trim()
 }
 
@@ -201,9 +214,18 @@ const shouldShowUserAnswerCanvas = (record) => {
   return resolveUserAnswerCanvasObjectName(record).length > 0
 }
 
+const resolveImageAnnotationObjectNames = (userAnswer) => {
+  const { annotations } = parseImageAnnotationPayload(userAnswer)
+  return annotations.reduce((result, item) => {
+    result[item.imageObjectName] = item.annotationObjectName
+    return result
+  }, {})
+}
+
 const formatAnswerDisplay = (value) => {
-  const hasCanvasAnswer = hasEssayCanvasMarker(value)
-  const plainAnswer = stripEssayCanvasMarker(value)
+  const answerWithoutImageAnnotations = stripImageAnnotationMarkers(value)
+  const hasCanvasAnswer = hasEssayCanvasMarker(answerWithoutImageAnnotations)
+  const plainAnswer = stripEssayCanvasMarker(answerWithoutImageAnnotations)
   const normalized = String(plainAnswer ?? '').trim()
   if (!normalized) {
     return hasCanvasAnswer ? '已提交手写作答' : '未作答'

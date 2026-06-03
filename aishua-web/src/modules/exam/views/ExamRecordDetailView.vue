@@ -69,6 +69,14 @@
             </div>
           </header>
 
+          <QuestionImageList
+            v-if="item.imageUrls"
+            :image-urls="item.imageUrls"
+            :image-desc="item.imageDesc"
+            :annotation-object-names="resolveImageAnnotationObjectNames(item.userAnswer)"
+            readonly
+          />
+
           <div v-if="isChoiceQuestion(item.type) && parseQuestionOptions(item.options).length" class="option-list">
             <div
               v-for="option in parseQuestionOptions(item.options)"
@@ -108,6 +116,8 @@
 import { onMounted, ref } from 'vue'
 import { useRoute, useRouter } from 'vue-router'
 import { showToast } from 'vant'
+import QuestionImageList from '@/components/QuestionImageList.vue'
+import { parseImageAnnotationPayload } from '../../common/utils/imageAnnotationAnswer'
 import examApi from '../api/exam'
 import {
   formatAnswerDisplay,
@@ -138,6 +148,14 @@ const isSelected = (optionKey, answer) => {
 
 const isWrongSelected = (optionKey, userAnswer, standardAnswer) => {
   return isSelected(optionKey, userAnswer) && !isSelected(optionKey, standardAnswer)
+}
+
+const resolveImageAnnotationObjectNames = (userAnswer) => {
+  const { annotations } = parseImageAnnotationPayload(userAnswer)
+  return annotations.reduce((result, item) => {
+    result[item.imageObjectName] = item.annotationObjectName
+    return result
+  }, {})
 }
 
 const loadDetail = async () => {

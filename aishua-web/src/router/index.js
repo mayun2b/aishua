@@ -2,261 +2,239 @@ import { createRouter, createWebHistory } from 'vue-router'
 import store from '../store'
 import Home from '../views/Home.vue'
 import NotFound from '../views/NotFound.vue'
-import UserLoginView from '../modules/auth/views/UserLoginView.vue'
-import UserRegisterView from '../modules/auth/views/UserRegisterView.vue'
-import UserDashboardView from '../modules/dashboard/views/UserDashboardView.vue'
-import AdminDashboardView from '../modules/admin/views/AdminDashboardView.vue'
-import AdminSubjectManagementView from '../modules/admin/views/AdminSubjectManagementView.vue'
-import AdminDirectoryManagementView from '../modules/admin/views/AdminDirectoryManagementView.vue'
-import AdminTagManagementView from '../modules/admin/views/AdminTagManagementView.vue'
-import AdminQuestionManagementView from '../modules/admin/views/AdminQuestionManagementView.vue'
-import AdminExamManagementView from '../modules/admin/views/AdminExamManagementView.vue'
-import AdminExamQuestionConfigView from '../modules/admin/views/AdminExamQuestionConfigView.vue'
-import SubjectCatalogView from '../modules/subject/views/SubjectCatalogView.vue'
-import MySubjectsView from '../modules/subject/views/MySubjectsView.vue'
-import SubjectDirectoryView from '../modules/subject/views/SubjectDirectoryView.vue'
-import PracticeView from '../modules/practice/views/PracticeView.vue'
-import PracticeSessionView from '../modules/practice/views/PracticeSessionView.vue'
-import PracticeRecordsView from '../modules/practice/views/PracticeRecordsView.vue'
-import PracticeRecordDetailView from '../modules/practice/views/PracticeRecordDetailView.vue'
-import WrongQuestionsView from '../modules/practice/views/WrongQuestionsView.vue'
-import ExamCenterView from '../modules/exam/views/ExamCenterView.vue'
-import ExamSessionView from '../modules/exam/views/ExamSessionView.vue'
-import ExamRecordListView from '../modules/exam/views/ExamRecordListView.vue'
-import ExamRecordDetailView from '../modules/exam/views/ExamRecordDetailView.vue'
-import LearningAnalysisView from '../modules/ai/views/LearningAnalysisView.vue'
+import { navigationState } from './navigationState'
+
+const APP_NAME = 'AI刷题'
+const DEFAULT_TITLE = `${APP_NAME} - 智能知识点强化系统`
+const REDIRECT_BLOCK_PREFIXES = ['/login', '/register']
+
+const withMeta = (title, meta = {}) => ({ title, ...meta })
 
 const routes = [
   {
     path: '/',
     name: 'Home',
-    component: Home
+    component: Home,
+    meta: withMeta('首页')
   },
   {
     path: '/login',
     name: 'UserLogin',
-    component: UserLoginView,
-    meta: {
-      guestOnly: true
-    }
+    component: () => import('../modules/auth/views/UserLoginView.vue'),
+    meta: withMeta('账号登录', { guestOnly: true })
   },
   {
     path: '/register',
     name: 'UserRegister',
-    component: UserRegisterView,
-    meta: {
-      guestOnly: true
-    }
+    component: () => import('../modules/auth/views/UserRegisterView.vue'),
+    meta: withMeta('用户注册', { guestOnly: true })
   },
   {
     path: '/admin-login',
     name: 'AdminLogin',
-    redirect: '/login'
+    redirect: (to) => ({
+      path: '/login',
+      query: to.query,
+      hash: to.hash
+    })
   },
   {
     path: '/dashboard',
     name: 'UserDashboard',
-    component: UserDashboardView,
-    meta: {
-      requiresAuth: true
-    }
+    component: () => import('../modules/dashboard/views/UserDashboardView.vue'),
+    meta: withMeta('学习工作台', { requiresAuth: true })
+  },
+  {
+    path: '/dashboard/screen',
+    name: 'StudyCommandCenter',
+    component: () => import('../modules/dashboard/views/StudyCommandCenterView.vue'),
+    meta: withMeta('学情战情大屏', { requiresAuth: true })
   },
   {
     path: '/subjects',
     name: 'SubjectCatalog',
-    component: SubjectCatalogView,
-    meta: {
-      requiresAuth: true
-    }
+    component: () => import('../modules/subject/views/SubjectCatalogView.vue'),
+    meta: withMeta('学科列表', { requiresAuth: true })
   },
   {
     path: '/my-subjects',
     name: 'MySubjects',
-    component: MySubjectsView,
-    meta: {
-      requiresAuth: true
-    }
+    component: () => import('../modules/subject/views/MySubjectsView.vue'),
+    meta: withMeta('我的学科', { requiresAuth: true })
   },
   {
     path: '/subjects/:subjectId/directories',
     name: 'SubjectDirectories',
-    component: SubjectDirectoryView,
-    meta: {
-      requiresAuth: true
-    }
+    component: () => import('../modules/subject/views/SubjectDirectoryView.vue'),
+    meta: withMeta('目录与考点', { requiresAuth: true })
   },
   {
     path: '/practice',
     name: 'Practice',
-    component: PracticeView,
-    meta: {
-      requiresAuth: true
-    }
+    component: () => import('../modules/practice/views/PracticeView.vue'),
+    meta: withMeta('练习配置', { requiresAuth: true })
   },
   {
     path: '/practice/session/:sessionId',
     name: 'PracticeSession',
-    component: PracticeSessionView,
-    meta: {
-      requiresAuth: true
-    }
+    component: () => import('../modules/practice/views/PracticeSessionView.vue'),
+    meta: withMeta('练习作答', { requiresAuth: true, shell: false })
   },
   {
     path: '/practice-records',
     name: 'PracticeRecords',
-    component: PracticeRecordsView,
-    meta: {
-      requiresAuth: true
-    }
+    component: () => import('../modules/practice/views/PracticeRecordsView.vue'),
+    meta: withMeta('练习记录', { requiresAuth: true })
   },
   {
     path: '/practice-records/:sessionId',
     name: 'PracticeRecordDetail',
-    component: PracticeRecordDetailView,
-    meta: {
-      requiresAuth: true
-    }
+    component: () => import('../modules/practice/views/PracticeRecordDetailView.vue'),
+    meta: withMeta('练习详情', { requiresAuth: true })
   },
   {
     path: '/wrong-questions',
     name: 'WrongQuestions',
-    component: WrongQuestionsView,
-    meta: {
-      requiresAuth: true
-    }
+    component: () => import('../modules/practice/views/WrongQuestionsView.vue'),
+    meta: withMeta('错题记录', { requiresAuth: true })
   },
   {
     path: '/exercise/exam',
     name: 'ExamCenter',
-    component: ExamCenterView,
-    meta: {
-      requiresAuth: true
-    }
+    component: () => import('../modules/exam/views/ExamCenterView.vue'),
+    meta: withMeta('模拟考试', { requiresAuth: true })
   },
   {
     path: '/exercise/exam/session/:recordId',
     name: 'ExamSession',
-    component: ExamSessionView,
-    meta: {
-      requiresAuth: true
-    }
+    component: () => import('../modules/exam/views/ExamSessionView.vue'),
+    meta: withMeta('考试作答', { requiresAuth: true, shell: false })
   },
   {
     path: '/exercise/exam/records',
     name: 'ExamRecords',
-    component: ExamRecordListView,
-    meta: {
-      requiresAuth: true
-    }
+    component: () => import('../modules/exam/views/ExamRecordListView.vue'),
+    meta: withMeta('考试记录', { requiresAuth: true })
   },
   {
     path: '/exercise/exam/records/:recordId',
     name: 'ExamRecordDetail',
-    component: ExamRecordDetailView,
-    meta: {
-      requiresAuth: true
-    }
+    component: () => import('../modules/exam/views/ExamRecordDetailView.vue'),
+    meta: withMeta('考试详情', { requiresAuth: true })
   },
   {
     path: '/learning-analysis',
     name: 'LearningAnalysis',
-    component: LearningAnalysisView,
-    meta: {
-      requiresAuth: true
-    }
+    component: () => import('../modules/ai/views/LearningAnalysisView.vue'),
+    meta: withMeta('学情分析', { requiresAuth: true })
   },
   {
     path: '/admin',
     name: 'AdminDashboard',
-    component: AdminDashboardView,
-    meta: {
-      requiresAuth: true,
-      requiresAdmin: true
-    }
+    component: () => import('../modules/admin/views/AdminDashboardView.vue'),
+    meta: withMeta('管理台总览', { requiresAuth: true, requiresAdmin: true })
   },
   {
     path: '/admin/subjects',
     name: 'AdminSubjectManagement',
-    component: AdminSubjectManagementView,
-    meta: {
-      requiresAuth: true,
-      requiresAdmin: true
-    }
+    component: () => import('../modules/admin/views/AdminSubjectManagementView.vue'),
+    meta: withMeta('管理台 / 学科管理', { requiresAuth: true, requiresAdmin: true })
   },
   {
     path: '/admin/directories',
     name: 'AdminDirectoryManagement',
-    component: AdminDirectoryManagementView,
-    meta: {
-      requiresAuth: true,
-      requiresAdmin: true
-    }
+    component: () => import('../modules/admin/views/AdminDirectoryManagementView.vue'),
+    meta: withMeta('管理台 / 目录管理', { requiresAuth: true, requiresAdmin: true })
   },
   {
     path: '/admin/tags',
     name: 'AdminTagManagement',
-    component: AdminTagManagementView,
-    meta: {
-      requiresAuth: true,
-      requiresAdmin: true
-    }
+    component: () => import('../modules/admin/views/AdminTagManagementView.vue'),
+    meta: withMeta('管理台 / 标签管理', { requiresAuth: true, requiresAdmin: true })
   },
   {
     path: '/admin/questions',
     name: 'AdminQuestionManagement',
-    component: AdminQuestionManagementView,
-    meta: {
-      requiresAuth: true,
-      requiresAdmin: true
-    }
+    component: () => import('../modules/admin/views/AdminQuestionManagementView.vue'),
+    meta: withMeta('管理台 / 题目管理', { requiresAuth: true, requiresAdmin: true })
   },
   {
     path: '/admin/exams',
     name: 'AdminExamManagement',
-    component: AdminExamManagementView,
-    meta: {
-      requiresAuth: true,
-      requiresAdmin: true
-    }
+    component: () => import('../modules/admin/views/AdminExamManagementView.vue'),
+    meta: withMeta('管理台 / 试卷管理', { requiresAuth: true, requiresAdmin: true })
   },
   {
     path: '/admin/exams/:paperId/questions',
     name: 'AdminExamQuestionConfig',
-    component: AdminExamQuestionConfigView,
-    meta: {
-      requiresAuth: true,
-      requiresAdmin: true
-    }
+    component: () => import('../modules/admin/views/AdminExamQuestionConfigView.vue'),
+    meta: withMeta('管理台 / 配置试题', { requiresAuth: true, requiresAdmin: true })
   },
   {
     path: '/:pathMatch(.*)*',
     name: 'NotFound',
-    component: NotFound
+    component: NotFound,
+    meta: withMeta('页面未找到')
   }
 ]
 
 const router = createRouter({
   history: createWebHistory(),
-  routes
+  routes,
+  scrollBehavior(to, from, savedPosition) {
+    if (savedPosition) {
+      return savedPosition
+    }
+
+    if (to.hash) {
+      return {
+        el: to.hash,
+        top: 80,
+        behavior: 'smooth'
+      }
+    }
+
+    return {
+      left: 0,
+      top: 0,
+      behavior: from.name ? 'smooth' : 'auto'
+    }
+  }
 })
 
-// 已登录用户访问访客页时，按角色直接回到对应工作台。
 function resolveAuthenticatedHome() {
   return store.getters['auth/isAdmin'] ? '/admin' : '/dashboard'
 }
 
-// 全局前置守卫：统一处理登录态、访客页和管理员权限。
+function normalizeRedirectPath(path) {
+  if (typeof path !== 'string') {
+    return ''
+  }
+
+  const normalizedPath = path.trim()
+  if (!normalizedPath || !normalizedPath.startsWith('/')) {
+    return ''
+  }
+
+  const isBlockedPath = REDIRECT_BLOCK_PREFIXES.some((prefix) => {
+    return normalizedPath === prefix || normalizedPath.startsWith(`${prefix}?`)
+  })
+  return isBlockedPath ? '' : normalizedPath
+}
+
 router.beforeEach((to, from, next) => {
+  navigationState.pending = true
+
   const isAuthenticated = store.getters['auth/isAuthenticated']
   const isAdmin = store.getters['auth/isAdmin']
+  const redirectPath = normalizeRedirectPath(to.query?.redirect)
 
   if (to.meta.guestOnly && isAuthenticated) {
-    next(resolveAuthenticatedHome())
+    next(redirectPath || resolveAuthenticatedHome())
     return
   }
 
   if (to.meta.requiresAuth && !isAuthenticated) {
-    // 记录原始目标地址，登录后可以回跳
     next({
       path: '/login',
       query: {
@@ -267,11 +245,23 @@ router.beforeEach((to, from, next) => {
   }
 
   if (to.meta.requiresAdmin && !isAdmin) {
-    next('/dashboard')
+    next(resolveAuthenticatedHome())
     return
   }
 
   next()
+})
+
+router.afterEach((to) => {
+  const pageTitle = typeof to.meta?.title === 'string' && to.meta.title
+    ? `${to.meta.title} - ${APP_NAME}`
+    : DEFAULT_TITLE
+  document.title = pageTitle
+  navigationState.pending = false
+})
+
+router.onError(() => {
+  navigationState.pending = false
 })
 
 export default router

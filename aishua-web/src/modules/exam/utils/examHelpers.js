@@ -1,4 +1,5 @@
 import { hasEssayCanvasMarker, stripEssayCanvasMarker } from '../../common/utils/essayCanvasAnswer'
+import { stripImageAnnotationMarkers } from '../../common/utils/imageAnnotationAnswer'
 
 const OPTION_LABEL_REGEX = /^\s*([A-Za-z])[.、)\]:：]\s*(.+)$/
 const BOOLEAN_TEXT_REGEX =
@@ -190,7 +191,7 @@ export function toAnswerTokens(answer) {
       .filter(Boolean)
   }
 
-  const text = String(answer).trim()
+  const text = stripImageAnnotationMarkers(answer).trim()
   if (!text) {
     return []
   }
@@ -218,8 +219,9 @@ export function toAnswerTokens(answer) {
 }
 
 export function formatAnswerDisplay(answer) {
-  const hasCanvasDraft = hasEssayCanvasMarker(answer)
-  const plainAnswer = stripEssayCanvasMarker(answer)
+  const answerWithoutImageAnnotations = stripImageAnnotationMarkers(answer)
+  const hasCanvasDraft = hasEssayCanvasMarker(answerWithoutImageAnnotations)
+  const plainAnswer = stripEssayCanvasMarker(answerWithoutImageAnnotations)
   const tokens = toAnswerTokens(plainAnswer)
   if (!tokens.length) {
     const raw = String(plainAnswer ?? '').trim()
