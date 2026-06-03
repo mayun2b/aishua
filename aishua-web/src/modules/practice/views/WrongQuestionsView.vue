@@ -29,7 +29,7 @@
 
         <label>
           <span>目录</span>
-          <select v-model="filters.directoryId">
+          <select v-model="filters.directoryId" :disabled="!filters.subjectId">
             <option value="">全部目录</option>
             <option v-for="directory in directoryOptions" :key="directory.directoryId" :value="String(directory.directoryId)">
               {{ directory.directoryName }}
@@ -89,7 +89,7 @@
     <section class="table-card">
       <div class="table-head">
         <h2>错题列表</h2>
-        <span>{{ wrongQuestions.length }} 条</span>
+        <span>{{ wrongQuestionTotal }} 条</span>
       </div>
 
       <div v-if="loading" class="empty-state">正在加载错题记录...</div>
@@ -110,7 +110,7 @@
             </tr>
           </thead>
           <tbody>
-            <tr v-for="question in pagedWrongQuestions" :key="question.wrongQuestionId">
+            <tr v-for="question in wrongQuestions" :key="question.wrongQuestionId">
               <td>
                 <div class="title-cell">
                   <strong>{{ question.questionTitle || '题目已删除' }}</strong>
@@ -169,9 +169,11 @@
       </div>
 
       <BasePagination
-        v-if="!loading && wrongQuestions.length"
-        v-model="currentPage"
-        :total="wrongQuestions.length"
+        v-if="!loading && wrongQuestionTotal"
+        :model-value="wrongQuestionPage"
+        :total="wrongQuestionTotal"
+        :page-size="wrongQuestionPageSize"
+        @update:modelValue="changeWrongQuestionPage"
       />
     </section>
 
@@ -279,7 +281,7 @@ import { computed, onBeforeUnmount, onMounted, reactive, ref, watch } from 'vue'
 import { useRoute } from 'vue-router'
 import { showToast } from 'vant'
 import BasePagination from '@/components/BasePagination.vue'
-import useClientPagination from '@/composables/useClientPagination'
+import { normalizePageResult } from '../../common/utils/pageResult'
 import { hasEssayCanvasMarker, stripEssayCanvasMarker } from '../../common/utils/essayCanvasAnswer'
 import subjectApi from '../../subject/api/subject'
 import practiceApi from '../api/practice'
@@ -289,7 +291,10 @@ const route = useRoute()
 const loading = ref(false)
 const subjects = ref([])
 const wrongQuestions = ref([])
-const { currentPage, pagedItems: pagedWrongQuestions, resetPage } = useClientPagination(wrongQuestions)
+const wrongQuestionTotal = ref(0)
+const wrongQuestionPage = ref(1)
+const wrongQuestionPageSize = 10
+const directoryOptions = ref([])
 const masterStatusLoadingId = ref(null)
 
 const trendDayOptions = [7, 30, 90]
@@ -311,22 +316,6 @@ const filters = reactive({
   subjectId: '',
   directoryId: '',
   masterStatus: ''
-})
-
-const directoryOptions = computed(() => {
-  const directoryMap = new Map()
-  for (const item of wrongQuestions.value) {
-    if (!item?.directoryId) {
-      continue
-    }
-    if (!directoryMap.has(item.directoryId)) {
-      directoryMap.set(item.directoryId, {
-        directoryId: item.directoryId,
-        directoryName: item.directoryName || `目录 ${item.directoryId}`
-      })
-    }
-  }
-  return Array.from(directoryMap.values()).sort((left, right) => String(left.directoryName).localeCompare(String(right.directoryName), 'zh-CN'))
 })
 
 const trendMax = computed(() => Math.max(...wrongTrendItems.value.map((item) => Number(item.wrongAnswerCount || 0)), 1))
@@ -367,16 +356,56 @@ const loadSubjects = async () => {
   }
 }
 
-const loadWrongQuestions = async () => {
+const flattenDirectories = (nodes, level = 0) => {
+  const result = []
+  for (const node of nodes || []) {
+    result.push({
+      directoryId: node.id,
+      directoryName: `${'　'.repeat(level)}${node.name}`
+    })
+    if (node.children?.length) {
+      result.push(...flattenDirectories(node.children, level + 1))
+    }
+  }
+  return result
+}
+
+const loadDirectoryOptions = async (subjectId) => {
+  if (!subjectId) {
+    directoryOptions.value = []
+    return
+  }
+
+  try {
+    const response = await subjectApi.listDirectories(Number(subjectId))
+    directoryOptions.value = flattenDirectories(response.data || [])
+  } catch (error) {
+    directoryOptions.value = []
+    showToast(error.message || '加载目录失败')
+  }
+}
+
+const loadWrongQuestions = async ({ resetPage = false } = {}) => {
+  if (resetPage) {
+    wrongQuestionPage.value = 1
+  }
+
   loading.value = true
   try {
     const response = await practiceApi.listWrongQuestions({
       subjectId: filters.subjectId ? Number(filters.subjectId) : undefined,
       directoryId: filters.directoryId ? Number(filters.directoryId) : undefined,
-      masterStatus: filters.masterStatus === '' ? undefined : Number(filters.masterStatus)
+      masterStatus: filters.masterStatus === '' ? undefined : Number(filters.masterStatus),
+      pageNum: wrongQuestionPage.value,
+      pageSize: wrongQuestionPageSize
     })
-    wrongQuestions.value = response.data || []
-    resetPage()
+    const page = normalizePageResult(response.data, {
+      pageNum: wrongQuestionPage.value,
+      pageSize: wrongQuestionPageSize
+    })
+    wrongQuestions.value = page.records
+    wrongQuestionTotal.value = page.total
+    wrongQuestionPage.value = page.pageNum
   } catch (error) {
     showToast(error.message || '加载错题记录失败')
   } finally {
@@ -384,12 +413,21 @@ const loadWrongQuestions = async () => {
   }
 }
 
+const changeWrongQuestionPage = async (page) => {
+  if (page === wrongQuestionPage.value) {
+    return
+  }
+  wrongQuestionPage.value = page
+  await loadWrongQuestions()
+}
+
 const resetFilters = async () => {
   filters.subjectId = resolveRouteSubjectId()
   filters.directoryId = ''
   filters.masterStatus = ''
   selectedTrendDays.value = 30
-  await loadWrongQuestions()
+  await loadDirectoryOptions(filters.subjectId)
+  await loadWrongQuestions({ resetPage: true })
   await loadWrongTrends()
 }
 
@@ -411,7 +449,7 @@ const loadWrongTrends = async () => {
 }
 
 const applyFilters = async () => {
-  await loadWrongQuestions()
+  await loadWrongQuestions({ resetPage: true })
   await loadWrongTrends()
 }
 
@@ -840,14 +878,16 @@ watch(
   async () => {
     filters.subjectId = resolveRouteSubjectId()
     filters.directoryId = ''
+    await loadDirectoryOptions(filters.subjectId)
     await applyFilters()
   }
 )
 
 watch(
   () => filters.subjectId,
-  () => {
+  async (subjectId) => {
     filters.directoryId = ''
+    await loadDirectoryOptions(subjectId)
   }
 )
 
@@ -865,6 +905,7 @@ onMounted(() => {
 onMounted(async () => {
   filters.subjectId = resolveRouteSubjectId()
   await loadSubjects()
+  await loadDirectoryOptions(filters.subjectId)
   await applyFilters()
 })
 

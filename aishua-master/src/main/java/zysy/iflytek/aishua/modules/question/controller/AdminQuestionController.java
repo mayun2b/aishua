@@ -14,13 +14,12 @@ import org.springframework.web.bind.annotation.RequestMapping;
 import org.springframework.web.bind.annotation.RequestParam;
 import org.springframework.web.bind.annotation.RestController;
 import zysy.iflytek.aishua.common.context.UserContext;
+import zysy.iflytek.aishua.common.result.PageResult;
 import zysy.iflytek.aishua.common.result.Result;
 import zysy.iflytek.aishua.common.security.AdminAccess;
 import zysy.iflytek.aishua.modules.question.entity.dto.QuestionUpsertDTO;
 import zysy.iflytek.aishua.modules.question.entity.vo.QuestionVO;
 import zysy.iflytek.aishua.modules.question.service.QuestionService;
-
-import java.util.List;
 
 /**
  * 题目控制器，提供该领域对外接口入口。
@@ -44,18 +43,21 @@ public class AdminQuestionController {
      * 处理查询请求并返回结果。
      */
     @GetMapping
-    public Result<List<QuestionVO>> list(
+    public Result<PageResult<QuestionVO>> list(
             @RequestParam(required = false) @Min(value = 1, message = "学科编号不合法") Long subjectId,
             @RequestParam(required = false) @Min(value = 1, message = "目录编号不合法") Long directoryId,
             @RequestParam(required = false) @Min(value = 1, message = "难度范围为 1-3")
             @Max(value = 3, message = "难度范围为 1-3") Integer difficulty,
             @RequestParam(required = false) @Min(value = 1, message = "题型范围为 1-5")
             @Max(value = 5, message = "题型范围为 1-5") Integer type,
-            @RequestParam(required = false) String keyword
+            @RequestParam(required = false) String keyword,
+            @RequestParam(defaultValue = "1") @Min(value = 1, message = "页码必须大于 0") Integer pageNum,
+            @RequestParam(defaultValue = "10") @Min(value = 1, message = "每页数量必须大于 0")
+            @Max(value = 100, message = "每页数量不能超过 100") Integer pageSize
     ) {
         adminAccess.ensureAdmin(UserContext.requireUserId());
         // 调用服务层处理业务并封装统一响应。
-        return Result.success(questionService.listQuestions(subjectId, directoryId, difficulty, type, keyword));
+        return Result.success(questionService.listQuestions(subjectId, directoryId, difficulty, type, keyword, pageNum, pageSize));
     }
 
     /**

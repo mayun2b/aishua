@@ -7,6 +7,7 @@ import lombok.extern.slf4j.Slf4j;
 import org.springframework.stereotype.Service;
 import org.springframework.transaction.annotation.Transactional;
 import zysy.iflytek.aishua.common.exception.BusinessException;
+import zysy.iflytek.aishua.common.result.PageResult;
 import zysy.iflytek.aishua.modules.directory.entity.TextbookDirectory;
 import zysy.iflytek.aishua.modules.directory.mapper.TextbookDirectoryMapper;
 import zysy.iflytek.aishua.modules.directory.support.DirectoryScopeResolver;
@@ -70,7 +71,45 @@ public class QuestionServiceImpl implements QuestionService {
      * 执行查询业务流程并返回结果。
      */
     @Override
-    public List<QuestionVO> listQuestions(Long subjectId, Long directoryId, Integer difficulty, Integer type, String keyword) {
+    public PageResult<QuestionVO> listQuestions(
+            Long subjectId,
+            Long directoryId,
+            Integer difficulty,
+            Integer type,
+            String keyword,
+            Integer pageNum,
+            Integer pageSize
+    ) {
+        int safePageNum = PageResult.normalizePageNum(pageNum);
+        int safePageSize = PageResult.normalizePageSize(pageSize);
+        LambdaQueryWrapper<Question> countWrapper = buildQuestionQuery(subjectId, directoryId, difficulty, type, keyword);
+        if (countWrapper == null) {
+            return PageResult.empty(safePageNum, safePageSize);
+        }
+
+        Long total = questionMapper.selectCount(countWrapper);
+        if (total == null || total <= 0) {
+            return PageResult.empty(safePageNum, safePageSize);
+        }
+
+        LambdaQueryWrapper<Question> queryWrapper = buildQuestionQuery(subjectId, directoryId, difficulty, type, keyword);
+        if (queryWrapper == null) {
+            return PageResult.empty(safePageNum, safePageSize);
+        }
+        queryWrapper.orderByDesc(Question::getUpdateTime)
+                .orderByDesc(Question::getId)
+                .last("LIMIT " + PageResult.offset(safePageNum, safePageSize) + ", " + safePageSize);
+        List<Question> questions = questionMapper.selectList(queryWrapper);
+        return PageResult.of(buildQuestionVOs(questions), total, safePageNum, safePageSize);
+    }
+
+    private LambdaQueryWrapper<Question> buildQuestionQuery(
+            Long subjectId,
+            Long directoryId,
+            Integer difficulty,
+            Integer type,
+            String keyword
+    ) {
         LambdaQueryWrapper<Question> queryWrapper = new LambdaQueryWrapper<>();
         if (subjectId != null) {
             requireSubject(subjectId);
@@ -80,7 +119,7 @@ public class QuestionServiceImpl implements QuestionService {
             // 目录筛选包含当前目录及其所有子目录，避免父目录筛选不到子目录题目。
             List<Long> directoryIds = directoryScopeResolver.resolveSelfAndDescendants(directoryId, subjectId);
             if (directoryIds.isEmpty()) {
-                return Collections.emptyList();
+                return null;
             }
             queryWrapper.in(Question::getDirectoryId, directoryIds);
         }
@@ -99,9 +138,7 @@ public class QuestionServiceImpl implements QuestionService {
                     .or()
                     .like(Question::getAnswer, trimmed));
         }
-        queryWrapper.orderByDesc(Question::getUpdateTime).orderByDesc(Question::getId);
-        List<Question> questions = questionMapper.selectList(queryWrapper);
-        return buildQuestionVOs(questions);
+        return queryWrapper;
     }
 
     /**

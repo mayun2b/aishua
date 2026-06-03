@@ -15,6 +15,7 @@ import org.springframework.web.bind.annotation.RequestMapping;
 import org.springframework.web.bind.annotation.RequestParam;
 import org.springframework.web.bind.annotation.RestController;
 import zysy.iflytek.aishua.common.context.UserContext;
+import zysy.iflytek.aishua.common.result.PageResult;
 import zysy.iflytek.aishua.common.result.Result;
 import zysy.iflytek.aishua.common.security.AdminAccess;
 import zysy.iflytek.aishua.modules.exam.entity.dto.AdminExamPaperQuestionAssignDTO;
@@ -191,16 +192,19 @@ public class AdminExamController {
      * 处理查询请求并返回结果。
      */
     @GetMapping("/records")
-    public Result<List<ExamRecordSummaryVO>> listRecords(
+    public Result<PageResult<ExamRecordSummaryVO>> listRecords(
             @RequestParam(required = false) @Min(value = 1, message = "学科编号不合法") Long subjectId,
             @RequestParam(required = false) @Min(value = 1, message = "用户编号不合法") Long userId,
             @RequestParam(required = false) String keyword,
             @RequestParam(required = false) @DateTimeFormat(iso = DateTimeFormat.ISO.DATE) LocalDate startDate,
-            @RequestParam(required = false) @DateTimeFormat(iso = DateTimeFormat.ISO.DATE) LocalDate endDate
+            @RequestParam(required = false) @DateTimeFormat(iso = DateTimeFormat.ISO.DATE) LocalDate endDate,
+            @RequestParam(defaultValue = "1") @Min(value = 1, message = "页码必须大于 0") Integer pageNum,
+            @RequestParam(defaultValue = "10") @Min(value = 1, message = "每页数量必须大于 0")
+            @Max(value = 100, message = "每页数量不能超过 100") Integer pageSize
     ) {
         adminAccess.ensureAdmin(UserContext.requireUserId());
         // 调用服务层处理业务并封装统一响应。
-        return Result.success(examService.listAdminRecords(subjectId, userId, keyword, startDate, endDate));
+        return Result.success(examService.listAdminRecords(subjectId, userId, keyword, startDate, endDate, pageNum, pageSize));
     }
 
     /**

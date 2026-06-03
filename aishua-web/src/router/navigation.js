@@ -102,6 +102,13 @@ const ADMIN_SECTION = {
       match: ['/admin/tags']
     },
     {
+      key: 'admin-directory-tags',
+      label: '目录-考点',
+      to: '/admin/directory-tags',
+      icon: '↔',
+      match: ['/admin/directory-tags']
+    },
+    {
       key: 'admin-questions',
       label: '题库管理',
       to: '/admin/questions',

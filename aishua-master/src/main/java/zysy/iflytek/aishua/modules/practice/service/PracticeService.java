@@ -1,5 +1,6 @@
 package zysy.iflytek.aishua.modules.practice.service;
 
+import zysy.iflytek.aishua.common.result.PageResult;
 import zysy.iflytek.aishua.modules.practice.entity.dto.PracticeBatchSubmitDTO;
 import zysy.iflytek.aishua.modules.practice.entity.dto.PracticeDraftSaveDTO;
 import zysy.iflytek.aishua.modules.practice.entity.dto.PracticeStartDTO;
@@ -49,7 +50,7 @@ public interface PracticeService {
     /**
      * 查询练习会话列表，可按学科筛选。
      */
-    List<PracticeSessionSummaryVO> listPracticeSessions(Long userId, Long subjectId);
+    PageResult<PracticeSessionSummaryVO> listPracticeSessions(Long userId, Long subjectId, Integer pageNum, Integer pageSize);
 
     /**
      * 查询单个练习会话明细。
@@ -59,12 +60,19 @@ public interface PracticeService {
     /**
      * 查询做题记录（含题目与作答信息）。
      */
-    List<PracticeExerciseRecordVO> listExerciseRecords(Long userId, Long subjectId);
+    PageResult<PracticeExerciseRecordVO> listExerciseRecords(Long userId, Long subjectId, Integer pageNum, Integer pageSize);
 
     /**
      * 查询错题列表，支持按目录和掌握状态筛选。
      */
-    List<PracticeWrongQuestionVO> listWrongQuestions(Long userId, Long subjectId, Long directoryId, Integer masterStatus);
+    PageResult<PracticeWrongQuestionVO> listWrongQuestions(
+            Long userId,
+            Long subjectId,
+            Long directoryId,
+            Integer masterStatus,
+            Integer pageNum,
+            Integer pageSize
+    );
 
     /**
      * 更新错题掌握状态（未掌握/已掌握）。

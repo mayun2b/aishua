@@ -163,6 +163,8 @@ const resolveModeLabel = (mode) => {
       return '随机练习'
     case 3:
       return '知识点练习'
+    case 4:
+      return '错题重练'
     default:
       return mode ? `模式 ${mode}` : '-'
   }

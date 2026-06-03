@@ -1111,7 +1111,7 @@ CREATE TABLE `practice_session`  (
   `session_code` varchar(64) CHARACTER SET utf8mb4 COLLATE utf8mb4_0900_ai_ci NOT NULL COMMENT '会话唯一编码',
   `user_id` bigint NOT NULL COMMENT '用户ID',
   `subject_id` bigint NULL DEFAULT NULL COMMENT '学科ID，学科被物理删除时保留历史会话并置空',
-  `practice_mode` tinyint NOT NULL COMMENT '练习模式：1-顺序，2-随机，3-错题重练，4-AI强化',
+  `practice_mode` tinyint NOT NULL COMMENT '练习模式：1-顺序，2-随机，3-知识点练习，4-错题重练',
   `question_count` int NULL DEFAULT 0 COMMENT '计划题目数',
   `answered_count` int NULL DEFAULT 0 COMMENT '已答数',
   `correct_count` int NULL DEFAULT 0 COMMENT '答对数',

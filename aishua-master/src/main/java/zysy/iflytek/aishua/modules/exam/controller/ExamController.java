@@ -1,6 +1,7 @@
 package zysy.iflytek.aishua.modules.exam.controller;
 
 import jakarta.validation.Valid;
+import jakarta.validation.constraints.Max;
 import jakarta.validation.constraints.Min;
 import org.springframework.format.annotation.DateTimeFormat;
 import org.springframework.validation.annotation.Validated;
@@ -12,6 +13,7 @@ import org.springframework.web.bind.annotation.RequestMapping;
 import org.springframework.web.bind.annotation.RequestParam;
 import org.springframework.web.bind.annotation.RestController;
 import zysy.iflytek.aishua.common.context.UserContext;
+import zysy.iflytek.aishua.common.result.PageResult;
 import zysy.iflytek.aishua.common.result.Result;
 import zysy.iflytek.aishua.modules.exam.entity.dto.ExamStartDTO;
 import zysy.iflytek.aishua.modules.exam.entity.dto.ExamSubmitDTO;
@@ -82,11 +84,18 @@ public class ExamController {
      * 处理查询请求并返回结果。
      */
     @GetMapping("/records/me")
-    public Result<List<ExamRecordSummaryVO>> listMyRecords() {
+    public Result<PageResult<ExamRecordSummaryVO>> listMyRecords(
+            @RequestParam(required = false) @Min(value = 1, message = "学科编号不合法") Long subjectId,
+            @RequestParam(required = false) @Min(value = 1, message = "状态不合法")
+            @Max(value = 2, message = "状态不合法") Integer status,
+            @RequestParam(defaultValue = "1") @Min(value = 1, message = "页码必须大于 0") Integer pageNum,
+            @RequestParam(defaultValue = "10") @Min(value = 1, message = "每页数量必须大于 0")
+            @Max(value = 100, message = "每页数量不能超过 100") Integer pageSize
+    ) {
         // 从用户上下文获取当前登录用户编号。
         Long userId = UserContext.requireUserId();
         // 调用服务层处理业务并封装统一响应。
-        return Result.success(examService.listMyRecords(userId));
+        return Result.success(examService.listMyRecords(userId, subjectId, status, pageNum, pageSize));
     }
 
     /**

@@ -10,8 +10,8 @@ export default {
   submit(recordId, payload) {
     return request.post(`/exam/${recordId}/submit`, payload)
   },
-  listMyRecords() {
-    return request.get('/exam/records/me')
+  listMyRecords(params) {
+    return request.get('/exam/records/me', { params })
   },
   getMyRecord(recordId) {
     return request.get(`/exam/records/${recordId}`)

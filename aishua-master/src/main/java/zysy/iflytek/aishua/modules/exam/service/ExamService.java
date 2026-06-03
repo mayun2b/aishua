@@ -1,5 +1,6 @@
 package zysy.iflytek.aishua.modules.exam.service;
 
+import zysy.iflytek.aishua.common.result.PageResult;
 import zysy.iflytek.aishua.modules.exam.entity.dto.AdminExamPaperQuestionAssignDTO;
 import zysy.iflytek.aishua.modules.exam.entity.dto.AdminExamPaperUpsertDTO;
 import zysy.iflytek.aishua.modules.exam.entity.dto.ExamStartDTO;
@@ -51,7 +52,15 @@ public interface ExamService {
             Integer pageSize
     );
 
-    List<ExamRecordSummaryVO> listAdminRecords(Long subjectId, Long userId, String keyword, LocalDate startDate, LocalDate endDate);
+    PageResult<ExamRecordSummaryVO> listAdminRecords(
+            Long subjectId,
+            Long userId,
+            String keyword,
+            LocalDate startDate,
+            LocalDate endDate,
+            Integer pageNum,
+            Integer pageSize
+    );
 
     ExamRecordSummaryVO getAdminRecord(Long recordId);
 
@@ -63,7 +72,7 @@ public interface ExamService {
 
     ExamSubmitResultVO submitExam(Long userId, Long recordId, ExamSubmitDTO submitDTO);
 
-    List<ExamRecordSummaryVO> listMyRecords(Long userId);
+    PageResult<ExamRecordSummaryVO> listMyRecords(Long userId, Long subjectId, Integer status, Integer pageNum, Integer pageSize);
 
     ExamRecordSummaryVO getMyRecord(Long userId, Long recordId);
 

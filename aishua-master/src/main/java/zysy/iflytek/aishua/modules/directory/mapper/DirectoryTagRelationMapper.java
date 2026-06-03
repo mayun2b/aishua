@@ -1,6 +1,7 @@
 package zysy.iflytek.aishua.modules.directory.mapper;
 
 import com.baomidou.mybatisplus.core.mapper.BaseMapper;
+import org.apache.ibatis.annotations.Delete;
 import org.apache.ibatis.annotations.Mapper;
 import zysy.iflytek.aishua.modules.directory.entity.DirectoryTagRelation;
 
@@ -9,5 +10,6 @@ import zysy.iflytek.aishua.modules.directory.entity.DirectoryTagRelation;
  */
 @Mapper
 public interface DirectoryTagRelationMapper extends BaseMapper<DirectoryTagRelation> {
+    @Delete("DELETE FROM directory_tag_relation WHERE id = #{id}")
+    int hardDeleteById(Long id);
 }
-

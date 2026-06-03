@@ -41,18 +41,18 @@
       </div>
       <div class="filter-actions">
         <button type="button" class="ghost" @click="resetFilters">重置</button>
-        <button type="button" @click="loadRecords">刷新</button>
+        <button type="button" @click="loadRecords({ resetPage: true })">刷新</button>
       </div>
     </section>
 
     <section class="table-card">
       <div class="table-head">
         <h2>记录列表</h2>
-        <span>{{ filteredRecords.length }} 条</span>
+        <span>{{ recordTotal }} 条</span>
       </div>
 
       <div v-if="loading" class="empty-state">正在加载考试记录...</div>
-      <div v-else-if="!filteredRecords.length" class="empty-state">暂无考试记录</div>
+      <div v-else-if="!records.length" class="empty-state">暂无考试记录</div>
       <div v-else class="table-wrap">
         <table>
           <thead>
@@ -68,7 +68,7 @@
             </tr>
           </thead>
           <tbody>
-            <tr v-for="record in filteredRecords" :key="record.id">
+            <tr v-for="record in records" :key="record.id">
               <td>{{ record.examName || '-' }}</td>
               <td>{{ record.subjectName || '-' }}</td>
               <td>{{ formatScore(record.score) }}</td>
@@ -103,13 +103,23 @@
           </tbody>
         </table>
       </div>
+      <BasePagination
+        v-if="!loading && recordTotal"
+        :model-value="recordPage"
+        :total="recordTotal"
+        :page-size="recordPageSize"
+        @update:modelValue="changeRecordPage"
+      />
     </section>
   </div>
 </template>
 
 <script setup>
-import { computed, onMounted, reactive, ref } from 'vue'
+import { onMounted, reactive, ref } from 'vue'
 import { showToast } from 'vant'
+import BasePagination from '@/components/BasePagination.vue'
+import { normalizePageResult } from '../../common/utils/pageResult'
+import subjectApi from '../../subject/api/subject'
 import examApi from '../api/exam'
 import {
   buildSessionCacheKey,
@@ -121,45 +131,52 @@ import {
 
 const loading = ref(false)
 const records = ref([])
+const subjectOptions = ref([])
+const recordTotal = ref(0)
+const recordPage = ref(1)
+const recordPageSize = 10
 
 const filters = reactive({
   subjectId: '',
   status: ''
 })
 
-const subjectOptions = computed(() => {
-  const map = new Map()
-  for (const item of records.value) {
-    if (!item?.subjectId) {
-      continue
-    }
-    if (!map.has(item.subjectId)) {
-      map.set(item.subjectId, {
-        id: item.subjectId,
-        name: item.subjectName || `学科 ${item.subjectId}`
-      })
-    }
-  }
-  return [...map.values()]
-})
-
-const filteredRecords = computed(() => {
-  return records.value.filter((item) => {
-    const subjectMatched = !filters.subjectId || String(item.subjectId) === filters.subjectId
-    const statusMatched = !filters.status || String(item.status) === filters.status
-    return subjectMatched && statusMatched
-  })
-})
-
 const hasSessionCache = (recordId) => {
   return Boolean(sessionStorage.getItem(buildSessionCacheKey(recordId)))
 }
 
-const loadRecords = async () => {
+const loadSubjects = async () => {
+  try {
+    const response = await subjectApi.listMySubjects()
+    subjectOptions.value = (response.data || []).map((subject) => ({
+      id: subject.subjectId,
+      name: subject.name || `学科 ${subject.subjectId}`
+    }))
+  } catch (error) {
+    showToast(error.message || '加载学科失败')
+  }
+}
+
+const loadRecords = async ({ resetPage = false } = {}) => {
+  if (resetPage) {
+    recordPage.value = 1
+  }
+
   loading.value = true
   try {
-    const response = await examApi.listMyRecords()
-    records.value = response.data || []
+    const response = await examApi.listMyRecords({
+      subjectId: filters.subjectId ? Number(filters.subjectId) : undefined,
+      status: filters.status === '' ? undefined : Number(filters.status),
+      pageNum: recordPage.value,
+      pageSize: recordPageSize
+    })
+    const page = normalizePageResult(response.data, {
+      pageNum: recordPage.value,
+      pageSize: recordPageSize
+    })
+    records.value = page.records
+    recordTotal.value = page.total
+    recordPage.value = page.pageNum
   } catch (error) {
     showToast(error.message || '加载考试记录失败')
   } finally {
@@ -167,13 +184,23 @@ const loadRecords = async () => {
   }
 }
 
-const resetFilters = () => {
-  filters.subjectId = ''
-  filters.status = ''
+const changeRecordPage = async (page) => {
+  if (page === recordPage.value) {
+    return
+  }
+  recordPage.value = page
+  await loadRecords()
 }
 
-onMounted(() => {
-  loadRecords()
+const resetFilters = async () => {
+  filters.subjectId = ''
+  filters.status = ''
+  await loadRecords({ resetPage: true })
+}
+
+onMounted(async () => {
+  await loadSubjects()
+  await loadRecords()
 })
 </script>
 

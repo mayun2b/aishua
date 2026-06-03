@@ -30,7 +30,7 @@
 
         <label>
           <span>目录</span>
-          <select v-model="filters.directoryId" @change="loadQuestions">
+          <select v-model="filters.directoryId" @change="loadQuestions({ resetPage: true })">
             <option value="">全部目录</option>
             <option
               v-for="directory in filterDirectoryOptions"
@@ -44,7 +44,7 @@
 
         <label>
           <span>题型</span>
-          <select v-model="filters.type" @change="loadQuestions">
+          <select v-model="filters.type" @change="loadQuestions({ resetPage: true })">
             <option value="">全部题型</option>
             <option v-for="item in QUESTION_TYPES" :key="item.value" :value="String(item.value)">
               {{ item.label }}
@@ -54,7 +54,7 @@
 
         <label>
           <span>难度</span>
-          <select v-model="filters.difficulty" @change="loadQuestions">
+          <select v-model="filters.difficulty" @change="loadQuestions({ resetPage: true })">
             <option value="">全部难度</option>
             <option v-for="item in DIFFICULTY_OPTIONS" :key="item.value" :value="String(item.value)">
               {{ item.label }}
@@ -68,7 +68,7 @@
             v-model.trim="filters.keyword"
             type="text"
             placeholder="按题干、内容、答案搜索"
-            @keyup.enter="loadQuestions"
+            @keyup.enter="loadQuestions({ resetPage: true })"
           />
         </label>
       </div>
@@ -76,14 +76,14 @@
       <div class="filter-actions">
         <button type="button" @click="openCreateForm">新增题目</button>
         <button type="button" class="ghost" @click="resetFilters">重置</button>
-        <button type="button" @click="loadQuestions">查询</button>
+        <button type="button" @click="loadQuestions({ resetPage: true })">查询</button>
       </div>
     </section>
 
     <section class="table-card">
       <div class="table-head">
         <h2>题目列表</h2>
-        <span>{{ questions.length }} 道题</span>
+        <span>{{ questionTotal }} 道题</span>
       </div>
 
       <div v-if="loading" class="empty-state">正在加载题目数据...</div>
@@ -102,7 +102,7 @@
             </tr>
           </thead>
           <tbody>
-            <tr v-for="question in pagedQuestions" :key="question.id">
+            <tr v-for="question in questions" :key="question.id">
               <td>
                 <div class="title-cell">
                   <strong>{{ question.title }}</strong>
@@ -127,7 +127,13 @@
           </tbody>
         </table>
       </div>
-      <BasePagination v-if="!loading && questions.length" v-model="currentPage" :total="questions.length" />
+      <BasePagination
+        v-if="!loading && questionTotal"
+        :model-value="questionPage"
+        :total="questionTotal"
+        :page-size="questionPageSize"
+        @update:modelValue="changeQuestionPage"
+      />
     </section>
 
     <div v-if="modalVisible" class="modal-mask" @click.self="closeModal">
@@ -337,9 +343,9 @@
 <script setup>
 import { onMounted, reactive, ref } from 'vue'
 import BasePagination from '@/components/BasePagination.vue'
-import useClientPagination from '@/composables/useClientPagination'
 import { showToast } from 'vant'
 import fileApi from '../../common/api/file'
+import { normalizePageResult } from '../../common/utils/pageResult'
 import directoryApi from '../api/directory'
 import questionApi from '../api/question'
 import subjectApi from '../api/subject'
@@ -375,7 +381,9 @@ const editingId = ref(null)
 
 const subjects = ref([])
 const questions = ref([])
-const { currentPage, pagedItems: pagedQuestions, resetPage } = useClientPagination(questions)
+const questionTotal = ref(0)
+const questionPage = ref(1)
+const questionPageSize = 10
 const filterDirectoryOptions = ref([])
 const formDirectoryOptions = ref([])
 const formTagOptions = ref([])
@@ -618,7 +626,11 @@ const loadFormBindings = async (subjectId) => {
   }
 }
 
-const loadQuestions = async () => {
+const loadQuestions = async ({ resetPage = false } = {}) => {
+  if (resetPage) {
+    questionPage.value = 1
+  }
+
   loading.value = true
   try {
     const response = await questionApi.list({
@@ -626,14 +638,30 @@ const loadQuestions = async () => {
       directoryId: filters.directoryId ? Number(filters.directoryId) : undefined,
       type: filters.type ? Number(filters.type) : undefined,
       difficulty: filters.difficulty ? Number(filters.difficulty) : undefined,
-      keyword: filters.keyword || undefined
+      keyword: filters.keyword || undefined,
+      pageNum: questionPage.value,
+      pageSize: questionPageSize
     })
-    questions.value = response.data || []
+    const page = normalizePageResult(response.data, {
+      pageNum: questionPage.value,
+      pageSize: questionPageSize
+    })
+    questions.value = page.records
+    questionTotal.value = page.total
+    questionPage.value = page.pageNum
   } catch (error) {
     showToast(error.message || '加载题目失败')
   } finally {
     loading.value = false
   }
+}
+
+const changeQuestionPage = async (page) => {
+  if (page === questionPage.value) {
+    return
+  }
+  questionPage.value = page
+  await loadQuestions()
 }
 
 const openCreateForm = async () => {
@@ -849,7 +877,7 @@ const submitForm = async () => {
       await questionApi.create(payload)
       showToast('题目创建成功')
     }
-    await loadQuestions()
+    await loadQuestions({ resetPage: !editingId.value })
     closeModal()
   } catch (error) {
     showToast(error.message || '保存题目失败')
@@ -874,7 +902,7 @@ const removeQuestion = async (question) => {
 const handleFilterSubjectChange = async () => {
   filters.directoryId = ''
   await loadFilterDirectories(filters.subjectId)
-  await loadQuestions()
+  await loadQuestions({ resetPage: true })
 }
 
 const handleFormSubjectChange = async () => {
@@ -890,8 +918,7 @@ const resetFilters = async () => {
   filters.difficulty = ''
   filters.keyword = ''
   filterDirectoryOptions.value = []
-  resetPage()
-  await loadQuestions()
+  await loadQuestions({ resetPage: true })
 }
 
 const resolveTypeLabel = (value) => {

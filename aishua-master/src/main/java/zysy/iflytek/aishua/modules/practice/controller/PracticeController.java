@@ -1,6 +1,8 @@
 package zysy.iflytek.aishua.modules.practice.controller;
 
 import jakarta.validation.Valid;
+import jakarta.validation.constraints.Max;
+import jakarta.validation.constraints.Min;
 import org.springframework.web.bind.annotation.GetMapping;
 import org.springframework.web.bind.annotation.PathVariable;
 import org.springframework.web.bind.annotation.PostMapping;
@@ -10,6 +12,7 @@ import org.springframework.web.bind.annotation.RequestMapping;
 import org.springframework.web.bind.annotation.RequestParam;
 import org.springframework.web.bind.annotation.RestController;
 import zysy.iflytek.aishua.common.context.UserContext;
+import zysy.iflytek.aishua.common.result.PageResult;
 import zysy.iflytek.aishua.common.result.Result;
 import zysy.iflytek.aishua.modules.practice.entity.dto.PracticeBatchSubmitDTO;
 import zysy.iflytek.aishua.modules.practice.entity.dto.PracticeDraftSaveDTO;
@@ -70,13 +73,16 @@ public class PracticeController {
      * 处理查询请求并返回结果。
      */
     @GetMapping("/sessions")
-    public Result<List<PracticeSessionSummaryVO>> listPracticeSessions(
-            @RequestParam(required = false) Long subjectId
+    public Result<PageResult<PracticeSessionSummaryVO>> listPracticeSessions(
+            @RequestParam(required = false) Long subjectId,
+            @RequestParam(defaultValue = "1") @Min(value = 1, message = "页码必须大于 0") Integer pageNum,
+            @RequestParam(defaultValue = "10") @Min(value = 1, message = "每页数量必须大于 0")
+            @Max(value = 100, message = "每页数量不能超过 100") Integer pageSize
     ) {
         // 从用户上下文获取当前登录用户编号。
         Long userId = UserContext.requireUserId();
         // 调用服务层处理业务并封装统一响应。
-        return Result.success(practiceService.listPracticeSessions(userId, subjectId));
+        return Result.success(practiceService.listPracticeSessions(userId, subjectId, pageNum, pageSize));
     }
 
     /**
@@ -94,28 +100,34 @@ public class PracticeController {
      * 处理查询请求并返回结果。
      */
     @GetMapping("/records")
-    public Result<List<PracticeExerciseRecordVO>> listExerciseRecords(
-            @RequestParam(required = false) Long subjectId
+    public Result<PageResult<PracticeExerciseRecordVO>> listExerciseRecords(
+            @RequestParam(required = false) Long subjectId,
+            @RequestParam(defaultValue = "1") @Min(value = 1, message = "页码必须大于 0") Integer pageNum,
+            @RequestParam(defaultValue = "10") @Min(value = 1, message = "每页数量必须大于 0")
+            @Max(value = 100, message = "每页数量不能超过 100") Integer pageSize
     ) {
         // 从用户上下文获取当前登录用户编号。
         Long userId = UserContext.requireUserId();
         // 调用服务层处理业务并封装统一响应。
-        return Result.success(practiceService.listExerciseRecords(userId, subjectId));
+        return Result.success(practiceService.listExerciseRecords(userId, subjectId, pageNum, pageSize));
     }
 
     /**
      * 处理查询请求并返回结果。
      */
     @GetMapping("/wrong-questions")
-    public Result<List<PracticeWrongQuestionVO>> listWrongQuestions(
+    public Result<PageResult<PracticeWrongQuestionVO>> listWrongQuestions(
             @RequestParam(required = false) Long subjectId,
             @RequestParam(required = false) Long directoryId,
-            @RequestParam(required = false) Integer masterStatus
+            @RequestParam(required = false) Integer masterStatus,
+            @RequestParam(defaultValue = "1") @Min(value = 1, message = "页码必须大于 0") Integer pageNum,
+            @RequestParam(defaultValue = "10") @Min(value = 1, message = "每页数量必须大于 0")
+            @Max(value = 100, message = "每页数量不能超过 100") Integer pageSize
     ) {
         // 从用户上下文获取当前登录用户编号。
         Long userId = UserContext.requireUserId();
         // 调用服务层处理业务并封装统一响应。
-        return Result.success(practiceService.listWrongQuestions(userId, subjectId, directoryId, masterStatus));
+        return Result.success(practiceService.listWrongQuestions(userId, subjectId, directoryId, masterStatus, pageNum, pageSize));
     }
 
     /**

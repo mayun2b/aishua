@@ -1,15 +1,22 @@
 package zysy.iflytek.aishua.modules.question.service;
 
+import zysy.iflytek.aishua.common.result.PageResult;
 import zysy.iflytek.aishua.modules.question.entity.dto.QuestionUpsertDTO;
 import zysy.iflytek.aishua.modules.question.entity.vo.QuestionVO;
-
-import java.util.List;
 
 /**
  * 题目服务接口，定义该领域对外能力契约。
  */
 public interface QuestionService {
-    List<QuestionVO> listQuestions(Long subjectId, Long directoryId, Integer difficulty, Integer type, String keyword);
+    PageResult<QuestionVO> listQuestions(
+            Long subjectId,
+            Long directoryId,
+            Integer difficulty,
+            Integer type,
+            String keyword,
+            Integer pageNum,
+            Integer pageSize
+    );
 
     QuestionVO getQuestionDetail(Long id);
 

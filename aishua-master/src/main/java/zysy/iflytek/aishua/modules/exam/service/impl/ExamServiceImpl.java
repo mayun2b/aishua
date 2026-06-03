@@ -5,6 +5,7 @@ import lombok.extern.slf4j.Slf4j;
 import org.springframework.stereotype.Service;
 import org.springframework.transaction.annotation.Transactional;
 import zysy.iflytek.aishua.common.exception.BusinessException;
+import zysy.iflytek.aishua.common.result.PageResult;
 import zysy.iflytek.aishua.modules.directory.entity.TextbookDirectory;
 import zysy.iflytek.aishua.modules.directory.entity.DirectoryTagRelation;
 import zysy.iflytek.aishua.modules.directory.mapper.TextbookDirectoryMapper;
@@ -452,12 +453,28 @@ public class ExamServiceImpl implements ExamService {
      * 执行查询业务流程并返回结果。
      */
     @Override
-    public List<ExamRecordSummaryVO> listAdminRecords(Long subjectId, Long userId, String keyword, LocalDate startDate, LocalDate endDate) {
+    public PageResult<ExamRecordSummaryVO> listAdminRecords(
+            Long subjectId,
+            Long userId,
+            String keyword,
+            LocalDate startDate,
+            LocalDate endDate,
+            Integer pageNum,
+            Integer pageSize
+    ) {
+        int safePageNum = PageResult.normalizePageNum(pageNum);
+        int safePageSize = PageResult.normalizePageSize(pageSize);
+        Long total = examRecordMapper.selectCount(buildRecordFilter(subjectId, userId, keyword, null, startDate, endDate));
+        if (total == null || total <= 0) {
+            return PageResult.empty(safePageNum, safePageSize);
+        }
+
         LambdaQueryWrapper<ExamRecord> wrapper = buildRecordFilter(subjectId, userId, keyword, null, startDate, endDate)
                 .orderByDesc(ExamRecord::getStartTime)
-                .orderByDesc(ExamRecord::getId);
+                .orderByDesc(ExamRecord::getId)
+                .last("LIMIT " + PageResult.offset(safePageNum, safePageSize) + ", " + safePageSize);
         List<ExamRecord> records = examRecordMapper.selectList(wrapper);
-        return toRecordSummaryVOList(records);
+        return PageResult.of(toRecordSummaryVOList(records), total, safePageNum, safePageSize);
     }
 
     /**
@@ -647,12 +664,26 @@ public class ExamServiceImpl implements ExamService {
      * 执行查询业务流程并返回结果。
      */
     @Override
-    public List<ExamRecordSummaryVO> listMyRecords(Long userId) {
+    public PageResult<ExamRecordSummaryVO> listMyRecords(Long userId, Long subjectId, Integer status, Integer pageNum, Integer pageSize) {
+        int safePageNum = PageResult.normalizePageNum(pageNum);
+        int safePageSize = PageResult.normalizePageSize(pageSize);
+        LambdaQueryWrapper<ExamRecord> countWrapper = new LambdaQueryWrapper<ExamRecord>()
+                .eq(ExamRecord::getUserId, userId)
+                .eq(subjectId != null, ExamRecord::getSubjectId, subjectId)
+                .eq(status != null, ExamRecord::getStatus, status);
+        Long total = examRecordMapper.selectCount(countWrapper);
+        if (total == null || total <= 0) {
+            return PageResult.empty(safePageNum, safePageSize);
+        }
+
         List<ExamRecord> records = examRecordMapper.selectList(new LambdaQueryWrapper<ExamRecord>()
                 .eq(ExamRecord::getUserId, userId)
+                .eq(subjectId != null, ExamRecord::getSubjectId, subjectId)
+                .eq(status != null, ExamRecord::getStatus, status)
                 .orderByDesc(ExamRecord::getStartTime)
-                .orderByDesc(ExamRecord::getId));
-        return toRecordSummaryVOList(records);
+                .orderByDesc(ExamRecord::getId)
+                .last("LIMIT " + PageResult.offset(safePageNum, safePageSize) + ", " + safePageSize));
+        return PageResult.of(toRecordSummaryVOList(records), total, safePageNum, safePageSize);
     }
 
     /**

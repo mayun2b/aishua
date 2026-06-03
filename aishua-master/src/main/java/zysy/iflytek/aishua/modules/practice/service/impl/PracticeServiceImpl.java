@@ -15,6 +15,7 @@ import org.springframework.stereotype.Service;
 import org.springframework.transaction.annotation.Transactional;
 import org.springframework.transaction.support.TransactionTemplate;
 import zysy.iflytek.aishua.common.exception.BusinessException;
+import zysy.iflytek.aishua.common.result.PageResult;
 import zysy.iflytek.aishua.config.properties.PracticeDraftProperties;
 import zysy.iflytek.aishua.modules.directory.entity.TextbookDirectory;
 import zysy.iflytek.aishua.modules.directory.mapper.TextbookDirectoryMapper;
@@ -367,16 +368,26 @@ public class PracticeServiceImpl implements PracticeService {
     }
 
     @Override
-    public List<PracticeSessionSummaryVO> listPracticeSessions(Long userId, Long subjectId) {
+    public PageResult<PracticeSessionSummaryVO> listPracticeSessions(Long userId, Long subjectId, Integer pageNum, Integer pageSize) {
         validateSubjectFilter(subjectId);
+
+        int safePageNum = PageResult.normalizePageNum(pageNum);
+        int safePageSize = PageResult.normalizePageSize(pageSize);
+        Long total = practiceSessionMapper.selectCount(new LambdaQueryWrapper<PracticeSession>()
+                .eq(PracticeSession::getUserId, userId)
+                .eq(subjectId != null, PracticeSession::getSubjectId, subjectId));
+        if (total == null || total <= 0) {
+            return PageResult.empty(safePageNum, safePageSize);
+        }
 
         List<PracticeSession> sessions = practiceSessionMapper.selectList(new LambdaQueryWrapper<PracticeSession>()
                 .eq(PracticeSession::getUserId, userId)
                 .eq(subjectId != null, PracticeSession::getSubjectId, subjectId)
                 .orderByDesc(PracticeSession::getStartedAt)
-                .orderByDesc(PracticeSession::getId));
+                .orderByDesc(PracticeSession::getId)
+                .last("LIMIT " + PageResult.offset(safePageNum, safePageSize) + ", " + safePageSize));
         if (sessions.isEmpty()) {
-            return Collections.emptyList();
+            return PageResult.of(Collections.emptyList(), total, safePageNum, safePageSize);
         }
 
         Map<Long, Subject> subjectMap = loadSubjectMap(sessions.stream()
@@ -390,7 +401,7 @@ public class PracticeServiceImpl implements PracticeService {
             Subject subject = subjectMap.get(session.getSubjectId());
             result.add(buildPracticeSessionSummary(session, subject));
         }
-        return result;
+        return PageResult.of(result, total, safePageNum, safePageSize);
     }
 
     @Override
@@ -420,26 +431,34 @@ public class PracticeServiceImpl implements PracticeService {
     }
 
     @Override
-    public List<PracticeExerciseRecordVO> listExerciseRecords(Long userId, Long subjectId) {
+    public PageResult<PracticeExerciseRecordVO> listExerciseRecords(Long userId, Long subjectId, Integer pageNum, Integer pageSize) {
         validateSubjectFilter(subjectId);
 
+        int safePageNum = PageResult.normalizePageNum(pageNum);
+        int safePageSize = PageResult.normalizePageSize(pageSize);
         List<Long> sessionIds = listFilteredSessionIds(userId, subjectId);
         if (subjectId != null && sessionIds.isEmpty()) {
-            return Collections.emptyList();
+            return PageResult.empty(safePageNum, safePageSize);
         }
 
         LambdaQueryWrapper<ExerciseRecord> queryWrapper = new LambdaQueryWrapper<ExerciseRecord>()
                 .eq(ExerciseRecord::getUserId, userId)
-                .isNotNull(ExerciseRecord::getIsCorrect)
-                .orderByDesc(ExerciseRecord::getExerciseTime)
-                .orderByDesc(ExerciseRecord::getId);
+                .isNotNull(ExerciseRecord::getIsCorrect);
         if (subjectId != null) {
             queryWrapper.in(ExerciseRecord::getSessionRefId, sessionIds);
         }
 
+        Long total = exerciseRecordMapper.selectCount(queryWrapper);
+        if (total == null || total <= 0) {
+            return PageResult.empty(safePageNum, safePageSize);
+        }
+
+        queryWrapper.orderByDesc(ExerciseRecord::getExerciseTime)
+                .orderByDesc(ExerciseRecord::getId)
+                .last("LIMIT " + PageResult.offset(safePageNum, safePageSize) + ", " + safePageSize);
         List<ExerciseRecord> records = exerciseRecordMapper.selectList(queryWrapper);
         if (records.isEmpty()) {
-            return Collections.emptyList();
+            return PageResult.of(Collections.emptyList(), total, safePageNum, safePageSize);
         }
 
         Map<Long, PracticeSession> sessionMap = loadSessionMap(records.stream()
@@ -483,26 +502,42 @@ public class PracticeServiceImpl implements PracticeService {
             recordVO.setExerciseTime(record.getExerciseTime());
             result.add(recordVO);
         }
-        return result;
+        return PageResult.of(result, total, safePageNum, safePageSize);
     }
 
     @Override
-    public List<PracticeWrongQuestionVO> listWrongQuestions(Long userId, Long subjectId, Long directoryId, Integer masterStatus) {
+    public PageResult<PracticeWrongQuestionVO> listWrongQuestions(
+            Long userId,
+            Long subjectId,
+            Long directoryId,
+            Integer masterStatus,
+            Integer pageNum,
+            Integer pageSize
+    ) {
         validateSubjectFilter(subjectId);
         validateDirectoryFilter(directoryId, subjectId);
         validateMasterStatusFilter(masterStatus);
 
-        List<WrongQuestion> wrongQuestions = wrongQuestionMapper.selectList(new LambdaQueryWrapper<WrongQuestion>()
+        int safePageNum = PageResult.normalizePageNum(pageNum);
+        int safePageSize = PageResult.normalizePageSize(pageSize);
+        LambdaQueryWrapper<WrongQuestion> queryWrapper = new LambdaQueryWrapper<WrongQuestion>()
                 .eq(WrongQuestion::getUserId, userId)
                 .eq(subjectId != null, WrongQuestion::getSubjectId, subjectId)
                 .eq(directoryId != null, WrongQuestion::getDirectoryId, directoryId)
-                .eq(masterStatus != null, WrongQuestion::getMasterStatus, masterStatus)
-                .orderByAsc(WrongQuestion::getMasterStatus)
+                .eq(masterStatus != null, WrongQuestion::getMasterStatus, masterStatus);
+        Long total = wrongQuestionMapper.selectCount(queryWrapper);
+        if (total == null || total <= 0) {
+            return PageResult.empty(safePageNum, safePageSize);
+        }
+
+        queryWrapper.orderByAsc(WrongQuestion::getMasterStatus)
                 .orderByDesc(WrongQuestion::getWrongCount)
                 .orderByDesc(WrongQuestion::getLastWrongTime)
-                .orderByDesc(WrongQuestion::getId));
+                .orderByDesc(WrongQuestion::getId)
+                .last("LIMIT " + PageResult.offset(safePageNum, safePageSize) + ", " + safePageSize);
+        List<WrongQuestion> wrongQuestions = wrongQuestionMapper.selectList(queryWrapper);
         if (wrongQuestions.isEmpty()) {
-            return Collections.emptyList();
+            return PageResult.of(Collections.emptyList(), total, safePageNum, safePageSize);
         }
 
         Map<Long, Subject> subjectMap = loadSubjectMap(wrongQuestions.stream()
@@ -525,7 +560,7 @@ public class PracticeServiceImpl implements PracticeService {
         for (WrongQuestion wrongQuestion : wrongQuestions) {
             result.add(toWrongQuestionVO(wrongQuestion, subjectMap, questionMap, directoryMap));
         }
-        return result;
+        return PageResult.of(result, total, safePageNum, safePageSize);
     }
 
     @Override

@@ -47,6 +47,12 @@ const adminLinks = [
     desc: '管理知识点标签，支撑练习与分析。'
   },
   {
+    to: '/admin/directory-tags',
+    kicker: 'Mapping',
+    label: '目录-考点',
+    desc: '维护章节和考点映射，支撑配题和章节练习。'
+  },
+  {
     to: '/admin/questions',
     kicker: 'Question Bank',
     label: '题库管理',

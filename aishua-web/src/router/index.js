@@ -153,6 +153,12 @@ const routes = [
     meta: withMeta('管理台 / 标签管理', { requiresAuth: true, requiresAdmin: true })
   },
   {
+    path: '/admin/directory-tags',
+    name: 'AdminDirectoryTagRelations',
+    component: () => import('../modules/admin/views/AdminDirectoryTagRelationView.vue'),
+    meta: withMeta('管理台 / 目录-考点关系', { requiresAuth: true, requiresAdmin: true })
+  },
+  {
     path: '/admin/questions',
     name: 'AdminQuestionManagement',
     component: () => import('../modules/admin/views/AdminQuestionManagementView.vue'),

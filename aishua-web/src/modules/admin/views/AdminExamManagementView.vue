@@ -136,14 +136,14 @@
       </div>
       <div class="filter-actions">
         <button type="button" class="ghost" @click="resetRecordFilters">重置</button>
-        <button type="button" @click="loadRecords">查询</button>
+        <button type="button" @click="loadRecords({ resetPage: true })">查询</button>
       </div>
     </section>
 
     <section class="table-card">
       <div class="table-head">
         <h2>考试记录</h2>
-        <span>{{ records.length }} 条记录</span>
+        <span>{{ recordTotal }} 条记录</span>
       </div>
 
       <div v-if="loadingRecords" class="empty-state">正在加载考试记录...</div>
@@ -164,7 +164,7 @@
             </tr>
           </thead>
           <tbody>
-            <tr v-for="record in pagedRecords" :key="record.id">
+            <tr v-for="record in records" :key="record.id">
               <td>{{ record.examName }}</td>
               <td>{{ record.userNickname || record.userPhone || record.userId }}</td>
               <td>{{ record.subjectName || '-' }}</td>
@@ -184,7 +184,13 @@
           </tbody>
         </table>
       </div>
-      <BasePagination v-if="!loadingRecords && records.length" v-model="recordPage" :total="records.length" />
+      <BasePagination
+        v-if="!loadingRecords && recordTotal"
+        :model-value="recordPage"
+        :total="recordTotal"
+        :page-size="recordPageSize"
+        @update:modelValue="changeRecordPage"
+      />
     </section>
 
     <div v-if="paperModalVisible" class="modal-mask" @click.self="closePaperModal">
@@ -290,6 +296,7 @@ import { useRouter } from 'vue-router'
 import { showToast } from 'vant'
 import BasePagination from '@/components/BasePagination.vue'
 import useClientPagination from '@/composables/useClientPagination'
+import { normalizePageResult } from '../../common/utils/pageResult'
 import examApi from '../api/exam'
 import subjectApi from '../api/subject'
 
@@ -303,7 +310,9 @@ const { currentPage: paperPage, pagedItems: pagedPapers, resetPage: resetPaperPa
 
 const loadingRecords = ref(false)
 const records = ref([])
-const { currentPage: recordPage, pagedItems: pagedRecords, resetPage: resetRecordPage } = useClientPagination(records)
+const recordTotal = ref(0)
+const recordPage = ref(1)
+const recordPageSize = 10
 
 const paperFilters = reactive({
   subjectId: '',
@@ -361,7 +370,11 @@ const loadPapers = async () => {
   }
 }
 
-const loadRecords = async () => {
+const loadRecords = async ({ resetPage = false } = {}) => {
+  if (resetPage) {
+    recordPage.value = 1
+  }
+
   loadingRecords.value = true
   try {
     const response = await examApi.listRecords({
@@ -369,15 +382,30 @@ const loadRecords = async () => {
       userId: recordFilters.userId ? Number(recordFilters.userId) : undefined,
       keyword: recordFilters.keyword || undefined,
       startDate: recordFilters.startDate || undefined,
-      endDate: recordFilters.endDate || undefined
+      endDate: recordFilters.endDate || undefined,
+      pageNum: recordPage.value,
+      pageSize: recordPageSize
     })
-    records.value = response.data || []
-    resetRecordPage()
+    const page = normalizePageResult(response.data, {
+      pageNum: recordPage.value,
+      pageSize: recordPageSize
+    })
+    records.value = page.records
+    recordTotal.value = page.total
+    recordPage.value = page.pageNum
   } catch (error) {
     showToast(error.message || '加载考试记录失败')
   } finally {
     loadingRecords.value = false
   }
+}
+
+const changeRecordPage = async (page) => {
+  if (page === recordPage.value) {
+    return
+  }
+  recordPage.value = page
+  await loadRecords()
 }
 
 const resetPaperFilters = () => {
@@ -393,7 +421,7 @@ const resetRecordFilters = () => {
   recordFilters.keyword = ''
   recordFilters.startDate = ''
   recordFilters.endDate = ''
-  loadRecords()
+  loadRecords({ resetPage: true })
 }
 
 const fillPaperForm = (payload) => {

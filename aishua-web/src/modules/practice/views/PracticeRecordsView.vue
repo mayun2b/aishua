@@ -30,14 +30,14 @@
 
       <div class="filter-actions">
         <button type="button" class="ghost" @click="resetFilters">重置</button>
-        <button type="button" @click="loadSessions">查询</button>
+        <button type="button" @click="loadSessions({ resetPage: true })">查询</button>
       </div>
     </section>
 
     <section class="table-card">
       <div class="table-head">
         <h2>练习会话</h2>
-        <span>{{ sessions.length }} 次</span>
+        <span>{{ sessionTotal }} 次</span>
       </div>
 
       <div v-if="loading" class="empty-state">正在加载练习会话...</div>
@@ -56,7 +56,7 @@
             </tr>
           </thead>
           <tbody>
-            <tr v-for="session in pagedSessions" :key="session.sessionId">
+            <tr v-for="session in sessions" :key="session.sessionId">
               <td>
                 <div class="cell-stack">
                   <strong>{{ formatDateTime(session.startedAt) }}</strong>
@@ -92,7 +92,13 @@
         </table>
       </div>
 
-      <BasePagination v-if="!loading && sessions.length" v-model="currentPage" :total="sessions.length" />
+      <BasePagination
+        v-if="!loading && sessionTotal"
+        :model-value="sessionPage"
+        :total="sessionTotal"
+        :page-size="sessionPageSize"
+        @update:modelValue="changeSessionPage"
+      />
     </section>
   </div>
 </template>
@@ -102,7 +108,7 @@ import { onMounted, reactive, ref, watch } from 'vue'
 import { useRoute } from 'vue-router'
 import { showToast } from 'vant'
 import BasePagination from '@/components/BasePagination.vue'
-import useClientPagination from '@/composables/useClientPagination'
+import { normalizePageResult } from '../../common/utils/pageResult'
 import subjectApi from '../../subject/api/subject'
 import practiceApi from '../api/practice'
 
@@ -111,7 +117,9 @@ const route = useRoute()
 const loading = ref(false)
 const subjects = ref([])
 const sessions = ref([])
-const { currentPage, pagedItems: pagedSessions, resetPage } = useClientPagination(sessions)
+const sessionTotal = ref(0)
+const sessionPage = ref(1)
+const sessionPageSize = 10
 
 const filters = reactive({
   subjectId: ''
@@ -130,14 +138,25 @@ const loadSubjects = async () => {
   }
 }
 
-const loadSessions = async () => {
+const loadSessions = async ({ resetPage = false } = {}) => {
+  if (resetPage) {
+    sessionPage.value = 1
+  }
+
   loading.value = true
   try {
     const response = await practiceApi.listSessions({
-      subjectId: filters.subjectId ? Number(filters.subjectId) : undefined
+      subjectId: filters.subjectId ? Number(filters.subjectId) : undefined,
+      pageNum: sessionPage.value,
+      pageSize: sessionPageSize
     })
-    sessions.value = response.data || []
-    resetPage()
+    const page = normalizePageResult(response.data, {
+      pageNum: sessionPage.value,
+      pageSize: sessionPageSize
+    })
+    sessions.value = page.records
+    sessionTotal.value = page.total
+    sessionPage.value = page.pageNum
   } catch (error) {
     showToast(error.message || '加载练习记录失败')
   } finally {
@@ -145,9 +164,17 @@ const loadSessions = async () => {
   }
 }
 
+const changeSessionPage = async (page) => {
+  if (page === sessionPage.value) {
+    return
+  }
+  sessionPage.value = page
+  await loadSessions()
+}
+
 const resetFilters = async () => {
   filters.subjectId = resolveRouteSubjectId()
-  await loadSessions()
+  await loadSessions({ resetPage: true })
 }
 
 const resolveModeLabel = (mode) => {
@@ -158,6 +185,8 @@ const resolveModeLabel = (mode) => {
       return '随机练习'
     case 3:
       return '知识点练习'
+    case 4:
+      return '错题重练'
     default:
       return mode ? `模式 ${mode}` : '-'
   }
@@ -194,7 +223,7 @@ watch(
   () => route.query.subjectId,
   async () => {
     filters.subjectId = resolveRouteSubjectId()
-    await loadSessions()
+    await loadSessions({ resetPage: true })
   }
 )
 
