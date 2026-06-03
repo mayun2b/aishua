@@ -30,7 +30,6 @@
 
       <div class="filter-actions">
         <button type="button" class="ghost" @click="resetFilters">重置</button>
-        <button type="button" @click="loadSessions({ resetPage: true })">查询</button>
       </div>
     </section>
 
@@ -108,6 +107,7 @@ import { onMounted, reactive, ref, watch } from 'vue'
 import { useRoute } from 'vue-router'
 import { showToast } from 'vant'
 import BasePagination from '@/components/BasePagination.vue'
+import useAutoReload from '@/composables/useAutoReload'
 import { normalizePageResult } from '../../common/utils/pageResult'
 import subjectApi from '../../subject/api/subject'
 import practiceApi from '../api/practice'
@@ -123,6 +123,10 @@ const sessionPageSize = 10
 
 const filters = reactive({
   subjectId: ''
+})
+
+const { runWithoutAutoReload, scheduleReload } = useAutoReload(() => {
+  return loadSessions({ resetPage: true })
 })
 
 const resolveRouteSubjectId = () => {
@@ -173,8 +177,10 @@ const changeSessionPage = async (page) => {
 }
 
 const resetFilters = async () => {
-  filters.subjectId = resolveRouteSubjectId()
-  await loadSessions({ resetPage: true })
+  await runWithoutAutoReload(async () => {
+    filters.subjectId = resolveRouteSubjectId()
+    await loadSessions({ resetPage: true })
+  })
 }
 
 const resolveModeLabel = (mode) => {
@@ -222,15 +228,26 @@ const resolveSessionActionLabel = (session) => {
 watch(
   () => route.query.subjectId,
   async () => {
-    filters.subjectId = resolveRouteSubjectId()
-    await loadSessions({ resetPage: true })
+    await runWithoutAutoReload(async () => {
+      filters.subjectId = resolveRouteSubjectId()
+      await loadSessions({ resetPage: true })
+    })
+  }
+)
+
+watch(
+  () => filters.subjectId,
+  () => {
+    scheduleReload()
   }
 )
 
 onMounted(async () => {
-  filters.subjectId = resolveRouteSubjectId()
-  await loadSubjects()
-  await loadSessions()
+  await runWithoutAutoReload(async () => {
+    filters.subjectId = resolveRouteSubjectId()
+    await loadSubjects()
+    await loadSessions()
+  })
 })
 </script>
 

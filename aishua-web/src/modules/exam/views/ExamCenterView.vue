@@ -36,7 +36,6 @@
       </div>
       <div class="filter-actions">
         <button type="button" class="ghost" @click="resetFilter">重置</button>
-        <button type="button" @click="loadPapers">刷新试卷</button>
       </div>
     </section>
 

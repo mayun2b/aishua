@@ -37,7 +37,6 @@
       <div class="filter-actions">
         <button type="button" @click="openCreateForm">新增考点</button>
         <button type="button" class="ghost" @click="resetFilters">重置</button>
-        <button type="button" @click="loadTags">查询</button>
       </div>
     </section>
 
@@ -128,8 +127,9 @@
 </template>
 
 <script setup>
-import { onMounted, reactive, ref } from 'vue'
+import { onMounted, reactive, ref, watch } from 'vue'
 import BasePagination from '@/components/BasePagination.vue'
+import useAutoReload from '@/composables/useAutoReload'
 import useClientPagination from '@/composables/useClientPagination'
 import { showToast } from 'vant'
 import subjectApi from '../api/subject'
@@ -146,6 +146,11 @@ const { currentPage, pagedItems: pagedTags, resetPage } = useClientPagination(ta
 const filters = reactive({
   subjectId: '',
   keyword: ''
+})
+
+const { runWithoutAutoReload, scheduleReload } = useAutoReload(() => {
+  resetPage()
+  return loadTags()
 })
 
 const createEmptyForm = (subjectId = filters.subjectId || '') => ({
@@ -281,11 +286,27 @@ const removeTag = async (row) => {
 }
 
 const resetFilters = async () => {
-  filters.subjectId = ''
-  filters.keyword = ''
-  resetPage()
-  await loadTags()
+  await runWithoutAutoReload(async () => {
+    filters.subjectId = ''
+    filters.keyword = ''
+    resetPage()
+    await loadTags()
+  })
 }
+
+watch(
+  () => filters.subjectId,
+  () => {
+    scheduleReload()
+  }
+)
+
+watch(
+  () => filters.keyword,
+  () => {
+    scheduleReload({ delay: 300 })
+  }
+)
 
 const resolveSubjectName = (subjectId) => {
   const subject = subjects.value.find((item) => item.id === subjectId)

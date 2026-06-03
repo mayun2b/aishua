@@ -55,7 +55,6 @@
 
       <div class="filter-actions">
         <button type="button" class="ghost" @click="resetFilters">重置</button>
-        <button type="button" @click="loadRelations({ resetPage: true })">查询</button>
       </div>
     </section>
 
@@ -182,7 +181,7 @@
               <td>
                 <div class="cell-stack compact">
                   <span>{{ resolveRelationTypeLabel(relation.relationType) }}</span>
-                  <span>重要 {{ relation.importanceLevel || 1 }} / 考频 {{ relation.examFrequency || 1 }}</span>
+                  <span>重要 {{ resolveImportanceLevelLabel(relation.importanceLevel) }} / 考频 {{ relation.examFrequency || 1 }}</span>
                   <span>排序 {{ relation.sort || 0 }}</span>
                 </div>
               </td>
@@ -220,10 +219,11 @@
 </template>
 
 <script setup>
-import { computed, onMounted, reactive, ref, watch } from 'vue'
+import { computed, nextTick, onBeforeUnmount, onMounted, reactive, ref, watch } from 'vue'
 import { showToast } from 'vant'
 import BasePagination from '@/components/BasePagination.vue'
 import { normalizePageResult } from '@/modules/common/utils/pageResult'
+import { resolveImportanceLevelLabel, resolveRelationTypeLabel } from '../utils/directoryTagRelationLabels'
 import directoryApi from '../api/directory'
 import directoryTagRelationApi from '../api/directoryTagRelation'
 import subjectApi from '../api/subject'
@@ -243,6 +243,11 @@ const relationPageSize = 10
 const filterDirectoryOptions = ref([])
 const formDirectoryOptions = ref([])
 const formTagOptions = ref([])
+
+let filterReloadTimer = null
+let relationRequestId = 0
+let suppressFilterReload = false
+let subjectFilterResettingDirectory = false
 
 const filters = reactive({
   subjectId: '',
@@ -336,11 +341,31 @@ const loadFormBindings = async (subjectId) => {
   }
 }
 
+const clearScheduledFilterReload = () => {
+  if (filterReloadTimer) {
+    clearTimeout(filterReloadTimer)
+    filterReloadTimer = null
+  }
+}
+
+const scheduleFilterReload = ({ delay = 0 } = {}) => {
+  if (suppressFilterReload) {
+    return
+  }
+
+  clearScheduledFilterReload()
+  filterReloadTimer = setTimeout(() => {
+    filterReloadTimer = null
+    loadRelations({ resetPage: true })
+  }, delay)
+}
+
 const loadRelations = async ({ resetPage = false } = {}) => {
   if (resetPage) {
     relationPage.value = 1
   }
 
+  const requestId = ++relationRequestId
   loading.value = true
   try {
     const response = await directoryTagRelationApi.list({
@@ -351,6 +376,9 @@ const loadRelations = async ({ resetPage = false } = {}) => {
       pageNum: relationPage.value,
       pageSize: relationPageSize
     })
+    if (requestId !== relationRequestId) {
+      return
+    }
     const page = normalizePageResult(response.data, {
       pageNum: relationPage.value,
       pageSize: relationPageSize
@@ -359,9 +387,13 @@ const loadRelations = async ({ resetPage = false } = {}) => {
     relationTotal.value = page.total
     relationPage.value = page.pageNum
   } catch (error) {
-    showToast(error.message || '加载目录-考点关系失败')
+    if (requestId === relationRequestId) {
+      showToast(error.message || '加载目录-考点关系失败')
+    }
   } finally {
-    loading.value = false
+    if (requestId === relationRequestId) {
+      loading.value = false
+    }
   }
 }
 
@@ -486,23 +518,16 @@ const removeRelation = async (relation) => {
 }
 
 const resetFilters = async () => {
+  suppressFilterReload = true
+  clearScheduledFilterReload()
   filters.subjectId = ''
   filters.directoryId = ''
   filters.isEnabled = ''
   filters.keyword = ''
   filterDirectoryOptions.value = []
+  await nextTick()
+  suppressFilterReload = false
   await loadRelations({ resetPage: true })
-}
-
-const resolveRelationTypeLabel = (value) => {
-  switch (Number(value)) {
-    case 2:
-      return '前置关联'
-    case 3:
-      return '拓展关联'
-    default:
-      return '直接关联'
-  }
 }
 
 const formatDateTime = (value) => {
@@ -515,8 +540,28 @@ const formatDateTime = (value) => {
 watch(
   () => filters.subjectId,
   async (subjectId) => {
+    subjectFilterResettingDirectory = true
     filters.directoryId = ''
     await loadFilterDirectories(subjectId)
+    subjectFilterResettingDirectory = false
+    scheduleFilterReload()
+  }
+)
+
+watch(
+  () => [filters.directoryId, filters.isEnabled],
+  () => {
+    if (subjectFilterResettingDirectory) {
+      return
+    }
+    scheduleFilterReload()
+  }
+)
+
+watch(
+  () => filters.keyword,
+  () => {
+    scheduleFilterReload({ delay: 300 })
   }
 )
 
@@ -535,6 +580,10 @@ watch(
 onMounted(async () => {
   await loadSubjects()
   await loadRelations()
+})
+
+onBeforeUnmount(() => {
+  clearScheduledFilterReload()
 })
 </script>
 

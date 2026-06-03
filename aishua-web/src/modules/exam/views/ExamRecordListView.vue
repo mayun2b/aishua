@@ -41,7 +41,6 @@
       </div>
       <div class="filter-actions">
         <button type="button" class="ghost" @click="resetFilters">重置</button>
-        <button type="button" @click="loadRecords({ resetPage: true })">刷新</button>
       </div>
     </section>
 
@@ -115,9 +114,10 @@
 </template>
 
 <script setup>
-import { onMounted, reactive, ref } from 'vue'
+import { onMounted, reactive, ref, watch } from 'vue'
 import { showToast } from 'vant'
 import BasePagination from '@/components/BasePagination.vue'
+import useAutoReload from '@/composables/useAutoReload'
 import { normalizePageResult } from '../../common/utils/pageResult'
 import subjectApi from '../../subject/api/subject'
 import examApi from '../api/exam'
@@ -139,6 +139,10 @@ const recordPageSize = 10
 const filters = reactive({
   subjectId: '',
   status: ''
+})
+
+const { runWithoutAutoReload, scheduleReload } = useAutoReload(() => {
+  return loadRecords({ resetPage: true })
 })
 
 const hasSessionCache = (recordId) => {
@@ -193,15 +197,24 @@ const changeRecordPage = async (page) => {
 }
 
 const resetFilters = async () => {
-  filters.subjectId = ''
-  filters.status = ''
-  await loadRecords({ resetPage: true })
+  await runWithoutAutoReload(async () => {
+    filters.subjectId = ''
+    filters.status = ''
+    await loadRecords({ resetPage: true })
+  })
 }
 
 onMounted(async () => {
   await loadSubjects()
   await loadRecords()
 })
+
+watch(
+  () => [filters.subjectId, filters.status],
+  () => {
+    scheduleReload()
+  }
+)
 </script>
 
 <style scoped>

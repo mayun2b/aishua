@@ -20,7 +20,7 @@
       <div class="filter-grid">
         <label>
           <span>学科</span>
-          <select v-model="filters.subjectId" @change="handleFilterSubjectChange">
+          <select v-model="filters.subjectId">
             <option value="">全部学科</option>
             <option v-for="subject in subjects" :key="subject.id" :value="String(subject.id)">
               {{ subject.name }}（{{ subject.code }}）
@@ -30,7 +30,7 @@
 
         <label>
           <span>目录</span>
-          <select v-model="filters.directoryId" @change="loadQuestions({ resetPage: true })">
+          <select v-model="filters.directoryId">
             <option value="">全部目录</option>
             <option
               v-for="directory in filterDirectoryOptions"
@@ -44,7 +44,7 @@
 
         <label>
           <span>题型</span>
-          <select v-model="filters.type" @change="loadQuestions({ resetPage: true })">
+          <select v-model="filters.type">
             <option value="">全部题型</option>
             <option v-for="item in QUESTION_TYPES" :key="item.value" :value="String(item.value)">
               {{ item.label }}
@@ -54,7 +54,7 @@
 
         <label>
           <span>难度</span>
-          <select v-model="filters.difficulty" @change="loadQuestions({ resetPage: true })">
+          <select v-model="filters.difficulty">
             <option value="">全部难度</option>
             <option v-for="item in DIFFICULTY_OPTIONS" :key="item.value" :value="String(item.value)">
               {{ item.label }}
@@ -68,7 +68,6 @@
             v-model.trim="filters.keyword"
             type="text"
             placeholder="按题干、内容、答案搜索"
-            @keyup.enter="loadQuestions({ resetPage: true })"
           />
         </label>
       </div>
@@ -76,7 +75,6 @@
       <div class="filter-actions">
         <button type="button" @click="openCreateForm">新增题目</button>
         <button type="button" class="ghost" @click="resetFilters">重置</button>
-        <button type="button" @click="loadQuestions({ resetPage: true })">查询</button>
       </div>
     </section>
 
@@ -341,8 +339,9 @@
 </template>
 
 <script setup>
-import { onMounted, reactive, ref } from 'vue'
+import { onMounted, reactive, ref, watch } from 'vue'
 import BasePagination from '@/components/BasePagination.vue'
+import useAutoReload from '@/composables/useAutoReload'
 import { showToast } from 'vant'
 import fileApi from '../../common/api/file'
 import { normalizePageResult } from '../../common/utils/pageResult'
@@ -396,6 +395,10 @@ const filters = reactive({
   type: '',
   difficulty: '',
   keyword: ''
+})
+
+const { isReloadSuppressed, runWithoutAutoReload, scheduleReload } = useAutoReload(() => {
+  return loadQuestions({ resetPage: true })
 })
 
 const createEmptyForm = (subjectId = filters.subjectId || '') => ({
@@ -900,9 +903,11 @@ const removeQuestion = async (question) => {
 }
 
 const handleFilterSubjectChange = async () => {
-  filters.directoryId = ''
-  await loadFilterDirectories(filters.subjectId)
-  await loadQuestions({ resetPage: true })
+  await runWithoutAutoReload(async () => {
+    filters.directoryId = ''
+    await loadFilterDirectories(filters.subjectId)
+  })
+  scheduleReload()
 }
 
 const handleFormSubjectChange = async () => {
@@ -912,14 +917,40 @@ const handleFormSubjectChange = async () => {
 }
 
 const resetFilters = async () => {
-  filters.subjectId = ''
-  filters.directoryId = ''
-  filters.type = ''
-  filters.difficulty = ''
-  filters.keyword = ''
-  filterDirectoryOptions.value = []
-  await loadQuestions({ resetPage: true })
+  await runWithoutAutoReload(async () => {
+    filters.subjectId = ''
+    filters.directoryId = ''
+    filters.type = ''
+    filters.difficulty = ''
+    filters.keyword = ''
+    filterDirectoryOptions.value = []
+    await loadQuestions({ resetPage: true })
+  })
 }
+
+watch(
+  () => filters.subjectId,
+  async () => {
+    if (isReloadSuppressed()) {
+      return
+    }
+    await handleFilterSubjectChange()
+  }
+)
+
+watch(
+  () => [filters.directoryId, filters.type, filters.difficulty],
+  () => {
+    scheduleReload()
+  }
+)
+
+watch(
+  () => filters.keyword,
+  () => {
+    scheduleReload({ delay: 300 })
+  }
+)
 
 const resolveTypeLabel = (value) => {
   const item = QUESTION_TYPES.find((type) => type.value === value)

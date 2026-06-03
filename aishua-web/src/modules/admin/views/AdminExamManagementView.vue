@@ -45,7 +45,6 @@
       </div>
       <div class="filter-actions">
         <button type="button" class="ghost" @click="resetPaperFilters">重置</button>
-        <button type="button" @click="loadPapers">查询</button>
       </div>
     </section>
 
@@ -136,7 +135,6 @@
       </div>
       <div class="filter-actions">
         <button type="button" class="ghost" @click="resetRecordFilters">重置</button>
-        <button type="button" @click="loadRecords({ resetPage: true })">查询</button>
       </div>
     </section>
 
@@ -291,10 +289,11 @@
 </template>
 
 <script setup>
-import { onMounted, reactive, ref } from 'vue'
+import { onMounted, reactive, ref, watch } from 'vue'
 import { useRouter } from 'vue-router'
 import { showToast } from 'vant'
 import BasePagination from '@/components/BasePagination.vue'
+import useAutoReload from '@/composables/useAutoReload'
 import useClientPagination from '@/composables/useClientPagination'
 import { normalizePageResult } from '../../common/utils/pageResult'
 import examApi from '../api/exam'
@@ -327,6 +326,16 @@ const recordFilters = reactive({
   startDate: '',
   endDate: ''
 })
+
+const {
+  runWithoutAutoReload: runWithoutPaperAutoReload,
+  scheduleReload: schedulePaperReload
+} = useAutoReload(() => loadPapers())
+
+const {
+  runWithoutAutoReload: runWithoutRecordAutoReload,
+  scheduleReload: scheduleRecordReload
+} = useAutoReload(() => loadRecords({ resetPage: true }))
 
 const paperModalVisible = ref(false)
 const submittingPaper = ref(false)
@@ -408,20 +417,24 @@ const changeRecordPage = async (page) => {
   await loadRecords()
 }
 
-const resetPaperFilters = () => {
-  paperFilters.subjectId = ''
-  paperFilters.status = ''
-  paperFilters.keyword = ''
-  loadPapers()
+const resetPaperFilters = async () => {
+  await runWithoutPaperAutoReload(async () => {
+    paperFilters.subjectId = ''
+    paperFilters.status = ''
+    paperFilters.keyword = ''
+    await loadPapers()
+  })
 }
 
-const resetRecordFilters = () => {
-  recordFilters.subjectId = ''
-  recordFilters.userId = ''
-  recordFilters.keyword = ''
-  recordFilters.startDate = ''
-  recordFilters.endDate = ''
-  loadRecords({ resetPage: true })
+const resetRecordFilters = async () => {
+  await runWithoutRecordAutoReload(async () => {
+    recordFilters.subjectId = ''
+    recordFilters.userId = ''
+    recordFilters.keyword = ''
+    recordFilters.startDate = ''
+    recordFilters.endDate = ''
+    await loadRecords({ resetPage: true })
+  })
 }
 
 const fillPaperForm = (payload) => {
@@ -597,6 +610,34 @@ onMounted(async () => {
   await loadSubjects()
   await Promise.all([loadPapers(), loadRecords()])
 })
+
+watch(
+  () => [paperFilters.subjectId, paperFilters.status],
+  () => {
+    schedulePaperReload()
+  }
+)
+
+watch(
+  () => paperFilters.keyword,
+  () => {
+    schedulePaperReload({ delay: 300 })
+  }
+)
+
+watch(
+  () => [recordFilters.subjectId, recordFilters.startDate, recordFilters.endDate],
+  () => {
+    scheduleRecordReload()
+  }
+)
+
+watch(
+  () => [recordFilters.userId, recordFilters.keyword],
+  () => {
+    scheduleRecordReload({ delay: 300 })
+  }
+)
 </script>
 
 <style scoped>

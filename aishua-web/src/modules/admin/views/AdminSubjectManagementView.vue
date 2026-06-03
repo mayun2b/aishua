@@ -37,7 +37,6 @@
 
       <div class="filter-actions">
         <button type="button" class="ghost" @click="resetFilters">重置</button>
-        <button type="button" @click="loadSubjects">查询</button>
       </div>
     </section>
 
@@ -159,8 +158,9 @@
 </template>
 
 <script setup>
-import { onMounted, reactive, ref } from 'vue'
+import { onMounted, reactive, ref, watch } from 'vue'
 import BasePagination from '@/components/BasePagination.vue'
+import useAutoReload from '@/composables/useAutoReload'
 import useClientPagination from '@/composables/useClientPagination'
 import { showToast } from 'vant'
 import subjectApi from '../api/subject'
@@ -175,6 +175,11 @@ const modalVisible = ref(false)
 const filters = reactive({
   keyword: '',
   enabled: ''
+})
+
+const { runWithoutAutoReload, scheduleReload } = useAutoReload(() => {
+  resetPage()
+  return loadSubjects()
 })
 
 const createEmptyForm = () => ({
@@ -323,11 +328,27 @@ const removeSubject = async (subject) => {
 }
 
 const resetFilters = async () => {
-  filters.keyword = ''
-  filters.enabled = ''
-  resetPage()
-  await loadSubjects()
+  await runWithoutAutoReload(async () => {
+    filters.keyword = ''
+    filters.enabled = ''
+    resetPage()
+    await loadSubjects()
+  })
 }
+
+watch(
+  () => filters.enabled,
+  () => {
+    scheduleReload()
+  }
+)
+
+watch(
+  () => filters.keyword,
+  () => {
+    scheduleReload({ delay: 300 })
+  }
+)
 
 onMounted(() => {
   fillForm(createEmptyForm())

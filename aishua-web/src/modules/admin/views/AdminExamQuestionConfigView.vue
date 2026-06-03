@@ -46,7 +46,6 @@
             v-model.trim="questionBankFilters.keyword"
             type="text"
             placeholder="题目关键字"
-            @keyup.enter="searchQuestionBank"
           />
           <select v-model="questionBankFilters.type" @change="onSimpleFilterChange">
             <option value="">题型</option>
@@ -62,7 +61,6 @@
             <option value="2">中等</option>
             <option value="3">困难</option>
           </select>
-          <button type="button" class="ghost small" @click="searchQuestionBank">按知识点/考点选题</button>
           <button type="button" class="ghost small" @click="resetQuestionFilters">重置筛选</button>
         </div>
 
@@ -184,6 +182,7 @@ import { computed, onMounted, reactive, ref, watch } from 'vue'
 import { useRoute, useRouter } from 'vue-router'
 import { showToast } from 'vant'
 import BasePagination from '@/components/BasePagination.vue'
+import useAutoReload from '@/composables/useAutoReload'
 import examApi from '../api/exam'
 
 const QUESTION_TYPE_MAP = {
@@ -242,6 +241,11 @@ const selectedTotalScore = computed(() => {
   }, 0)
 })
 const ready = ref(false)
+
+const {
+  runWithoutAutoReload: runWithoutQuestionBankAutoReload,
+  scheduleReload: scheduleQuestionBankReload
+} = useAutoReload(() => loadQuestionBank({ resetPage: true, silent: true }))
 
 const hydratePaperMetaFromRoute = () => {
   paperMeta.paperName = String(route.query.paperName || '').trim()
@@ -434,20 +438,18 @@ const loadQuestionBank = async ({ resetPage = false, silent = false } = {}) => {
   }
 }
 
-const searchQuestionBank = async () => {
-  await loadQuestionBank({ resetPage: true })
-}
-
 const resetQuestionFilters = async () => {
-  questionBankFilters.volumeId = volumeOptions.value.length ? String(volumeOptions.value[0].id) : ''
-  const scopedDirectoryOptions = getDirectoryOptionsByVolume(questionBankFilters.volumeId)
-  questionBankFilters.directoryId = scopedDirectoryOptions.length ? String(scopedDirectoryOptions[0].id) : ''
-  questionBankFilters.tagId = ''
-  questionBankFilters.keyword = ''
-  questionBankFilters.type = ''
-  questionBankFilters.difficulty = ''
-  await loadDirectoryTags(questionBankFilters.directoryId ? Number(questionBankFilters.directoryId) : null)
-  await loadQuestionBank({ resetPage: true, silent: true })
+  await runWithoutQuestionBankAutoReload(async () => {
+    questionBankFilters.volumeId = volumeOptions.value.length ? String(volumeOptions.value[0].id) : ''
+    const scopedDirectoryOptions = getDirectoryOptionsByVolume(questionBankFilters.volumeId)
+    questionBankFilters.directoryId = scopedDirectoryOptions.length ? String(scopedDirectoryOptions[0].id) : ''
+    questionBankFilters.tagId = ''
+    questionBankFilters.keyword = ''
+    questionBankFilters.type = ''
+    questionBankFilters.difficulty = ''
+    await loadDirectoryTags(questionBankFilters.directoryId ? Number(questionBankFilters.directoryId) : null)
+    await loadQuestionBank({ resetPage: true, silent: true })
+  })
 }
 
 const normalizeQuestionOrder = () => {
@@ -581,6 +583,16 @@ watch(questionBankPage, async (nextPage, previousPage) => {
   }
   await loadQuestionBank()
 })
+
+watch(
+  () => questionBankFilters.keyword,
+  () => {
+    if (!ready.value) {
+      return
+    }
+    scheduleQuestionBankReload({ delay: 300 })
+  }
+)
 
 onMounted(async () => {
   if (!Number.isInteger(paperId.value) || paperId.value <= 0) {

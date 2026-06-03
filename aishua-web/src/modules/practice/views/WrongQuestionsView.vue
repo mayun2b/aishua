@@ -49,7 +49,6 @@
 
       <div class="filter-actions">
         <button type="button" class="ghost" @click="resetFilters">重置</button>
-        <button type="button" @click="applyFilters">查询</button>
       </div>
     </section>
 
@@ -281,6 +280,7 @@ import { computed, onBeforeUnmount, onMounted, reactive, ref, watch } from 'vue'
 import { useRoute } from 'vue-router'
 import { showToast } from 'vant'
 import BasePagination from '@/components/BasePagination.vue'
+import useAutoReload from '@/composables/useAutoReload'
 import { normalizePageResult } from '../../common/utils/pageResult'
 import { hasEssayCanvasMarker, stripEssayCanvasMarker } from '../../common/utils/essayCanvasAnswer'
 import subjectApi from '../../subject/api/subject'
@@ -316,6 +316,10 @@ const filters = reactive({
   subjectId: '',
   directoryId: '',
   masterStatus: ''
+})
+
+const { isReloadSuppressed, runWithoutAutoReload, scheduleReload } = useAutoReload(() => {
+  return applyFilters()
 })
 
 const trendMax = computed(() => Math.max(...wrongTrendItems.value.map((item) => Number(item.wrongAnswerCount || 0)), 1))
@@ -422,13 +426,14 @@ const changeWrongQuestionPage = async (page) => {
 }
 
 const resetFilters = async () => {
-  filters.subjectId = resolveRouteSubjectId()
-  filters.directoryId = ''
-  filters.masterStatus = ''
-  selectedTrendDays.value = 30
-  await loadDirectoryOptions(filters.subjectId)
-  await loadWrongQuestions({ resetPage: true })
-  await loadWrongTrends()
+  await runWithoutAutoReload(async () => {
+    filters.subjectId = resolveRouteSubjectId()
+    filters.directoryId = ''
+    filters.masterStatus = ''
+    selectedTrendDays.value = 30
+    await loadDirectoryOptions(filters.subjectId)
+    await applyFilters()
+  })
 }
 
 const loadWrongTrends = async () => {
@@ -876,18 +881,33 @@ const formatAiMessageContent = (value) => {
 watch(
   () => route.query.subjectId,
   async () => {
-    filters.subjectId = resolveRouteSubjectId()
-    filters.directoryId = ''
-    await loadDirectoryOptions(filters.subjectId)
-    await applyFilters()
+    await runWithoutAutoReload(async () => {
+      filters.subjectId = resolveRouteSubjectId()
+      filters.directoryId = ''
+      await loadDirectoryOptions(filters.subjectId)
+      await applyFilters()
+    })
   }
 )
 
 watch(
   () => filters.subjectId,
   async (subjectId) => {
-    filters.directoryId = ''
-    await loadDirectoryOptions(subjectId)
+    if (isReloadSuppressed()) {
+      return
+    }
+    await runWithoutAutoReload(async () => {
+      filters.directoryId = ''
+      await loadDirectoryOptions(subjectId)
+    })
+    scheduleReload()
+  }
+)
+
+watch(
+  () => [filters.directoryId, filters.masterStatus],
+  () => {
+    scheduleReload()
   }
 )
 
@@ -903,10 +923,12 @@ onMounted(() => {
 })
 
 onMounted(async () => {
-  filters.subjectId = resolveRouteSubjectId()
-  await loadSubjects()
-  await loadDirectoryOptions(filters.subjectId)
-  await applyFilters()
+  await runWithoutAutoReload(async () => {
+    filters.subjectId = resolveRouteSubjectId()
+    await loadSubjects()
+    await loadDirectoryOptions(filters.subjectId)
+    await applyFilters()
+  })
 })
 
 onBeforeUnmount(() => {
