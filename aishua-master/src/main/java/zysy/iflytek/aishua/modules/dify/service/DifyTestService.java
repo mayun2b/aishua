@@ -4,9 +4,12 @@ import org.springframework.stereotype.Service;
 import org.springframework.util.StringUtils;
 import zysy.iflytek.aishua.common.context.UserContext;
 import zysy.iflytek.aishua.common.exception.BusinessException;
+import zysy.iflytek.aishua.modules.ai.entity.vo.LearningAnalysisReportVO;
+import zysy.iflytek.aishua.modules.ai.service.LearningAnalysisReportService;
 import zysy.iflytek.aishua.modules.dify.client.DifyClient;
 import zysy.iflytek.aishua.modules.dify.entity.dto.DifyTestRequest;
 
+import java.util.LinkedHashMap;
 import java.util.Map;
 
 /**
@@ -19,9 +22,11 @@ public class DifyTestService {
     private static final String BEARER_PREFIX = "Bearer ";
 
     private final DifyClient difyClient;
+    private final LearningAnalysisReportService learningAnalysisReportService;
 
-    public DifyTestService(DifyClient difyClient) {
+    public DifyTestService(DifyClient difyClient, LearningAnalysisReportService learningAnalysisReportService) {
         this.difyClient = difyClient;
+        this.learningAnalysisReportService = learningAnalysisReportService;
     }
 
     /**
@@ -44,7 +49,7 @@ public class DifyTestService {
                 ? request.getStudentId().trim()
                 : resolvedUserId;
 
-        return difyClient.runWorkflow(
+        Map<String, Object> difyResponse = difyClient.runWorkflow(
                 request.getQuery().trim(),
                 resolvedStudentId,
                 resolvedUserId,
@@ -54,6 +59,11 @@ public class DifyTestService {
                 normalizeNullableText(request.getGrade()),
                 normalizeNullableText(request.getTextbookVersion())
         );
+
+        LearningAnalysisReportVO analysisReport = learningAnalysisReportService.saveDifyResult(userId, request, difyResponse);
+        Map<String, Object> result = new LinkedHashMap<>(difyResponse);
+        result.put("analysisReport", analysisReport);
+        return result;
     }
 
     /**

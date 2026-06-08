@@ -11,7 +11,7 @@
  Target Server Version : 80046 (8.0.46)
  File Encoding         : 65001
 
- Date: 01/06/2026 14:38:32
+ Date: 08/06/2026 10:47:14
 */
 
 SET NAMES utf8mb4;
@@ -119,7 +119,7 @@ CREATE TABLE `exam_paper`  (
   INDEX `idx_subject_id`(`subject_id` ASC) USING BTREE,
   INDEX `idx_ep_subject_status`(`subject_id` ASC, `status` ASC, `deleted` ASC) USING BTREE,
   CONSTRAINT `fk_ep_subject` FOREIGN KEY (`subject_id`) REFERENCES `subject` (`id`) ON DELETE CASCADE ON UPDATE RESTRICT
-) ENGINE = InnoDB AUTO_INCREMENT = 2 CHARACTER SET = utf8mb4 COLLATE = utf8mb4_0900_ai_ci COMMENT = '试卷表：考试试卷模板' ROW_FORMAT = DYNAMIC;
+) ENGINE = InnoDB AUTO_INCREMENT = 3 CHARACTER SET = utf8mb4 COLLATE = utf8mb4_0900_ai_ci COMMENT = '试卷表：考试试卷模板' ROW_FORMAT = DYNAMIC;
 
 -- ----------------------------
 -- Table structure for exam_paper_question
@@ -139,7 +139,7 @@ CREATE TABLE `exam_paper_question`  (
   INDEX `fk_epq_question`(`question_id` ASC) USING BTREE,
   CONSTRAINT `fk_epq_paper` FOREIGN KEY (`paper_id`) REFERENCES `exam_paper` (`id`) ON DELETE CASCADE ON UPDATE RESTRICT,
   CONSTRAINT `fk_epq_question` FOREIGN KEY (`question_id`) REFERENCES `question` (`id`) ON DELETE CASCADE ON UPDATE RESTRICT
-) ENGINE = InnoDB AUTO_INCREMENT = 7 CHARACTER SET = utf8mb4 COLLATE = utf8mb4_0900_ai_ci COMMENT = '试卷题目关联表：试卷包含的题目模板' ROW_FORMAT = DYNAMIC;
+) ENGINE = InnoDB AUTO_INCREMENT = 8 CHARACTER SET = utf8mb4 COLLATE = utf8mb4_0900_ai_ci COMMENT = '试卷题目关联表：试卷包含的题目模板' ROW_FORMAT = DYNAMIC;
 
 -- ----------------------------
 -- Table structure for exam_record
@@ -234,7 +234,7 @@ CREATE TABLE `exercise_record`  (
   CONSTRAINT `fk_er_session` FOREIGN KEY (`session_ref_id`) REFERENCES `practice_session` (`id`) ON DELETE SET NULL ON UPDATE CASCADE,
   CONSTRAINT `fk_exercise_record_question` FOREIGN KEY (`question_id`) REFERENCES `question` (`id`) ON DELETE CASCADE ON UPDATE RESTRICT,
   CONSTRAINT `fk_exercise_record_user` FOREIGN KEY (`user_id`) REFERENCES `user` (`id`) ON DELETE CASCADE ON UPDATE RESTRICT
-) ENGINE = InnoDB AUTO_INCREMENT = 90 CHARACTER SET = utf8mb4 COLLATE = utf8mb4_0900_ai_ci COMMENT = '练习记录表：用户每道题的作答流水日志' ROW_FORMAT = DYNAMIC;
+) ENGINE = InnoDB AUTO_INCREMENT = 106 CHARACTER SET = utf8mb4 COLLATE = utf8mb4_0900_ai_ci COMMENT = '练习记录表：用户每道题的作答流水日志' ROW_FORMAT = DYNAMIC;
 
 -- ----------------------------
 -- Table structure for practice_question_ai_chat_message
@@ -265,7 +265,7 @@ CREATE TABLE `practice_question_ai_chat_message`  (
   UNIQUE INDEX `uk_pq_ai_chat_msg_seq`(`assistant_session_id` ASC, `seq_no` ASC) USING BTREE,
   INDEX `idx_pq_ai_chat_msg_session_time`(`assistant_session_id` ASC, `create_time` ASC) USING BTREE,
   CONSTRAINT `fk_pqacm_session` FOREIGN KEY (`assistant_session_id`) REFERENCES `practice_question_ai_chat_session` (`id`) ON DELETE CASCADE ON UPDATE CASCADE
-) ENGINE = InnoDB AUTO_INCREMENT = 27 CHARACTER SET = utf8mb4 COLLATE = utf8mb4_0900_ai_ci COMMENT = '练习题AI助手消息表' ROW_FORMAT = DYNAMIC;
+) ENGINE = InnoDB AUTO_INCREMENT = 31 CHARACTER SET = utf8mb4 COLLATE = utf8mb4_0900_ai_ci COMMENT = '练习题AI助手消息表' ROW_FORMAT = DYNAMIC;
 
 -- ----------------------------
 -- Table structure for practice_question_ai_chat_session
@@ -301,7 +301,7 @@ CREATE TABLE `practice_question_ai_chat_session`  (
   CONSTRAINT `fk_pqacs_record` FOREIGN KEY (`exercise_record_id`) REFERENCES `exercise_record` (`id`) ON DELETE SET NULL ON UPDATE CASCADE,
   CONSTRAINT `fk_pqacs_subject` FOREIGN KEY (`subject_id`) REFERENCES `subject` (`id`) ON DELETE SET NULL ON UPDATE CASCADE,
   CONSTRAINT `fk_pqacs_user` FOREIGN KEY (`user_id`) REFERENCES `user` (`id`) ON DELETE CASCADE ON UPDATE CASCADE
-) ENGINE = InnoDB AUTO_INCREMENT = 11 CHARACTER SET = utf8mb4 COLLATE = utf8mb4_0900_ai_ci COMMENT = '练习题AI助手会话表' ROW_FORMAT = DYNAMIC;
+) ENGINE = InnoDB AUTO_INCREMENT = 13 CHARACTER SET = utf8mb4 COLLATE = utf8mb4_0900_ai_ci COMMENT = '练习题AI助手会话表' ROW_FORMAT = DYNAMIC;
 
 -- ----------------------------
 -- Table structure for practice_session
@@ -312,7 +312,7 @@ CREATE TABLE `practice_session`  (
   `session_code` varchar(64) CHARACTER SET utf8mb4 COLLATE utf8mb4_0900_ai_ci NOT NULL COMMENT '会话唯一编码',
   `user_id` bigint NOT NULL COMMENT '用户ID',
   `subject_id` bigint NULL DEFAULT NULL COMMENT '学科ID，学科被物理删除时保留历史会话并置空',
-  `practice_mode` tinyint NOT NULL COMMENT '练习模式：1-顺序，2-随机，3-知识点练习，4-错题重练',
+  `practice_mode` tinyint NOT NULL COMMENT '练习模式：1-顺序，2-随机，3-错题重练，4-AI强化',
   `question_count` int NULL DEFAULT 0 COMMENT '计划题目数',
   `answered_count` int NULL DEFAULT 0 COMMENT '已答数',
   `correct_count` int NULL DEFAULT 0 COMMENT '答对数',
@@ -331,7 +331,7 @@ CREATE TABLE `practice_session`  (
   INDEX `idx_ps_user_subject_status`(`user_id` ASC, `subject_id` ASC, `status` ASC, `started_at` ASC) USING BTREE,
   CONSTRAINT `fk_ps_subject` FOREIGN KEY (`subject_id`) REFERENCES `subject` (`id`) ON DELETE SET NULL ON UPDATE CASCADE,
   CONSTRAINT `fk_ps_user` FOREIGN KEY (`user_id`) REFERENCES `user` (`id`) ON DELETE CASCADE ON UPDATE CASCADE
-) ENGINE = InnoDB AUTO_INCREMENT = 13 CHARACTER SET = utf8mb4 COLLATE = utf8mb4_0900_ai_ci COMMENT = '刷题会话表：记录一次完整刷题过程' ROW_FORMAT = DYNAMIC;
+) ENGINE = InnoDB AUTO_INCREMENT = 16 CHARACTER SET = utf8mb4 COLLATE = utf8mb4_0900_ai_ci COMMENT = '刷题会话表：记录一次完整刷题过程' ROW_FORMAT = DYNAMIC;
 
 -- ----------------------------
 -- Table structure for question
@@ -361,7 +361,7 @@ CREATE TABLE `question`  (
   INDEX `idx_q_filter`(`subject_id` ASC, `directory_id` ASC, `difficulty` ASC, `type` ASC, `deleted` ASC, `update_time` ASC) USING BTREE,
   CONSTRAINT `fk_q_directory` FOREIGN KEY (`directory_id`) REFERENCES `textbook_directory` (`id`) ON DELETE SET NULL ON UPDATE RESTRICT,
   CONSTRAINT `fk_q_subject` FOREIGN KEY (`subject_id`) REFERENCES `subject` (`id`) ON DELETE SET NULL ON UPDATE RESTRICT
-) ENGINE = InnoDB AUTO_INCREMENT = 305 CHARACTER SET = utf8mb4 COLLATE = utf8mb4_0900_ai_ci COMMENT = '题目表：官方题库核心表' ROW_FORMAT = DYNAMIC;
+) ENGINE = InnoDB AUTO_INCREMENT = 348 CHARACTER SET = utf8mb4 COLLATE = utf8mb4_0900_ai_ci COMMENT = '题目表：官方题库核心表' ROW_FORMAT = DYNAMIC;
 
 -- ----------------------------
 -- Table structure for question_tag_relation
@@ -376,7 +376,7 @@ CREATE TABLE `question_tag_relation`  (
   INDEX `fk_qtr_tag`(`tag_id` ASC) USING BTREE,
   CONSTRAINT `fk_qtr_question` FOREIGN KEY (`question_id`) REFERENCES `question` (`id`) ON DELETE CASCADE ON UPDATE RESTRICT,
   CONSTRAINT `fk_qtr_tag` FOREIGN KEY (`tag_id`) REFERENCES `exam_tag` (`id`) ON DELETE CASCADE ON UPDATE RESTRICT
-) ENGINE = InnoDB AUTO_INCREMENT = 291 CHARACTER SET = utf8mb4 COLLATE = utf8mb4_0900_ai_ci COMMENT = '题目-考点关联表：多对多关系中间表' ROW_FORMAT = DYNAMIC;
+) ENGINE = InnoDB AUTO_INCREMENT = 355 CHARACTER SET = utf8mb4 COLLATE = utf8mb4_0900_ai_ci COMMENT = '题目-考点关联表：多对多关系中间表' ROW_FORMAT = DYNAMIC;
 
 -- ----------------------------
 -- Table structure for subject
@@ -670,4 +670,62 @@ CREATE TABLE `wrong_question_ai_chat_session`  (
   CONSTRAINT `fk_wqacs_wrong` FOREIGN KEY (`wrong_question_id`) REFERENCES `wrong_question` (`id`) ON DELETE CASCADE ON UPDATE CASCADE
 ) ENGINE = InnoDB AUTO_INCREMENT = 70 CHARACTER SET = utf8mb4 COLLATE = utf8mb4_0900_ai_ci COMMENT = '错题AI对话会话表' ROW_FORMAT = DYNAMIC;
 
+-- ----------------------------
+-- 学情分析报告表结构
+-- ----------------------------
+DROP TABLE IF EXISTS `learning_analysis_report`;
+CREATE TABLE `learning_analysis_report`  (
+  `id` bigint NOT NULL AUTO_INCREMENT COMMENT '主键ID',
+  `report_code` varchar(64) CHARACTER SET utf8mb4 COLLATE utf8mb4_0900_ai_ci NOT NULL COMMENT '唯一报告编码',
+  `user_id` bigint NOT NULL COMMENT '用户ID',
+  `subject_id` bigint NULL DEFAULT NULL COMMENT '学科ID',
+  `subject_name` varchar(100) CHARACTER SET utf8mb4 COLLATE utf8mb4_0900_ai_ci NULL DEFAULT NULL COMMENT '学科名称快照',
+  `grade` varchar(64) CHARACTER SET utf8mb4 COLLATE utf8mb4_0900_ai_ci NULL DEFAULT NULL COMMENT '年级快照',
+  `textbook_version` varchar(100) CHARACTER SET utf8mb4 COLLATE utf8mb4_0900_ai_ci NULL DEFAULT NULL COMMENT '教材版本快照',
+  `query_text` text CHARACTER SET utf8mb4 COLLATE utf8mb4_0900_ai_ci NOT NULL COMMENT '用户分析问题',
+  `summary` text CHARACTER SET utf8mb4 COLLATE utf8mb4_0900_ai_ci NULL COMMENT '分析摘要',
+  `full_text` longtext CHARACTER SET utf8mb4 COLLATE utf8mb4_0900_ai_ci NULL COMMENT '大模型完整输出文本',
+  `result_json` json NULL COMMENT '结构化分析结果JSON',
+  `raw_response_json` json NULL COMMENT 'Dify原始响应JSON',
+  `data_quality_sufficient` tinyint NULL DEFAULT NULL COMMENT '数据质量是否充足：0-否，1-是',
+  `missing_metrics` json NULL COMMENT '数据质量缺失指标JSON',
+  `workflow_run_id` varchar(128) CHARACTER SET utf8mb4 COLLATE utf8mb4_0900_ai_ci NULL DEFAULT NULL COMMENT 'Dify工作流运行ID',
+  `task_id` varchar(128) CHARACTER SET utf8mb4 COLLATE utf8mb4_0900_ai_ci NULL DEFAULT NULL COMMENT 'Dify任务ID',
+  `status` tinyint NULL DEFAULT 1 COMMENT '状态：1-成功，2-失败',
+  `error_message` varchar(1000) CHARACTER SET utf8mb4 COLLATE utf8mb4_0900_ai_ci NULL DEFAULT NULL COMMENT '错误信息',
+  `create_time` datetime NULL DEFAULT CURRENT_TIMESTAMP COMMENT '创建时间',
+  `update_time` datetime NULL DEFAULT CURRENT_TIMESTAMP ON UPDATE CURRENT_TIMESTAMP COMMENT '更新时间',
+  `deleted` tinyint NULL DEFAULT 0 COMMENT '软删除标记：0-未删，1-已删',
+  PRIMARY KEY (`id`) USING BTREE,
+  UNIQUE INDEX `uk_learning_analysis_code`(`report_code` ASC) USING BTREE,
+  INDEX `idx_la_user_subject_time`(`user_id` ASC, `subject_id` ASC, `create_time` ASC) USING BTREE,
+  INDEX `idx_la_workflow_run_id`(`workflow_run_id` ASC) USING BTREE,
+  INDEX `fk_la_subject`(`subject_id` ASC) USING BTREE,
+  CONSTRAINT `fk_la_subject` FOREIGN KEY (`subject_id`) REFERENCES `subject` (`id`) ON DELETE SET NULL ON UPDATE CASCADE,
+  CONSTRAINT `fk_la_user` FOREIGN KEY (`user_id`) REFERENCES `user` (`id`) ON DELETE CASCADE ON UPDATE CASCADE
+) ENGINE = InnoDB AUTO_INCREMENT = 1 CHARACTER SET = utf8mb4 COLLATE = utf8mb4_0900_ai_ci COMMENT = '学情分析报告表：保存用户学情分析结果' ROW_FORMAT = DYNAMIC;
+
+-- ----------------------------
+-- 学情分析知识点表结构
+-- ----------------------------
+DROP TABLE IF EXISTS `learning_analysis_knowledge_point`;
+CREATE TABLE `learning_analysis_knowledge_point`  (
+  `id` bigint NOT NULL AUTO_INCREMENT COMMENT '主键ID',
+  `report_id` bigint NOT NULL COMMENT '学情分析报告ID',
+  `name` varchar(128) CHARACTER SET utf8mb4 COLLATE utf8mb4_0900_ai_ci NOT NULL COMMENT '知识点名称',
+  `module_name` varchar(128) CHARACTER SET utf8mb4 COLLATE utf8mb4_0900_ai_ci NULL DEFAULT NULL COMMENT '所属模块名称',
+  `reason_text` text CHARACTER SET utf8mb4 COLLATE utf8mb4_0900_ai_ci NULL COMMENT '薄弱原因说明',
+  `mastery_level` varchar(32) CHARACTER SET utf8mb4 COLLATE utf8mb4_0900_ai_ci NULL DEFAULT NULL COMMENT 'AI返回的掌握程度',
+  `correct_rate` decimal(5, 2) NULL DEFAULT NULL COMMENT '正确率或准确率',
+  `sample_count` int NULL DEFAULT NULL COMMENT '样本数量',
+  `wrong_count` int NULL DEFAULT NULL COMMENT '错题数量',
+  `priority` int NULL DEFAULT NULL COMMENT 'AI返回的优先级',
+  `sort_order` int NULL DEFAULT 0 COMMENT '展示排序',
+  `create_time` datetime NULL DEFAULT CURRENT_TIMESTAMP COMMENT '创建时间',
+  `update_time` datetime NULL DEFAULT CURRENT_TIMESTAMP ON UPDATE CURRENT_TIMESTAMP COMMENT '更新时间',
+  `deleted` tinyint NULL DEFAULT 0 COMMENT '软删除标记：0-未删，1-已删',
+  PRIMARY KEY (`id`) USING BTREE,
+  INDEX `idx_lakp_report_sort`(`report_id` ASC, `sort_order` ASC) USING BTREE,
+  CONSTRAINT `fk_lakp_report` FOREIGN KEY (`report_id`) REFERENCES `learning_analysis_report` (`id`) ON DELETE CASCADE ON UPDATE CASCADE
+) ENGINE = InnoDB AUTO_INCREMENT = 1 CHARACTER SET = utf8mb4 COLLATE = utf8mb4_0900_ai_ci COMMENT = '学情分析知识点表：保存报告中的薄弱知识点明细' ROW_FORMAT = DYNAMIC;
 SET FOREIGN_KEY_CHECKS = 1;
