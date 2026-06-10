@@ -1,0 +1,425 @@
+app:
+  description: AI刷题系统学习助手：结合掌握度、错题和网页资源推荐学习资料
+  icon: "\U0001F4DA"
+  icon_background: '#FFEAD5'
+  mode: workflow
+  name: aishua_learning_agent_v1
+  use_icon_as_answer_icon: false
+dependencies: []
+kind: app
+version: 0.1.5
+workflow:
+  conversation_variables: []
+  environment_variables: []
+  features:
+    file_upload:
+      allowed_file_extensions: []
+      allowed_file_types: []
+      allowed_file_upload_methods: []
+      enabled: false
+      fileUploadConfig:
+        audio_file_size_limit: 50
+        batch_count_limit: 5
+        file_size_limit: 15
+        image_file_size_limit: 10
+        video_file_size_limit: 100
+        workflow_file_upload_limit: 10
+      image:
+        enabled: false
+        number_limits: 3
+        transfer_methods: []
+    opening_statement: ''
+    retriever_resource:
+      enabled: false
+    sensitive_word_avoidance:
+      enabled: false
+    speech_to_text:
+      enabled: false
+    suggested_questions: []
+    suggested_questions_after_answer:
+      enabled: false
+    text_to_speech:
+      enabled: false
+      language: ''
+      voice: ''
+  graph:
+    edges:
+    - data:
+        isInIteration: false
+        sourceType: start
+        targetType: code
+      id: 1719000000000-source-1719000001000-target
+      source: '1719000000000'
+      sourceHandle: source
+      target: '1719000001000'
+      targetHandle: target
+      type: custom
+      zIndex: 0
+    - data:
+        isInIteration: false
+        sourceType: code
+        targetType: end
+      id: 1719000001000-source-1719000002000-target
+      source: '1719000001000'
+      sourceHandle: source
+      target: '1719000002000'
+      targetHandle: target
+      type: custom
+      zIndex: 0
+    nodes:
+    - data:
+        desc: 学习助手输入上下文
+        selected: false
+        title: Start
+        type: start
+        variables:
+        - label: query
+          max_length: 4000
+          options: []
+          required: true
+          type: paragraph
+          variable: query
+        - label: subject
+          max_length: 256
+          options: []
+          required: false
+          type: text-input
+          variable: subject
+        - label: subject_id
+          max_length: 64
+          options: []
+          required: false
+          type: text-input
+          variable: subject_id
+        - label: grade
+          max_length: 128
+          options: []
+          required: false
+          type: text-input
+          variable: grade
+        - label: textbook_version
+          max_length: 128
+          options: []
+          required: false
+          type: text-input
+          variable: textbook_version
+        - label: learning_context_json
+          max_length: 20000
+          options: []
+          required: true
+          type: paragraph
+          variable: learning_context_json
+        - label: conversation_context_json
+          max_length: 20000
+          options: []
+          required: false
+          type: paragraph
+          variable: conversation_context_json
+        - label: local_question_candidates_json
+          max_length: 20000
+          options: []
+          required: false
+          type: paragraph
+          variable: local_question_candidates_json
+        - label: resource_policy_json
+          max_length: 8000
+          options: []
+          required: false
+          type: paragraph
+          variable: resource_policy_json
+      height: 520
+      id: '1719000000000'
+      position:
+        x: 80
+        y: 260
+      positionAbsolute:
+        x: 80
+        y: 260
+      selected: false
+      sourcePosition: right
+      targetPosition: left
+      type: custom
+      width: 244
+    - data:
+        code: |
+          import json
+          import re
+
+
+          def _loads(value, fallback):
+              if value is None:
+                  return fallback
+              if isinstance(value, (dict, list)):
+                  return value
+              text = str(value).strip()
+              if not text:
+                  return fallback
+              try:
+                  return json.loads(text)
+              except Exception:
+                  return fallback
+
+
+          def _as_list(value):
+              return value if isinstance(value, list) else []
+
+
+          def _short_text(value, limit=500):
+              text = re.sub(r"\s+", " ", str(value or "")).strip()
+              return text[:limit]
+
+
+          def _pick_tag_names(weak_points, subject):
+              names = []
+              for item in weak_points[:8]:
+                  if not isinstance(item, dict):
+                      continue
+                  name = item.get("tagName") or item.get("tag_name") or item.get("name")
+                  if name and str(name) not in names:
+                      names.append(str(name))
+              if not names and subject:
+                  names.append(str(subject))
+              return names
+
+
+          def _detect_intent(query):
+              text = str(query or "")
+              resource_words = ["资料", "视频", "网页", "链接", "推荐", "资源", "题目", "练习", "课程", "讲解"]
+              strategy_words = ["不会入手", "怎么入手", "思路", "解题", "方法", "步骤", "突破"]
+              if any(word in text for word in resource_words) and any(word in text for word in strategy_words):
+                  return "mixed"
+              if any(word in text for word in resource_words):
+                  return "resource_recommendation"
+              if any(word in text for word in strategy_words):
+                  return "solution_strategy"
+              return "concept_explain"
+
+
+          def _build_local_practice(local_questions, primary_tag):
+              items = []
+              for question in local_questions[:5]:
+                  if not isinstance(question, dict):
+                      continue
+                  items.append({
+                      "question_id": question.get("questionId") or question.get("question_id") or question.get("id"),
+                      "title": question.get("title") or question.get("name") or "",
+                      "difficulty": question.get("difficulty") or question.get("level") or "",
+                      "reason": question.get("reason") or "用于巩固「%s」并定位第一处卡点" % primary_tag
+                  })
+              return items
+
+
+          def main(
+              query: str,
+              subject: str = "",
+              subject_id: str = "",
+              grade: str = "",
+              textbook_version: str = "",
+              learning_context_json: str = "{}",
+              conversation_context_json: str = "[]",
+              local_question_candidates_json: str = "[]",
+              resource_policy_json: str = "{}"
+          ) -> dict:
+              context = _loads(learning_context_json, {})
+              conversation = _as_list(_loads(conversation_context_json, []))
+              local_questions = _as_list(_loads(local_question_candidates_json, []))
+              policy = _loads(resource_policy_json, {})
+
+              weak_points = _as_list(context.get("weakPoints") or context.get("weak_points") or [])
+              focus_tags = _pick_tag_names(weak_points, subject)
+              primary_tag = focus_tags[0] if focus_tags else "当前知识点"
+              subject_text = subject or "当前学科"
+              intent = _detect_intent(query)
+              need_web_search = intent in ["resource_recommendation", "mixed"]
+              max_resources = policy.get("maxResources") if isinstance(policy, dict) else None
+
+              resources = []
+              local_practice = _build_local_practice(local_questions, primary_tag)
+
+              if need_web_search:
+                  answer = (
+                      "我先根据你在%s的掌握情况定位到「%s」。当前 bootstrap 工作流还没有接入搜索插件，"
+                      "所以不会编造网页链接；建议先按“定义识别 -> 条件翻译 -> 标准方程/几何关系 -> 典型题型复盘”的顺序补。"
+                      "后续接入 Google Search 或 HTTP 搜索 API 后，resources 会返回真实 URL。"
+                  ) % (subject_text, primary_tag)
+              else:
+                  answer = (
+                      "这类题建议从「%s」入手：先把题干条件翻译成定义或标准式，再判断它属于求轨迹、求参数、焦点三角形、"
+                      "直线与圆锥曲线位置关系中的哪一类，最后选择对应公式推进。"
+                  ) % primary_tag
+
+              next_actions = [
+                  "先复习「%s」的定义、标准方程和条件转化" % primary_tag,
+                  "做 3 到 5 道基础同类题，只记录第一处卡点",
+                  "把错题按“审题卡住 / 公式不会选 / 运算失误 / 题型没识别”归类"
+              ]
+              if need_web_search:
+                  next_actions.append("在 Dify 中补上搜索分支后，再返回真实资料链接")
+
+              missing = []
+              if need_web_search and not resources:
+                  missing.append("web_search_results")
+              if not weak_points:
+                  missing.append("weakPoints")
+              if not local_practice:
+                  missing.append("local_question_candidates")
+
+              sufficient = bool(resources) or (not need_web_search and bool(weak_points or local_practice))
+              data_quality = {
+                  "sufficient": sufficient,
+                  "missing": missing,
+                  "bootstrap": True,
+                  "reason": "bootstrap workflow returns stable schema; search and LLM ranking are not connected yet"
+              }
+
+              trace = {
+                  "workflow": "aishua_learning_agent_v1_bootstrap",
+                  "intent": intent,
+                  "need_web_search": need_web_search,
+                  "subject_id": str(subject_id or ""),
+                  "grade": str(grade or ""),
+                  "textbook_version": str(textbook_version or ""),
+                  "conversation_items": len(conversation),
+                  "weak_point_count": len(weak_points),
+                  "local_question_count": len(local_questions),
+                  "max_resources": max_resources,
+                  "query_preview": _short_text(query, 160)
+              }
+
+              return {
+                  "answer": answer,
+                  "focus_tags": focus_tags,
+                  "resources": resources,
+                  "local_practice": local_practice,
+                  "next_actions": next_actions,
+                  "data_quality": data_quality,
+                  "trace": trace
+              }
+        code_language: python3
+        desc: 解析 JSON 字符串并返回第一版稳定输出。后续可拆成 normalize_inputs、planner、search、ranker 节点。
+        outputs:
+          answer:
+            children: null
+            type: string
+          data_quality:
+            children: null
+            type: object
+          focus_tags:
+            children: null
+            type: array[string]
+          local_practice:
+            children: null
+            type: array[object]
+          next_actions:
+            children: null
+            type: array[string]
+          resources:
+            children: null
+            type: array[object]
+          trace:
+            children: null
+            type: object
+        selected: false
+        title: normalize_and_respond
+        type: code
+        variables:
+        - value_selector:
+          - '1719000000000'
+          - query
+          variable: query
+        - value_selector:
+          - '1719000000000'
+          - subject
+          variable: subject
+        - value_selector:
+          - '1719000000000'
+          - subject_id
+          variable: subject_id
+        - value_selector:
+          - '1719000000000'
+          - grade
+          variable: grade
+        - value_selector:
+          - '1719000000000'
+          - textbook_version
+          variable: textbook_version
+        - value_selector:
+          - '1719000000000'
+          - learning_context_json
+          variable: learning_context_json
+        - value_selector:
+          - '1719000000000'
+          - conversation_context_json
+          variable: conversation_context_json
+        - value_selector:
+          - '1719000000000'
+          - local_question_candidates_json
+          variable: local_question_candidates_json
+        - value_selector:
+          - '1719000000000'
+          - resource_policy_json
+          variable: resource_policy_json
+      height: 360
+      id: '1719000001000'
+      position:
+        x: 430
+        y: 260
+      positionAbsolute:
+        x: 430
+        y: 260
+      selected: false
+      sourcePosition: right
+      targetPosition: left
+      type: custom
+      width: 244
+    - data:
+        desc: 返回后端可解析的 data.outputs
+        outputs:
+        - value_selector:
+          - '1719000001000'
+          - answer
+          variable: answer
+        - value_selector:
+          - '1719000001000'
+          - focus_tags
+          variable: focus_tags
+        - value_selector:
+          - '1719000001000'
+          - resources
+          variable: resources
+        - value_selector:
+          - '1719000001000'
+          - local_practice
+          variable: local_practice
+        - value_selector:
+          - '1719000001000'
+          - next_actions
+          variable: next_actions
+        - value_selector:
+          - '1719000001000'
+          - data_quality
+          variable: data_quality
+        - value_selector:
+          - '1719000001000'
+          - trace
+          variable: trace
+        selected: false
+        title: Output
+        type: end
+      height: 260
+      id: '1719000002000'
+      position:
+        x: 780
+        y: 260
+      positionAbsolute:
+        x: 780
+        y: 260
+      selected: false
+      sourcePosition: right
+      targetPosition: left
+      type: custom
+      width: 244
+    viewport:
+      x: 0
+      y: 0
+      zoom: 0.8

@@ -1,0 +1,15 @@
+{
+  "inputs": {
+    "query": "我椭圆这类题总不会入手，推荐点适合我的资料",
+    "subject": "高中数学",
+    "subject_id": "1",
+    "grade": "高二",
+    "textbook_version": "人教版",
+    "learning_context_json": "{\"weakPoints\":[{\"tagId\":12,\"tagName\":\"椭圆定义\",\"masteryLevel\":1,\"correctRate\":45,\"wrongCount\":6}]}",
+    "conversation_context_json": "[]",
+    "local_question_candidates_json": "[]",
+    "resource_policy_json": "{\"resourceTypes\":[\"video\",\"article\",\"exercise\"],\"maxResources\":5}"
+  },
+  "response_mode": "blocking",
+  "user": "aishua_acceptance_user"
+}
