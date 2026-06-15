@@ -402,7 +402,22 @@ onMounted(loadStats)
   font-size: 14px;
   text-decoration: none;
   cursor: pointer;
-  transition: all 0.2s ease;
+  transition: background-color 0.2s ease, border-color 0.2s ease, box-shadow 0.2s ease, color 0.2s ease, transform 0.2s ease;
+}
+
+.head-actions .ghost:hover,
+.range-control button:hover:not(.active) {
+  border-color: #98a2b3;
+  background: #f9fafb;
+  transform: translateY(-1px);
+}
+
+.head-actions .ghost:focus-visible,
+.range-control button:focus-visible,
+.panel-head a:focus-visible,
+.session-link:focus-visible {
+  outline: 3px solid rgba(37, 99, 235, 0.18);
+  outline-offset: 3px;
 }
 
 .head-actions .ghost:hover {
@@ -503,6 +518,7 @@ onMounted(loadStats)
   color: #111827;
   font-size: 28px;
   line-height: 1.15;
+  font-variant-numeric: tabular-nums;
 }
 
 .panel {
@@ -566,6 +582,7 @@ onMounted(loadStats)
   bottom: 0;
   border-radius: 6px 6px 0 0;
   background: #22a06b;
+  transition: height 0.24s ease;
 }
 
 .trend-label {
@@ -639,6 +656,7 @@ onMounted(loadStats)
   color: #111827;
   font-style: normal;
   font-weight: 700;
+  font-variant-numeric: tabular-nums;
 }
 
 .weak-row {
@@ -703,6 +721,7 @@ td {
   font-size: 14px;
   text-align: left;
   white-space: nowrap;
+  font-variant-numeric: tabular-nums;
 }
 
 th {

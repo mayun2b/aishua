@@ -28,4 +28,10 @@ public class DifyProperties {
      * 请求响应模式。
      */
     private String responseMode = "blocking";
+
+    /**
+     * 视频搜索工作流 API Key（用于薄弱知识点视频推荐）。
+     * 如果未配置则回退到通用 apiKey。
+     */
+    private String videoSearchApiKey;
 }

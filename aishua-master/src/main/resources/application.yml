@@ -58,6 +58,7 @@ dify:
   api-key: app-brUWNXBqSB0sM0w5VfKDTTG7
   workflow-run-path: /v1/workflows/run
   response-mode: blocking
+  video-search-api-key: app-QV38e9CmToLIo0FGDMLMzvBu
 
 mybatis-plus:
   configuration:

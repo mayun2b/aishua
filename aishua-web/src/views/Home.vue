@@ -24,10 +24,9 @@
           </div>
           <nav class="nav-menu">
             <a href="#home" class="nav-link">首页</a>
-            <a href="#platform" class="nav-link">平台定位</a>
-            <a href="#capabilities" class="nav-link">能力矩阵</a>
             <a href="#advantages" class="nav-link">核心优势</a>
             <a href="#scenarios" class="nav-link">场景覆盖</a>
+            <a href="#cta" class="nav-link">开始使用</a>
           </nav>
           <div class="header-actions">
             <button class="btn-secondary" @click="goToLogin">登录</button>
@@ -120,9 +119,9 @@
                 <div class="button-glow"></div>
               </button>
               <button class="btn-secondary animated-button" @click="goToDashboard">
-              <span>开始练习</span>
-              <div class="button-glow-secondary"></div>
-            </button>
+                <span>进入学习工作台</span>
+                <div class="button-glow-secondary"></div>
+              </button>
             </div>
             
             <div class="hero-particles-left">
@@ -205,7 +204,7 @@
       </div>
     </section>
 
-    <section class="cta-section">
+    <section id="cta" class="cta-section">
       <div class="container">
         <div class="cta-content">
           <h2 class="cta-title">开启AI智能学习之旅</h2>
@@ -242,9 +241,9 @@
           <div class="footer-section">
             <h4>产品</h4>
             <ul class="footer-links">
-              <li><a href="#features">AI功能</a></li>
-              <li><a href="#how-it-works">智能学习</a></li>
-              <li><a href="#testimonials">用户反馈</a></li>
+              <li><a href="#advantages">AI功能</a></li>
+              <li><a href="#scenarios">学习场景</a></li>
+              <li><a href="#cta">开始使用</a></li>
             </ul>
           </div>
           <div class="footer-section">
@@ -293,6 +292,11 @@ const resolveAuthenticatedLanding = () => {
   return user?.isAdmin === 1 ? '/admin' : '/my-subjects'
 }
 
+const resolveAuthenticatedDashboard = () => {
+  const user = getStoredUser()
+  return user?.isAdmin === 1 ? '/admin' : '/dashboard'
+}
+
 const goToLogin = () => {
   router.push('/login')
 }
@@ -312,7 +316,8 @@ const goToExercise = () => {
   goToPracticeLanding()
 }
 const goToDashboard = () => {
-  goToPracticeLanding()
+  const token = localStorage.getItem('token')
+  router.push(token ? resolveAuthenticatedDashboard() : '/login')
 }
 const goToHome = () => {
   router.push('/')
@@ -372,8 +377,8 @@ onUnmounted(() => {
   --border-radius: 20px;
   --border-radius-lg: 28px;
   --border-radius-xl: 32px;
-  --transition: all 0.4s cubic-bezier(0.4, 0, 0.2, 1);
-  --transition-fast: all 0.3s cubic-bezier(0.4, 0, 0.2, 1);
+  --transition: color 0.3s cubic-bezier(0.4, 0, 0.2, 1), background-color 0.3s cubic-bezier(0.4, 0, 0.2, 1), border-color 0.3s cubic-bezier(0.4, 0, 0.2, 1), box-shadow 0.3s cubic-bezier(0.4, 0, 0.2, 1), transform 0.3s cubic-bezier(0.4, 0, 0.2, 1), opacity 0.3s cubic-bezier(0.4, 0, 0.2, 1), filter 0.3s cubic-bezier(0.4, 0, 0.2, 1), left 0.3s cubic-bezier(0.4, 0, 0.2, 1), padding 0.3s cubic-bezier(0.4, 0, 0.2, 1);
+  --transition-fast: color 0.2s cubic-bezier(0.4, 0, 0.2, 1), background-color 0.2s cubic-bezier(0.4, 0, 0.2, 1), border-color 0.2s cubic-bezier(0.4, 0, 0.2, 1), box-shadow 0.2s cubic-bezier(0.4, 0, 0.2, 1), transform 0.2s cubic-bezier(0.4, 0, 0.2, 1), opacity 0.2s cubic-bezier(0.4, 0, 0.2, 1);
 }
 * {
   margin: 0;
@@ -388,6 +393,7 @@ onUnmounted(() => {
   width: 100%;
   overflow-x: hidden;
   position: relative;
+  scroll-behavior: smooth;
 }
 .container {
   max-width: 1200px;
@@ -514,6 +520,14 @@ onUnmounted(() => {
 .nav-link:hover {
   color: #ffffff;
 }
+
+.nav-link:focus-visible,
+.btn-primary:focus-visible,
+.btn-secondary:focus-visible,
+.footer-links a:focus-visible {
+  outline: 3px solid rgba(255, 255, 255, 0.72);
+  outline-offset: 4px;
+}
 .nav-link::before {
   content: '';
   position: absolute;
@@ -563,6 +577,7 @@ onUnmounted(() => {
   font-size: 0.95rem;
   letter-spacing: 0.5px;
   text-transform: uppercase;
+  min-height: 44px;
 }
 .btn-primary::before {
   content: '';
@@ -598,6 +613,7 @@ onUnmounted(() => {
   font-size: 0.95rem;
   letter-spacing: 0.5px;
   text-transform: uppercase;
+  min-height: 44px;
 }
 .btn-secondary::before {
   content: '';
@@ -909,6 +925,7 @@ onUnmounted(() => {
   color: #ffffff;
   text-shadow: 0 0 30px rgba(102, 126, 234, 0.6), 0 2px 4px rgba(0, 0, 0, 0.3);
   position: relative;
+  text-wrap: balance;
 }
 
 .hero-title::before {
@@ -965,6 +982,7 @@ onUnmounted(() => {
   text-shadow: 0 2px 4px rgba(0, 0, 0, 0.7);
   font-weight: 500;
   animation: descriptionFadeIn 1s ease-out 1.1s both;
+  text-wrap: pretty;
 }
 @keyframes descriptionFadeIn {
   from { 
@@ -1314,6 +1332,7 @@ onUnmounted(() => {
   -webkit-text-fill-color: transparent;
   background-clip: text;
   text-shadow: 0 0 30px rgba(59, 130, 246, 0.3);
+  text-wrap: balance;
 }
 .section-description {
   font-size: 1.1rem;
@@ -1321,6 +1340,7 @@ onUnmounted(() => {
   line-height: 1.6;
   max-width: 600px;
   margin: 0 auto;
+  text-wrap: pretty;
 }
 .features-grid {
   display: grid;
@@ -1607,6 +1627,7 @@ onUnmounted(() => {
   padding: 6rem 0;
   background: var(--primary-gradient);
   text-align: center;
+  scroll-margin-top: 96px;
 }
 .cta-content {
   max-width: 800px;
@@ -1692,6 +1713,43 @@ onUnmounted(() => {
   font-size: 0.85rem;
 }
 @media (max-width: 768px) {
+  .home-header {
+    padding: 0.75rem 0;
+  }
+
+  .header-content {
+    flex-wrap: wrap;
+    gap: 0.75rem;
+  }
+
+  .nav-menu {
+    order: 3;
+    width: 100%;
+    gap: 1rem;
+    overflow-x: auto;
+    padding-bottom: 0.25rem;
+  }
+
+  .nav-link {
+    flex: 0 0 auto;
+    font-size: 0.9rem;
+  }
+
+  .header-actions {
+    margin-left: auto;
+    gap: 0.5rem;
+  }
+
+  .header-actions .btn-primary,
+  .header-actions .btn-secondary {
+    padding: 0.65rem 0.9rem;
+    font-size: 0.82rem;
+  }
+
+  .hero-section {
+    padding-top: 11rem;
+  }
+
   .hero-content {
     grid-template-columns: 1fr;
     gap: 2rem;
@@ -1732,6 +1790,36 @@ onUnmounted(() => {
   }
   .cta-title {
     font-size: 2rem;
+  }
+
+  .nav-menu {
+    display: none;
+  }
+
+  .header-actions {
+    width: 100%;
+  }
+
+  .header-actions .btn-primary,
+  .header-actions .btn-secondary {
+    flex: 1;
+  }
+
+  .hero-actions,
+  .cta-buttons {
+    display: grid;
+    grid-template-columns: 1fr;
+  }
+}
+
+@media (prefers-reduced-motion: reduce) {
+  .home-container *,
+  .home-container *::before,
+  .home-container *::after {
+    animation-duration: 0.01ms !important;
+    animation-iteration-count: 1 !important;
+    scroll-behavior: auto !important;
+    transition-duration: 0.01ms !important;
   }
 }
 </style>

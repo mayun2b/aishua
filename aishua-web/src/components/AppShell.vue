@@ -1,6 +1,12 @@
 <template>
   <div class="app-shell">
-    <aside class="shell-sidebar" :class="{ open: mobileMenuOpen }">
+    <aside
+      id="app-shell-sidebar"
+      class="shell-sidebar"
+      :class="{ open: mobileMenuOpen }"
+      :inert="isMobileViewport && !mobileMenuOpen"
+      :aria-hidden="isMobileViewport && !mobileMenuOpen ? 'true' : 'false'"
+    >
       <div class="brand-block">
         <router-link class="brand-mark" :to="homePath" @click="closeMobileMenu">
           <span>AI</span>
@@ -30,7 +36,14 @@
 
     <section class="shell-body">
       <header class="shell-topbar">
-        <button type="button" class="menu-button" aria-label="打开导航" @click="toggleMobileMenu">
+        <button
+          type="button"
+          class="menu-button"
+          :aria-label="mobileMenuOpen ? '关闭导航' : '打开导航'"
+          aria-controls="app-shell-sidebar"
+          :aria-expanded="mobileMenuOpen ? 'true' : 'false'"
+          @click="toggleMobileMenu"
+        >
           <span></span>
           <span></span>
           <span></span>
@@ -58,7 +71,7 @@
 </template>
 
 <script setup>
-import { computed, ref, watch } from 'vue'
+import { computed, onBeforeUnmount, onMounted, ref, watch } from 'vue'
 import { useRoute, useRouter } from 'vue-router'
 import { useStore } from 'vuex'
 import {
@@ -71,6 +84,7 @@ const router = useRouter()
 const store = useStore()
 
 const mobileMenuOpen = ref(false)
+const isMobileViewport = ref(false)
 const user = computed(() => store.getters['auth/currentUser'] || {})
 const isAdmin = computed(() => store.getters['auth/isAdmin'])
 const navigationSections = computed(() => getNavigationSections(isAdmin.value))
@@ -110,10 +124,37 @@ const handleLogout = async () => {
   router.replace('/login')
 }
 
+let mobileMediaQuery
+
+const syncMobileViewport = () => {
+  isMobileViewport.value = Boolean(mobileMediaQuery?.matches)
+}
+
 watch(
   () => route.fullPath,
   () => closeMobileMenu()
 )
+
+onMounted(() => {
+  mobileMediaQuery = window.matchMedia('(max-width: 980px)')
+  syncMobileViewport()
+  if (mobileMediaQuery.addEventListener) {
+    mobileMediaQuery.addEventListener('change', syncMobileViewport)
+  } else {
+    mobileMediaQuery.addListener(syncMobileViewport)
+  }
+})
+
+onBeforeUnmount(() => {
+  if (!mobileMediaQuery) {
+    return
+  }
+  if (mobileMediaQuery.removeEventListener) {
+    mobileMediaQuery.removeEventListener('change', syncMobileViewport)
+  } else {
+    mobileMediaQuery.removeListener(syncMobileViewport)
+  }
+})
 </script>
 
 <style scoped>
@@ -205,10 +246,19 @@ watch(
   transition: background 0.18s ease, color 0.18s ease, transform 0.18s ease;
 }
 
-.nav-item:hover {
+.nav-item:hover,
+.nav-item:focus-visible {
   background: #eef4ff;
   color: #17324d;
   transform: translateX(2px);
+}
+
+.brand-mark:focus-visible,
+.nav-item:focus-visible,
+.menu-button:focus-visible,
+.user-box button:focus-visible {
+  outline: 3px solid rgba(37, 99, 235, 0.24);
+  outline-offset: 3px;
 }
 
 .nav-item.active {
@@ -272,6 +322,7 @@ watch(
   overflow: hidden;
   text-overflow: ellipsis;
   white-space: nowrap;
+  text-wrap: balance;
 }
 
 .user-box {
@@ -297,13 +348,21 @@ watch(
 }
 
 .user-box button {
-  height: 36px;
+  min-width: 44px;
+  min-height: 40px;
   border: 1px solid #d0d5dd;
   border-radius: 8px;
   padding: 0 12px;
   background: #fff;
   color: #344054;
   cursor: pointer;
+  transition: background-color 0.18s ease, border-color 0.18s ease, transform 0.18s ease;
+}
+
+.user-box button:hover {
+  border-color: #98a2b3;
+  background: #f9fafb;
+  transform: translateY(-1px);
 }
 
 .shell-content {
@@ -318,6 +377,12 @@ watch(
   border-radius: 8px;
   background: #fff;
   cursor: pointer;
+  transition: background-color 0.18s ease, border-color 0.18s ease;
+}
+
+.menu-button:hover {
+  border-color: #98a2b3;
+  background: #f9fafb;
 }
 
 .menu-button span {
@@ -375,8 +440,17 @@ watch(
 }
 
 @media (max-width: 560px) {
+  .shell-topbar {
+    gap: 10px;
+  }
+
+  .page-context {
+    flex: 1;
+  }
+
   .page-context strong {
     font-size: 16px;
+    white-space: normal;
   }
 
   .user-box button {

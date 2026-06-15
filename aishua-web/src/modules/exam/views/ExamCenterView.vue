@@ -292,6 +292,13 @@ select {
   background: #fff;
   display: grid;
   gap: 16px;
+  transition: border-color 0.2s ease, box-shadow 0.2s ease, transform 0.2s ease;
+}
+
+.paper-card:hover {
+  border-color: #bdd0e7;
+  box-shadow: 0 18px 34px rgba(30, 62, 98, 0.1);
+  transform: translateY(-2px);
 }
 
 .paper-card header {
@@ -332,6 +339,7 @@ select {
 .paper-meta strong {
   color: #1e3a5f;
   font-size: 14px;
+  font-variant-numeric: tabular-nums;
 }
 
 .paper-card footer {
@@ -351,16 +359,29 @@ button,
 .ghost {
   border: 0;
   border-radius: 12px;
+  min-height: 40px;
   padding: 10px 14px;
   font-size: 14px;
   cursor: pointer;
   text-decoration: none;
-  transition: all 0.2s ease;
+  transition: background-color 0.2s ease, box-shadow 0.2s ease, color 0.2s ease, transform 0.2s ease;
 }
 
 button {
   background: #17324d;
   color: #fff;
+}
+
+button:hover:not(:disabled),
+.ghost:hover {
+  box-shadow: 0 10px 20px rgba(23, 50, 77, 0.12);
+  transform: translateY(-1px);
+}
+
+button:focus-visible,
+.ghost:focus-visible {
+  outline: 3px solid rgba(37, 99, 235, 0.18);
+  outline-offset: 3px;
 }
 
 button:disabled {

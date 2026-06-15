@@ -1,0 +1,264 @@
+package zysy.iflytek.aishua.modules.ai.service;
+
+import com.alibaba.fastjson2.JSON;
+import com.alibaba.fastjson2.JSONArray;
+import com.alibaba.fastjson2.JSONObject;
+import org.slf4j.Logger;
+import org.slf4j.LoggerFactory;
+import org.springframework.stereotype.Service;
+import org.springframework.util.StringUtils;
+import zysy.iflytek.aishua.config.properties.DifyProperties;
+import zysy.iflytek.aishua.modules.ai.entity.dto.VideoSearchRequest;
+import zysy.iflytek.aishua.modules.ai.entity.vo.VideoSearchResultVO;
+import zysy.iflytek.aishua.modules.dify.client.DifyClient;
+
+import java.util.*;
+
+/**
+ * 视频搜索服务。
+ * 通过 Dify 工作流调用大模型，根据薄弱知识点推荐 B站教学视频，
+ * 前端用 iframe 嵌入播放。
+ */
+@Service
+public class VideoSearchService {
+    private static final Logger log = LoggerFactory.getLogger(VideoSearchService.class);
+
+    private static final String BILIBILI_PLAYER_BASE = "https://player.bilibili.com/player.html";
+    private static final String BILIBILI_VIDEO_PAGE_BASE = "https://www.bilibili.com/video/";
+
+    private final DifyClient difyClient;
+    private final DifyProperties difyProperties;
+
+    public VideoSearchService(DifyClient difyClient, DifyProperties difyProperties) {
+        this.difyClient = difyClient;
+        this.difyProperties = difyProperties;
+    }
+
+    /**
+     * 搜索教学视频。
+     */
+    public VideoSearchResultVO searchVideos(VideoSearchRequest request) {
+        String apiKey = resolveApiKey();
+        if (!StringUtils.hasText(apiKey)) {
+            return new VideoSearchResultVO(false, List.of(),
+                    "视频搜索功能未配置，请在 Dify 中创建视频搜索工作流并配置 API Key");
+        }
+
+        try {
+            // 构建 Dify 工作流输入
+            Map<String, Object> inputs = new HashMap<>();
+            inputs.put("knowledge_point", request.getKnowledgePoint().trim());
+            if (StringUtils.hasText(request.getSubject())) {
+                inputs.put("subject", request.getSubject().trim());
+            }
+            if (StringUtils.hasText(request.getGrade())) {
+                inputs.put("grade", request.getGrade().trim());
+            }
+            int limit = request.getLimit() != null ? Math.min(Math.max(request.getLimit(), 1), 10) : 5;
+            inputs.put("limit", limit);
+
+            // 调用 Dify 工作流
+            Map<String, Object> result = difyClient.runWorkflow(inputs, "video-search-user", apiKey);
+
+            // 解析结果
+            return parseDifyResult(result, limit);
+        } catch (Exception e) {
+            log.error("Dify视频搜索工作流调用失败: knowledgePoint={}, error={}",
+                    request.getKnowledgePoint(), e.getMessage(), e);
+            return new VideoSearchResultVO(false, List.of(), "视频搜索失败，请稍后重试");
+        }
+    }
+
+    /**
+     * 解析 Dify 工作流返回结果。
+     * 期望 Dify 工作流输出格式：
+     * {
+     *   "data": {
+     *     "outputs": {
+     *       "videos": [
+     *         {"bvid": "BV1xx...", "title": "视频标题", "pic": "封面URL", "duration": "12:30", "owner": "UP主"}
+     *       ]
+     *     }
+     *   }
+     * }
+     * 也兼容直接输出 JSON 字符串的 text 字段。
+     */
+    private VideoSearchResultVO parseDifyResult(Map<String, Object> result, int limit) {
+        if (result == null || result.isEmpty()) {
+            return new VideoSearchResultVO(false, List.of(), "Dify工作流返回为空");
+        }
+
+        try {
+            // 尝试从 data.outputs.videos 获取
+            Object dataObj = result.get("data");
+            JSONObject dataJson = null;
+            if (dataObj instanceof Map) {
+                dataJson = new JSONObject((Map<String, Object>) dataObj);
+            }
+
+            JSONArray videosArray = null;
+
+            if (dataJson != null) {
+                // 方式1: data.outputs.videos
+                Object outputsObj = dataJson.get("outputs");
+                if (outputsObj instanceof Map) {
+                    JSONObject outputs = new JSONObject((Map<String, Object>) outputsObj);
+                    Object videosObj = outputs.get("videos");
+                    if (videosObj instanceof List) {
+                        videosArray = new JSONArray((List<?>) videosObj);
+                    } else if (videosObj instanceof String) {
+                        // videos 可能是 JSON 字符串
+                        videosArray = parseJsonStringToArray((String) videosObj);
+                    }
+                }
+
+                // 方式2: data.outputs.text 中包含 JSON
+                if (videosArray == null && outputsObj instanceof Map) {
+                    JSONObject outputs = new JSONObject((Map<String, Object>) outputsObj);
+                    String text = outputs.getString("text");
+                    if (StringUtils.hasText(text)) {
+                        videosArray = extractVideosFromText(text);
+                    }
+                }
+
+                // 方式3: data.structured_output.videos
+                if (videosArray == null) {
+                    Object structuredObj = dataJson.get("structured_output");
+                    if (structuredObj instanceof Map) {
+                        JSONObject structured = new JSONObject((Map<String, Object>) structuredObj);
+                        Object videosObj = structured.get("videos");
+                        if (videosObj instanceof List) {
+                            videosArray = new JSONArray((List<?>) videosObj);
+                        } else if (videosObj instanceof String) {
+                            videosArray = parseJsonStringToArray((String) videosObj);
+                        }
+                    }
+                }
+            }
+
+            if (videosArray == null || videosArray.isEmpty()) {
+                log.warn("Dify视频搜索结果中未找到视频列表，原始返回: {}", JSON.toJSONString(result));
+                return new VideoSearchResultVO(true, List.of(), null);
+            }
+
+            List<VideoSearchResultVO.VideoItemVO> videos = new ArrayList<>();
+            for (int i = 0; i < Math.min(videosArray.size(), limit); i++) {
+                JSONObject item = videosArray.getJSONObject(i);
+                VideoSearchResultVO.VideoItemVO video = new VideoSearchResultVO.VideoItemVO();
+
+                String bvid = item.getString("bvid");
+                if (!StringUtils.hasText(bvid)) {
+                    continue; // 跳过没有 bvid 的项
+                }
+
+                video.setBvid(bvid);
+                video.setTitle(item.getString("title"));
+                video.setPic(normalizeImageUrl(item.getString("pic")));
+                video.setDuration(item.getString("duration"));
+                video.setOwner(item.getString("owner"));
+                video.setPlay(item.getLong("play") != null ? item.getLong("play") : 0L);
+                video.setEmbedUrl(buildEmbedUrl(bvid));
+                video.setPageUrl(BILIBILI_VIDEO_PAGE_BASE + bvid);
+                video.setSource("bilibili");
+
+                videos.add(video);
+            }
+
+            return new VideoSearchResultVO(true, videos, null);
+        } catch (Exception e) {
+            log.error("解析Dify视频搜索结果异常: {}", e.getMessage(), e);
+            return new VideoSearchResultVO(false, List.of(), "解析搜索结果失败");
+        }
+    }
+
+    /**
+     * 从文本中提取 JSON 数组（大模型可能把 JSON 包在 markdown 代码块中）。
+     */
+    private JSONArray extractVideosFromText(String text) {
+        if (text == null || text.isBlank()) {
+            return null;
+        }
+        // 去除 markdown 代码块标记
+        String cleaned = text.replaceAll("```json\\s*", "").replaceAll("```\\s*", "").trim();
+
+        // 尝试直接解析
+        JSONArray arr = parseJsonStringToArray(cleaned);
+        if (arr != null) {
+            return arr;
+        }
+
+        // 尝试从文本中找到 JSON 数组
+        int start = cleaned.indexOf('[');
+        int end = cleaned.lastIndexOf(']');
+        if (start >= 0 && end > start) {
+            String jsonStr = cleaned.substring(start, end + 1);
+            return parseJsonStringToArray(jsonStr);
+        }
+
+        // 尝试从文本中找到 JSON 对象（可能包含 videos 字段）
+        int objStart = cleaned.indexOf('{');
+        int objEnd = cleaned.lastIndexOf('}');
+        if (objStart >= 0 && objEnd > objStart) {
+            String jsonStr = cleaned.substring(objStart, objEnd + 1);
+            try {
+                JSONObject obj = JSON.parseObject(jsonStr);
+                Object videos = obj.get("videos");
+                if (videos instanceof List) {
+                    return new JSONArray((List<?>) videos);
+                }
+            } catch (Exception ignored) {
+            }
+        }
+
+        return null;
+    }
+
+    /**
+     * 解析 JSON 字符串为数组。
+     */
+    private JSONArray parseJsonStringToArray(String jsonStr) {
+        try {
+            return JSON.parseArray(jsonStr);
+        } catch (Exception e) {
+            return null;
+        }
+    }
+
+    /**
+     * 解析 API Key：优先用视频搜索专用 Key，否则回退到通用 Key。
+     */
+    private String resolveApiKey() {
+        String videoSearchKey = difyProperties.getVideoSearchApiKey();
+        if (StringUtils.hasText(videoSearchKey)) {
+            return videoSearchKey.trim();
+        }
+        return difyProperties.getApiKey();
+    }
+
+    /**
+     * 构建 B站 iframe 嵌入播放地址。
+     */
+    private String buildEmbedUrl(String bvid) {
+        if (!StringUtils.hasText(bvid)) {
+            return "";
+        }
+        return BILIBILI_PLAYER_BASE
+                + "?bvid=" + bvid
+                + "&danmaku=0"
+                + "&high_quality=1"
+                + "&no_related=1";
+    }
+
+    /**
+     * 规范化图片 URL。
+     */
+    private String normalizeImageUrl(String url) {
+        if (url == null || url.isBlank()) {
+            return "";
+        }
+        if (url.startsWith("//")) {
+            return "https:" + url;
+        }
+        return url;
+    }
+}

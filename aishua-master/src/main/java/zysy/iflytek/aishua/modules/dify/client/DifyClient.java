@@ -73,6 +73,32 @@ public class DifyClient {
         return response.getBody() == null ? Map.of() : response.getBody();
     }
 
+    /**
+     * 通用工作流调用：自定义 inputs 和 API Key。
+     */
+    public Map<String, Object> runWorkflow(Map<String, Object> inputs, String userId, String apiKey) {
+        DifyWorkflowRequest request = new DifyWorkflowRequest();
+        request.setInputs(inputs);
+        request.setResponseMode(resolveResponseMode());
+        request.setUser(userId);
+
+        HttpHeaders headers = new HttpHeaders();
+        headers.setContentType(MediaType.APPLICATION_JSON);
+        headers.setBearerAuth(apiKey);
+
+        HttpEntity<DifyWorkflowRequest> entity = new HttpEntity<>(request, headers);
+
+        @SuppressWarnings("unchecked")
+        ResponseEntity<Map> response = restTemplate.exchange(
+                resolveWorkflowUrl(),
+                HttpMethod.POST,
+                entity,
+                Map.class
+        );
+
+        return response.getBody() == null ? Map.of() : response.getBody();
+    }
+
     private DifyWorkflowRequest buildRequest(
             String query,
             String studentId,
