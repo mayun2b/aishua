@@ -6,6 +6,8 @@ import org.springframework.stereotype.Service;
 import org.springframework.transaction.annotation.Transactional;
 import zysy.iflytek.aishua.common.exception.BusinessException;
 import zysy.iflytek.aishua.common.result.PageResult;
+import zysy.iflytek.aishua.modules.ai.grading.service.AiGradingTaskService;
+import zysy.iflytek.aishua.modules.ai.grading.support.AiGradingConstants;
 import zysy.iflytek.aishua.modules.directory.entity.TextbookDirectory;
 import zysy.iflytek.aishua.modules.directory.entity.DirectoryTagRelation;
 import zysy.iflytek.aishua.modules.directory.mapper.TextbookDirectoryMapper;
@@ -95,6 +97,7 @@ public class ExamServiceImpl implements ExamService {
     private final DirectoryService directoryService;
     private final DirectoryScopeResolver directoryScopeResolver;
     private final AnswerJudgeSupport answerJudgeSupport;
+    private final AiGradingTaskService aiGradingTaskService;
 
     /**
      * 构造方法，注入当前类所需依赖。
@@ -113,7 +116,8 @@ public class ExamServiceImpl implements ExamService {
             UserMapper userMapper,
             DirectoryService directoryService,
             DirectoryScopeResolver directoryScopeResolver,
-            AnswerJudgeSupport answerJudgeSupport
+            AnswerJudgeSupport answerJudgeSupport,
+            AiGradingTaskService aiGradingTaskService
     ) {
         this.examPaperMapper = examPaperMapper;
         this.examPaperQuestionMapper = examPaperQuestionMapper;
@@ -129,6 +133,7 @@ public class ExamServiceImpl implements ExamService {
         this.directoryService = directoryService;
         this.directoryScopeResolver = directoryScopeResolver;
         this.answerJudgeSupport = answerJudgeSupport;
+        this.aiGradingTaskService = aiGradingTaskService;
     }
 
     /**
@@ -539,6 +544,11 @@ public class ExamServiceImpl implements ExamService {
         record.setTotalQuestions(relations.size());
         record.setCorrectQuestions(0);
         record.setScore(0d);
+        record.setObjectiveScore(0d);
+        record.setSubjectiveScore(0d);
+        record.setGradingStatus(AiGradingConstants.STATUS_NOT_REQUIRED);
+        record.setPendingSubjectiveCount(0);
+        record.setFailedSubjectiveCount(0);
         record.setDuration(0);
         record.setStartTime(LocalDateTime.now());
         record.setStatus(RECORD_STATUS_ONGOING);
@@ -550,6 +560,9 @@ public class ExamServiceImpl implements ExamService {
             detail.setQuestionId(relation.getQuestionId());
             detail.setUserAnswer(null);
             detail.setIsCorrect(0);
+            detail.setAiGradingStatus(null);
+            detail.setFullScore(toDoubleScore(relation.getScore()));
+            detail.setAwardedScore(null);
             detail.setAnswerTime(0);
             examRecordQuestionMapper.insert(detail);
         }
@@ -615,22 +628,49 @@ public class ExamServiceImpl implements ExamService {
                 .filter(question -> question != null && !Integer.valueOf(1).equals(question.getDeleted()))
                 .collect(Collectors.toMap(Question::getId, Function.identity(), (left, right) -> left));
 
+        Map<Long, Double> questionScoreMap = loadPaperQuestionScoreMap(record.getSubjectId(), record.getExamName());
         int correctCount = 0;
+        int pendingSubjectiveCount = 0;
+        int failedSubjectiveCount = 0;
+        double objectiveScore = 0d;
+        double subjectiveScore = 0d;
         for (ExamRecordQuestion detail : details) {
             ExamSubmitAnswerItemDTO answerItem = answerMap.get(detail.getQuestionId());
             String userAnswer = answerItem == null ? null : normalizeText(answerItem.getUserAnswer());
             int answerTime = answerItem == null ? 0 : normalizeNonNegative(answerItem.getAnswerTime());
 
             Question question = questionMap.get(detail.getQuestionId());
-            boolean isCorrect = question != null && answerJudgeSupport.isCorrect(question.getType(), question.getAnswer(), userAnswer);
+            double fullScore = resolveQuestionFullScore(detail, questionScoreMap);
+            boolean subjectiveQuestion = question != null && AiGradingConstants.isShortAnswer(question.getType());
 
             detail.setUserAnswer(userAnswer);
-            detail.setIsCorrect(isCorrect ? 1 : 0);
             detail.setAnswerTime(answerTime);
-            examRecordQuestionMapper.updateById(detail);
+            detail.setFullScore(fullScore);
+            detail.setAiGradingConfidence(null);
+            detail.setAiGradingFeedback(null);
+            detail.setAiGradingDetailJson(null);
+            detail.setAiGradingErrorMessage(null);
+            detail.setAiGradedAt(null);
 
-            if (isCorrect) {
-                correctCount++;
+            if (subjectiveQuestion) {
+                detail.setIsCorrect(null);
+                detail.setAwardedScore(null);
+                detail.setAiGradingStatus(AiGradingConstants.STATUS_PENDING);
+                examRecordQuestionMapper.updateById(detail);
+                aiGradingTaskService.createExamTask(detail.getId(), detail.getQuestionId(), userId);
+                pendingSubjectiveCount++;
+            } else {
+                boolean isCorrect = question != null && answerJudgeSupport.isCorrect(question.getType(), question.getAnswer(), userAnswer);
+                double awardedScore = isCorrect ? fullScore : 0d;
+                detail.setIsCorrect(isCorrect ? 1 : 0);
+                detail.setAwardedScore(awardedScore);
+                detail.setAiGradingStatus(AiGradingConstants.STATUS_NOT_REQUIRED);
+                examRecordQuestionMapper.updateById(detail);
+
+                objectiveScore += awardedScore;
+                if (isCorrect) {
+                    correctCount++;
+                }
             }
         }
 
@@ -638,11 +678,18 @@ public class ExamServiceImpl implements ExamService {
         int duration = submitDTO.getDuration() != null
                 ? normalizeNonNegative(submitDTO.getDuration())
                 : calculateDurationMinutes(record.getStartTime(), endTime);
-        int totalScore = resolvePaperTotalScore(record.getSubjectId(), record.getExamName());
-        double score = calculateScore(correctCount, record.getTotalQuestions(), totalScore);
+        String gradingStatus = pendingSubjectiveCount > 0
+                ? AiGradingConstants.STATUS_PENDING
+                : AiGradingConstants.STATUS_NOT_REQUIRED;
+        double score = roundTwoDecimals(objectiveScore + subjectiveScore);
 
         record.setCorrectQuestions(correctCount);
         record.setScore(score);
+        record.setObjectiveScore(roundTwoDecimals(objectiveScore));
+        record.setSubjectiveScore(roundTwoDecimals(subjectiveScore));
+        record.setGradingStatus(gradingStatus);
+        record.setPendingSubjectiveCount(pendingSubjectiveCount);
+        record.setFailedSubjectiveCount(failedSubjectiveCount);
         record.setDuration(duration);
         record.setEndTime(endTime);
         record.setStatus(RECORD_STATUS_FINISHED);
@@ -653,6 +700,11 @@ public class ExamServiceImpl implements ExamService {
         submitResultVO.setTotalQuestions(record.getTotalQuestions());
         submitResultVO.setCorrectQuestions(correctCount);
         submitResultVO.setScore(score);
+        submitResultVO.setObjectiveScore(record.getObjectiveScore());
+        submitResultVO.setSubjectiveScore(record.getSubjectiveScore());
+        submitResultVO.setGradingStatus(gradingStatus);
+        submitResultVO.setPendingSubjectiveCount(pendingSubjectiveCount);
+        submitResultVO.setFailedSubjectiveCount(failedSubjectiveCount);
         submitResultVO.setDuration(duration);
         submitResultVO.setStartTime(record.getStartTime());
         submitResultVO.setEndTime(endTime);
@@ -1172,6 +1224,11 @@ public class ExamServiceImpl implements ExamService {
         summaryVO.setTotalQuestions(record.getTotalQuestions());
         summaryVO.setCorrectQuestions(record.getCorrectQuestions());
         summaryVO.setScore(record.getScore());
+        summaryVO.setObjectiveScore(record.getObjectiveScore());
+        summaryVO.setSubjectiveScore(record.getSubjectiveScore());
+        summaryVO.setGradingStatus(resolveRecordGradingStatus(record));
+        summaryVO.setPendingSubjectiveCount(defaultNumber(record.getPendingSubjectiveCount()));
+        summaryVO.setFailedSubjectiveCount(defaultNumber(record.getFailedSubjectiveCount()));
         summaryVO.setDuration(record.getDuration());
         summaryVO.setStartTime(record.getStartTime());
         summaryVO.setEndTime(record.getEndTime());
@@ -1207,6 +1264,12 @@ public class ExamServiceImpl implements ExamService {
             questionVO.setStandardAnswer(question.getAnswer());
             questionVO.setUserAnswer(detail.getUserAnswer());
             questionVO.setIsCorrect(detail.getIsCorrect());
+            questionVO.setAiGradingStatus(resolveQuestionGradingStatus(detail, question));
+            questionVO.setAiGradingConfidence(detail.getAiGradingConfidence());
+            questionVO.setAiGradingFeedback(detail.getAiGradingFeedback());
+            questionVO.setAiGradingErrorMessage(detail.getAiGradingErrorMessage());
+            questionVO.setFullScore(detail.getFullScore());
+            questionVO.setAwardedScore(detail.getAwardedScore());
             questionVO.setAnalysis(question.getAnalysis());
             questionVO.setAnswerTime(detail.getAnswerTime());
             result.add(questionVO);
@@ -1373,6 +1436,67 @@ public class ExamServiceImpl implements ExamService {
         return paper.getTotalScore();
     }
 
+    private Map<Long, Double> loadPaperQuestionScoreMap(Long subjectId, String examName) {
+        if (subjectId == null || examName == null || examName.isBlank()) {
+            return Collections.emptyMap();
+        }
+        ExamPaper paper = examPaperMapper.selectOne(new LambdaQueryWrapper<ExamPaper>()
+                .eq(ExamPaper::getSubjectId, subjectId)
+                .eq(ExamPaper::getPaperName, examName.trim())
+                .orderByDesc(ExamPaper::getUpdateTime)
+                .last("limit 1"));
+        if (paper == null) {
+            return Collections.emptyMap();
+        }
+        return listPaperQuestionRelations(paper.getId()).stream()
+                .collect(Collectors.toMap(
+                        ExamPaperQuestion::getQuestionId,
+                        relation -> toDoubleScore(relation.getScore()),
+                        (left, right) -> left
+                ));
+    }
+
+    private double resolveQuestionFullScore(ExamRecordQuestion detail, Map<Long, Double> questionScoreMap) {
+        if (detail.getFullScore() != null && detail.getFullScore() > 0) {
+            return detail.getFullScore();
+        }
+        Double score = questionScoreMap.get(detail.getQuestionId());
+        return score == null ? 0d : score;
+    }
+
+    private Double toDoubleScore(Integer score) {
+        return score == null ? 0d : Math.max(score, 0);
+    }
+
+    private String resolveRecordGradingStatus(ExamRecord record) {
+        if (record == null) {
+            return AiGradingConstants.STATUS_NOT_REQUIRED;
+        }
+        if (defaultNumber(record.getPendingSubjectiveCount()) > 0) {
+            return AiGradingConstants.STATUS_PROCESSING;
+        }
+        if (defaultNumber(record.getFailedSubjectiveCount()) > 0) {
+            return AiGradingConstants.STATUS_PARTIAL_FAILED;
+        }
+        if (record.getGradingStatus() != null && !record.getGradingStatus().isBlank()) {
+            return record.getGradingStatus();
+        }
+        return AiGradingConstants.STATUS_NOT_REQUIRED;
+    }
+
+    private String resolveQuestionGradingStatus(ExamRecordQuestion detail, Question question) {
+        if (detail == null) {
+            return AiGradingConstants.STATUS_NOT_REQUIRED;
+        }
+        if (detail.getAiGradingStatus() != null && !detail.getAiGradingStatus().isBlank()) {
+            return detail.getAiGradingStatus();
+        }
+        if (question != null && AiGradingConstants.isShortAnswer(question.getType()) && detail.getIsCorrect() == null) {
+            return AiGradingConstants.STATUS_PENDING;
+        }
+        return AiGradingConstants.STATUS_NOT_REQUIRED;
+    }
+
     /**
      * 解析并转换输入数据。
      */
@@ -1455,6 +1579,10 @@ public class ExamServiceImpl implements ExamService {
      */
     private double roundTwoDecimals(double value) {
         return Math.round(value * 100.0) / 100.0;
+    }
+
+    private int defaultNumber(Integer value) {
+        return value == null ? 0 : value;
     }
 
     /**

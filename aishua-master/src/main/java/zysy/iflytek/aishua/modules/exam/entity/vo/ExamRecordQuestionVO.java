@@ -18,6 +18,12 @@ public class ExamRecordQuestionVO {
     private String standardAnswer;
     private String userAnswer;
     private Integer isCorrect;
+    private String aiGradingStatus;
+    private Double aiGradingConfidence;
+    private String aiGradingFeedback;
+    private String aiGradingErrorMessage;
+    private Double fullScore;
+    private Double awardedScore;
     private String analysis;
     private Integer answerTime;
 }

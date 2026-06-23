@@ -38,6 +38,9 @@ public interface PracticeSessionMapper extends BaseMapper<PracticeSession> {
                 correct_count = #{correctCount},
                 wrong_count = #{wrongCount},
                 total_time_cost = #{totalTimeCost},
+                grading_status = #{gradingStatus},
+                pending_subjective_count = #{pendingSubjectiveCount},
+                failed_subjective_count = #{failedSubjectiveCount},
                 status = #{status},
                 ended_at = #{endedAt},
                 draft_version = #{nextVersion}
@@ -55,6 +58,9 @@ public interface PracticeSessionMapper extends BaseMapper<PracticeSession> {
             @Param("correctCount") Integer correctCount,
             @Param("wrongCount") Integer wrongCount,
             @Param("totalTimeCost") Integer totalTimeCost,
+            @Param("gradingStatus") String gradingStatus,
+            @Param("pendingSubjectiveCount") Integer pendingSubjectiveCount,
+            @Param("failedSubjectiveCount") Integer failedSubjectiveCount,
             @Param("status") Integer status,
             @Param("endedAt") LocalDateTime endedAt
     );

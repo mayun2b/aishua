@@ -25,8 +25,16 @@
             <strong>{{ record.subjectName || '-' }}</strong>
           </div>
           <div>
-            <span>考试得分</span>
+            <span>{{ hasPendingSubjectiveGrading ? '当前得分' : '考试得分' }}</span>
             <strong>{{ formatScore(record.score) }} 分</strong>
+          </div>
+          <div>
+            <span>客观题得分</span>
+            <strong>{{ formatScore(record.objectiveScore) }} 分</strong>
+          </div>
+          <div>
+            <span>主观题评分</span>
+            <strong>{{ record.pendingSubjectiveCount || 0 }} 待评 / {{ record.failedSubjectiveCount || 0 }} 失败</strong>
           </div>
           <div>
             <span>答对题数</span>
@@ -63,8 +71,8 @@
             <div class="head-tags">
               <span class="pill">{{ resolveTypeLabel(item.type) }}</span>
               <span class="pill">{{ resolveDifficultyLabel(item.difficulty) }}</span>
-              <span :class="['result-pill', Number(item.isCorrect) === 1 ? 'done' : 'wrong']">
-                {{ Number(item.isCorrect) === 1 ? '回答正确' : '回答错误' }}
+              <span :class="['result-pill', resolveResultClass(item)]">
+                {{ resolveResultLabel(item) }}
               </span>
             </div>
           </header>
@@ -97,6 +105,8 @@
           <div class="answer-meta">
             <p><strong>你的答案：</strong>{{ formatAnswerDisplay(item.userAnswer) }}</p>
             <p><strong>标准答案：</strong>{{ formatAnswerDisplay(item.standardAnswer) }}</p>
+            <p v-if="item.fullScore != null"><strong>本题得分：</strong>{{ formatScore(item.awardedScore) }} / {{ formatScore(item.fullScore) }} 分</p>
+            <p v-if="item.aiGradingFeedback"><strong>AI 反馈：</strong>{{ item.aiGradingFeedback }}</p>
             <p><strong>本题用时：</strong>{{ item.answerTime || 0 }} 秒</p>
           </div>
 
@@ -113,7 +123,7 @@
 </template>
 
 <script setup>
-import { onMounted, ref } from 'vue'
+import { computed, onMounted, ref } from 'vue'
 import { useRoute, useRouter } from 'vue-router'
 import { showToast } from 'vant'
 import QuestionImageList from '@/components/QuestionImageList.vue'
@@ -139,6 +149,10 @@ const questions = ref([])
 
 const recordId = Number(route.params.recordId || 0)
 
+const hasPendingSubjectiveGrading = computed(() => {
+  return Number(record.value?.pendingSubjectiveCount || 0) > 0
+})
+
 const isChoiceQuestion = (type) => Number(type) === 1 || Number(type) === 2 || Number(type) === 3
 
 const isSelected = (optionKey, answer) => {
@@ -148,6 +162,34 @@ const isSelected = (optionKey, answer) => {
 
 const isWrongSelected = (optionKey, userAnswer, standardAnswer) => {
   return isSelected(optionKey, userAnswer) && !isSelected(optionKey, standardAnswer)
+}
+
+const isGradingPending = (item) => {
+  return item?.aiGradingStatus === 'PENDING' || item?.aiGradingStatus === 'PROCESSING'
+}
+
+const isGradingFailed = (item) => {
+  return item?.aiGradingStatus === 'FAILED' || item?.aiGradingStatus === 'PARTIAL_FAILED'
+}
+
+const resolveResultClass = (item) => {
+  if (isGradingPending(item)) {
+    return 'pending'
+  }
+  if (isGradingFailed(item)) {
+    return 'wrong'
+  }
+  return Number(item?.isCorrect) === 1 ? 'done' : 'wrong'
+}
+
+const resolveResultLabel = (item) => {
+  if (isGradingPending(item)) {
+    return '评分中'
+  }
+  if (isGradingFailed(item)) {
+    return '评分失败'
+  }
+  return Number(item?.isCorrect) === 1 ? '回答正确' : '回答错误'
 }
 
 const resolveImageAnnotationObjectNames = (userAnswer) => {
@@ -356,6 +398,11 @@ onMounted(() => {
 .result-pill.done {
   color: #2d8a44;
   background: #e7f8ed;
+}
+
+.result-pill.pending {
+  color: #8a5a00;
+  background: #fff4d8;
 }
 
 .result-pill.wrong {

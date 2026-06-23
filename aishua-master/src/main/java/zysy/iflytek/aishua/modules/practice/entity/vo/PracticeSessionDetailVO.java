@@ -30,6 +30,12 @@ public class PracticeSessionDetailVO {
 
     private Integer totalTimeCost;
 
+    private String gradingStatus;
+
+    private Integer pendingSubjectiveCount;
+
+    private Integer failedSubjectiveCount;
+
     private Integer draftVersion;
 
     private Integer status;

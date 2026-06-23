@@ -6,7 +6,6 @@ import { navigationState } from './navigationState'
 
 const APP_NAME = 'AI刷题'
 const DEFAULT_TITLE = `${APP_NAME} - 智能知识点强化系统`
-const REDIRECT_BLOCK_PREFIXES = ['/login', '/register']
 
 const withMeta = (title, meta = {}) => ({ title, ...meta })
 
@@ -97,6 +96,12 @@ const routes = [
     name: 'WrongQuestions',
     component: () => import('../modules/practice/views/WrongQuestionsView.vue'),
     meta: withMeta('错题记录', { requiresAuth: true })
+  },
+  {
+    path: '/weak-points',
+    name: 'WeakKnowledgePoints',
+    component: () => import('../modules/practice/views/WeakKnowledgePointsView.vue'),
+    meta: withMeta('薄弱知识点', { requiresAuth: true })
   },
   {
     path: '/exercise/exam',
@@ -212,33 +217,11 @@ function resolveAuthenticatedHome() {
   return store.getters['auth/isAdmin'] ? '/admin' : '/dashboard'
 }
 
-function normalizeRedirectPath(path) {
-  if (typeof path !== 'string') {
-    return ''
-  }
-
-  const normalizedPath = path.trim()
-  if (!normalizedPath || !normalizedPath.startsWith('/')) {
-    return ''
-  }
-
-  const isBlockedPath = REDIRECT_BLOCK_PREFIXES.some((prefix) => {
-    return normalizedPath === prefix || normalizedPath.startsWith(`${prefix}?`)
-  })
-  return isBlockedPath ? '' : normalizedPath
-}
-
 router.beforeEach((to, from, next) => {
   navigationState.pending = true
 
   const isAuthenticated = store.getters['auth/isAuthenticated']
   const isAdmin = store.getters['auth/isAdmin']
-  const redirectPath = normalizeRedirectPath(to.query?.redirect)
-
-  if (to.meta.guestOnly && isAuthenticated) {
-    next(redirectPath || resolveAuthenticatedHome())
-    return
-  }
 
   if (to.meta.requiresAuth && !isAuthenticated) {
     next({

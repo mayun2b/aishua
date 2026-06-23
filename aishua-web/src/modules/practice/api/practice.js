@@ -246,6 +246,9 @@ export default {
   getStats(params) {
     return apiGet('/practice/stats', params)
   },
+  listWeakPoints(params) {
+    return apiGet('/practice/weak-points', params)
+  },
   listTags(params) {
     return apiGet('/practice/tags', params)
   },

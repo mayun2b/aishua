@@ -90,6 +90,11 @@ public interface PracticeService {
     PracticeStatsVO getPracticeStats(Long userId, Long subjectId, Integer days);
 
     /**
+     * 查询薄弱知识点列表。
+     */
+    List<PracticeStatsVO.KnowledgeMasteryVO> listWeakKnowledgePoints(Long userId, Long subjectId, Integer limit);
+
+    /**
      * 查询某学科下可用于练习筛选的知识点标签。
      */
     List<ExamTagVO> listPracticeTags(Long userId, Long subjectId);

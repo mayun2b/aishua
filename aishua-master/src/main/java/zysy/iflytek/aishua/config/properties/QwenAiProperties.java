@@ -40,4 +40,29 @@ public class QwenAiProperties {
      * Streaming request timeout.
      */
     private Duration streamRequestTimeout = Duration.ofSeconds(80);
+
+    /**
+     * Multimodal grading model.
+     */
+    private String gradingModel = "qwen-vl-max";
+
+    /**
+     * Max tokens for grading JSON output.
+     */
+    private Integer gradingMaxTokens = 800;
+
+    /**
+     * Request timeout for grading calls.
+     */
+    private Duration gradingTimeout = Duration.ofSeconds(90);
+
+    /**
+     * Number of pending grading tasks processed in one scheduler tick.
+     */
+    private Integer gradingBatchSize = 3;
+
+    /**
+     * Max images sent to the grading model for one answer.
+     */
+    private Integer gradingMaxImages = 6;
 }

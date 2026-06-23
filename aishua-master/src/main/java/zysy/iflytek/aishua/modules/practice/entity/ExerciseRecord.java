@@ -1,6 +1,8 @@
 package zysy.iflytek.aishua.modules.practice.entity;
 
+import com.baomidou.mybatisplus.annotation.FieldStrategy;
 import com.baomidou.mybatisplus.annotation.IdType;
+import com.baomidou.mybatisplus.annotation.TableField;
 import com.baomidou.mybatisplus.annotation.TableId;
 import com.baomidou.mybatisplus.annotation.TableLogic;
 import com.baomidou.mybatisplus.annotation.TableName;
@@ -27,7 +29,26 @@ public class ExerciseRecord {
 
     private String userAnswer;
 
+    @TableField(updateStrategy = FieldStrategy.ALWAYS)
     private Integer isCorrect;
+
+    @TableField(updateStrategy = FieldStrategy.ALWAYS)
+    private String aiGradingStatus;
+
+    @TableField(updateStrategy = FieldStrategy.ALWAYS)
+    private Double aiGradingConfidence;
+
+    @TableField(updateStrategy = FieldStrategy.ALWAYS)
+    private String aiGradingFeedback;
+
+    @TableField(updateStrategy = FieldStrategy.ALWAYS)
+    private String aiGradingDetailJson;
+
+    @TableField(updateStrategy = FieldStrategy.ALWAYS)
+    private String aiGradingErrorMessage;
+
+    @TableField(updateStrategy = FieldStrategy.ALWAYS)
+    private LocalDateTime aiGradedAt;
 
     private Integer timeCost;
 

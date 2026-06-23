@@ -13,6 +13,11 @@ public class ExamSubmitResultVO {
     private Integer totalQuestions;
     private Integer correctQuestions;
     private Double score;
+    private Double objectiveScore;
+    private Double subjectiveScore;
+    private String gradingStatus;
+    private Integer pendingSubjectiveCount;
+    private Integer failedSubjectiveCount;
     private Integer duration;
     private LocalDateTime startTime;
     private LocalDateTime endTime;

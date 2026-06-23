@@ -52,6 +52,11 @@ ai:
     chat-max-tokens: 220
     stream-connect-timeout: 8s
     stream-request-timeout: 80s
+    grading-model: qwen-vl-max
+    grading-max-tokens: 800
+    grading-timeout: 90s
+    grading-batch-size: 3
+    grading-max-images: 6
 
 dify:
   base-url: http://localhost

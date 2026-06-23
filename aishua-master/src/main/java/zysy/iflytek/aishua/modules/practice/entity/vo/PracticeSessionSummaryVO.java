@@ -28,6 +28,12 @@ public class PracticeSessionSummaryVO {
 
     private Integer totalTimeCost;
 
+    private String gradingStatus;
+
+    private Integer pendingSubjectiveCount;
+
+    private Integer failedSubjectiveCount;
+
     private Integer status;
 
     private BigDecimal correctRate;

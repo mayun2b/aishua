@@ -70,7 +70,10 @@
             <tr v-for="record in records" :key="record.id">
               <td>{{ record.examName || '-' }}</td>
               <td>{{ record.subjectName || '-' }}</td>
-              <td>{{ formatScore(record.score) }}</td>
+              <td>
+                {{ formatScore(record.score) }}
+                <span v-if="isRecordGradingPending(record)" class="score-note">当前</span>
+              </td>
               <td>{{ record.correctQuestions || 0 }} / {{ record.totalQuestions || 0 }}</td>
               <td>{{ formatDurationMinutes(record.duration) }}</td>
               <td>{{ formatDateTime(record.startTime) }}</td>
@@ -78,6 +81,8 @@
                 <span :class="['status-chip', Number(record.status) === 2 ? 'done' : 'ongoing']">
                   {{ resolveStatusLabel(record.status) }}
                 </span>
+                <span v-if="isRecordGradingPending(record)" class="status-chip pending">评分中</span>
+                <span v-else-if="isRecordGradingFailed(record)" class="status-chip wrong">评分失败</span>
               </td>
               <td>
                 <div class="row-actions">
@@ -147,6 +152,14 @@ const { runWithoutAutoReload, scheduleReload } = useAutoReload(() => {
 
 const hasSessionCache = (recordId) => {
   return Boolean(sessionStorage.getItem(buildSessionCacheKey(recordId)))
+}
+
+const isRecordGradingPending = (record) => {
+  return Number(record?.pendingSubjectiveCount || 0) > 0
+}
+
+const isRecordGradingFailed = (record) => {
+  return Number(record?.failedSubjectiveCount || 0) > 0
 }
 
 const loadSubjects = async () => {
@@ -360,6 +373,10 @@ th {
   font-weight: 600;
 }
 
+.status-chip + .status-chip {
+  margin-left: 6px;
+}
+
 .status-chip.done {
   color: #2d8a44;
   background: #e7f8ed;
@@ -368,6 +385,26 @@ th {
 .status-chip.ongoing {
   color: #bd7b17;
   background: #fff4dd;
+}
+
+.status-chip.pending {
+  color: #2563eb;
+  background: #eaf2ff;
+}
+
+.status-chip.wrong {
+  color: #c2410c;
+  background: #fff0e8;
+}
+
+.score-note {
+  margin-left: 6px;
+  border-radius: 999px;
+  padding: 2px 7px;
+  color: #2563eb;
+  background: #eaf2ff;
+  font-size: 12px;
+  font-weight: 600;
 }
 
 .row-actions {

@@ -1,4 +1,4 @@
-<!-- eslint-disable vue/multi-word-component-names -->
+﻿<!-- eslint-disable vue/multi-word-component-names -->
 <template>
   <div class="home-container">
     <div class="dynamic-background">
@@ -271,55 +271,47 @@
   </div>
 </template>
 <script setup>
-import { useRouter } from 'vue-router'
-import { onMounted, ref, onUnmounted } from 'vue'
-const router = useRouter()
-const isScrolled = ref(false)
-
-// 统一读取本地用户信息，解析失败时按未登录处理。
-const getStoredUser = () => {
-  try {
-    const rawUser = localStorage.getItem('user')
-    return rawUser ? JSON.parse(rawUser) : null
-  } catch (error) {
-    return null
+  import { useRouter } from 'vue-router'
+  import { useStore } from 'vuex'
+  import { onMounted, ref, onUnmounted } from 'vue'
+  const router = useRouter()
+  const store = useStore()
+  const isScrolled = ref(false)
+  
+  // 根据用户角色返回登录后默认落地页。
+  const resolveAuthenticatedLanding = () => {
+    return store.getters['auth/isAdmin'] ? '/admin' : '/my-subjects'
   }
-}
-
-// 根据用户角色返回登录后默认落地页。
-const resolveAuthenticatedLanding = () => {
-  const user = getStoredUser()
-  return user?.isAdmin === 1 ? '/admin' : '/my-subjects'
-}
-
-const resolveAuthenticatedDashboard = () => {
-  const user = getStoredUser()
-  return user?.isAdmin === 1 ? '/admin' : '/dashboard'
-}
-
-const goToLogin = () => {
-  router.push('/login')
-}
-const goToRegister = () => {
-  router.push('/register')
-}
-const goToPracticeLanding = () => {
-  const token = localStorage.getItem('token')
-  if (token) {
-    router.push(resolveAuthenticatedLanding())
-  } else {
+  
+  const resolveAuthenticatedDashboard = () => {
+    return store.getters['auth/isAdmin'] ? '/admin' : '/dashboard'
+  }
+  
+  const goToLogin = () => {
     router.push('/login')
   }
-}
-// 保留两个入口方法，避免改动模板结构。
-const goToExercise = () => {
-  goToPracticeLanding()
-}
-const goToDashboard = () => {
-  const token = localStorage.getItem('token')
-  router.push(token ? resolveAuthenticatedDashboard() : '/login')
-}
-const goToHome = () => {
+  const goToRegister = () => {
+    router.push('/register')
+  }
+  const goToPracticeLanding = () => {
+    if (store.getters['auth/isAuthenticated']) {
+      router.push(resolveAuthenticatedLanding())
+    } else {
+      router.push('/login')
+    }
+  }
+  // 保留两个入口方法，避免改动模板结构。
+  const goToExercise = () => {
+    goToPracticeLanding()
+  }
+  const goToDashboard = () => {
+    if (store.getters['auth/isAuthenticated']) {
+      router.push(resolveAuthenticatedDashboard())
+    } else {
+      router.push('/login')
+    }
+  }
+  const goToHome = () => {
   router.push('/')
 }
 const handleScroll = () => {
@@ -1823,3 +1815,4 @@ onUnmounted(() => {
   }
 }
 </style>
+

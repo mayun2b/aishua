@@ -5,12 +5,16 @@
     <router-view v-slot="{ Component }">
       <AppShell v-if="showAppShell">
         <transition :name="transitionName" mode="out-in">
-          <component :is="Component" :key="route.fullPath" />
+          <div :key="route.fullPath" class="route-view-shell">
+            <component :is="Component" />
+          </div>
         </transition>
       </AppShell>
 
       <transition v-else :name="transitionName" mode="out-in">
-        <component :is="Component" :key="route.fullPath" />
+        <div :key="route.fullPath" class="route-view-shell">
+          <component :is="Component" />
+        </div>
       </transition>
     </router-view>
   </div>
@@ -90,5 +94,10 @@ const showAppShell = computed(() => {
 .page-fade-leave-to {
   opacity: 0;
   transform: translateY(6px);
+}
+
+.route-view-shell {
+  min-width: 0;
+  min-height: 100%;
 }
 </style>

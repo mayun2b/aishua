@@ -77,8 +77,8 @@
                 </div>
               </td>
               <td>
-                <span :class="['status-chip', record.isCorrect === 1 ? 'success' : 'danger']">
-                  {{ record.isCorrect === 1 ? '答对' : '答错' }}
+                <span :class="['status-chip', resolveResultClass(record)]">
+                  {{ resolveResultLabel(record) }}
                 </span>
               </td>
               <td>
@@ -89,6 +89,10 @@
                     :object-name="resolveUserAnswerCanvasObjectName(record)"
                     :height="180"
                   />
+                  <div v-if="shouldShowAiFeedback(record)" class="ai-feedback">
+                    <span>AI 评判</span>
+                    <p>{{ resolveAiFeedbackText(record) }}</p>
+                  </div>
                   <span>标准答案：{{ formatAnswerDisplay(record.correctAnswer) }}</span>
                 </div>
               </td>
@@ -214,6 +218,42 @@ const resolveUserAnswerCanvasObjectName = (record) => {
 
 const shouldShowUserAnswerCanvas = (record) => {
   return resolveUserAnswerCanvasObjectName(record).length > 0
+}
+
+const resolveAiFeedbackText = (record) => {
+  return String(record?.aiGradingFeedback || record?.aiGradingErrorMessage || '').trim()
+}
+
+const shouldShowAiFeedback = (record) => {
+  return isEssayRecord(record) && resolveAiFeedbackText(record).length > 0
+}
+
+const isGradingPending = (record) => {
+  return record?.aiGradingStatus === 'PENDING' || record?.aiGradingStatus === 'PROCESSING'
+}
+
+const isGradingFailed = (record) => {
+  return record?.aiGradingStatus === 'FAILED' || record?.aiGradingStatus === 'PARTIAL_FAILED'
+}
+
+const resolveResultClass = (record) => {
+  if (isGradingPending(record)) {
+    return 'warning'
+  }
+  if (isGradingFailed(record)) {
+    return 'danger'
+  }
+  return record?.isCorrect === 1 ? 'success' : 'danger'
+}
+
+const resolveResultLabel = (record) => {
+  if (isGradingPending(record)) {
+    return '评分中'
+  }
+  if (isGradingFailed(record)) {
+    return '评分失败'
+  }
+  return record?.isCorrect === 1 ? '答对' : '答错'
 }
 
 const resolveImageAnnotationObjectNames = (userAnswer) => {
@@ -386,6 +426,28 @@ td {
   line-height: 1.6;
 }
 
+.ai-feedback {
+  border-left: 3px solid #5f7db4;
+  border-radius: 8px;
+  padding: 8px 10px;
+  background: #f3f7fd;
+}
+
+.ai-feedback span {
+  display: block;
+  color: #425a78;
+  font-size: 12px;
+  font-weight: 700;
+}
+
+.ai-feedback p {
+  margin: 4px 0 0;
+  color: #253d58;
+  font-size: 13px;
+  line-height: 1.7;
+  white-space: pre-wrap;
+}
+
 .status-chip {
   display: inline-flex;
   align-items: center;
@@ -397,6 +459,11 @@ td {
 .status-chip.success {
   background: #ddf5e9;
   color: #0f7a43;
+}
+
+.status-chip.warning {
+  background: #fff4d8;
+  color: #8a5a00;
 }
 
 .status-chip.danger {

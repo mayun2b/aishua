@@ -1,0 +1,7 @@
+.codex-build/
+docs/__pycache__/
+
+aishua-web/dist-codex-check/
+aishua-web/dist-codex-check-*/
+aishua-web/.codex-vue-serve.err.log
+aishua-web/.codex-vue-serve.out.log

@@ -176,6 +176,20 @@ public class PracticeController {
     /**
      * 处理查询请求并返回结果。
      */
+    @GetMapping("/weak-points")
+    public Result<List<PracticeStatsVO.KnowledgeMasteryVO>> listWeakKnowledgePoints(
+            @RequestParam(required = false) Long subjectId,
+            @RequestParam(required = false) Integer limit
+    ) {
+        // 从用户上下文获取当前登录用户编号。
+        Long userId = UserContext.requireUserId();
+        // 调用服务层处理业务并封装统一响应。
+        return Result.success(practiceService.listWeakKnowledgePoints(userId, subjectId, limit));
+    }
+
+    /**
+     * 处理查询请求并返回结果。
+     */
     @GetMapping("/tags")
     public Result<List<ExamTagVO>> listPracticeTags(
             @RequestParam Long subjectId

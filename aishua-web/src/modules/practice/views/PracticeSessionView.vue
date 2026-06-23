@@ -64,7 +64,9 @@
                 index === currentIndex ? 'active' : '',
                 isAnswered(question.questionId) ? 'answered' : '',
                 getQuestionResult(question.questionId)?.isCorrect === 1 ? 'correct' : '',
-                getQuestionResult(question.questionId)?.isCorrect === 0 ? 'wrong' : ''
+                getQuestionResult(question.questionId)?.isCorrect === 0 ? 'wrong' : '',
+                isResultGradingPending(getQuestionResult(question.questionId)) ? 'grading' : '',
+                isResultGradingFailed(getQuestionResult(question.questionId)) ? 'grading-failed' : ''
               ]"
               @click="goToQuestion(index)"
             >
@@ -265,8 +267,8 @@
             <div v-if="currentResult" class="analysis-card">
               <div class="section-head compact">
                 <h2>当前题判定</h2>
-                <span :class="['result-badge', Number(currentResult.isCorrect) === 1 ? 'success' : 'danger']">
-                  {{ Number(currentResult.isCorrect) === 1 ? '回答正确' : '回答错误' }}
+                <span :class="['result-badge', resolveResultBadgeClass(currentResult)]">
+                  {{ resolveResultLabel(currentResult) }}
                 </span>
               </div>
 
@@ -283,8 +285,13 @@
                   <span>本题耗时</span>
                   <strong>{{ currentResult.timeCost || 0 }} 秒</strong>
                 </div>
+                <div v-if="currentResult.aiGradingStatus" class="result-item">
+                  <span>评分状态</span>
+                  <strong>{{ resolveGradingStatusLabel(currentResult.aiGradingStatus) }}</strong>
+                </div>
               </div>
 
+              <p v-if="currentResult.aiGradingFeedback" class="analysis-text">{{ currentResult.aiGradingFeedback }}</p>
               <p v-if="currentResult.analysis" class="analysis-text">{{ currentResult.analysis }}</p>
             </div>
           </div>
@@ -294,7 +301,9 @@
       <section v-if="summaryResult" class="result-card">
         <div class="section-head">
           <h2>提交结果</h2>
-          <span class="result-badge success">已完成</span>
+          <span :class="['result-badge', hasPendingSubjectiveGrading ? 'warning' : hasFailedSubjectiveGrading ? 'danger' : 'success']">
+            {{ hasPendingSubjectiveGrading ? '主观题评分中' : hasFailedSubjectiveGrading ? '部分评分失败' : '已完成' }}
+          </span>
         </div>
 
         <div class="result-grid">
@@ -313,6 +322,10 @@
           <div class="result-item">
               <span>正确率</span>
             <strong>{{ summaryResult.correctRate }}%</strong>
+          </div>
+          <div v-if="summaryResult.pendingSubjectiveCount || summaryResult.failedSubjectiveCount" class="result-item">
+            <span>主观题评分</span>
+            <strong>{{ summaryResult.pendingSubjectiveCount || 0 }} 待评 / {{ summaryResult.failedSubjectiveCount || 0 }} 失败</strong>
           </div>
         </div>
 
@@ -343,6 +356,7 @@ import {
   buildImageAnnotationPayload,
   parseImageAnnotationPayload
 } from '../../common/utils/imageAnnotationAnswer'
+import { normalizeChoiceAnswer, parseQuestionOptions } from '../../common/utils/questionOptions'
 import { parseQuestionImageRefs } from '../../common/utils/questionImages'
 import practiceApi from '../api/practice'
 
@@ -350,9 +364,11 @@ const route = useRoute()
 const router = useRouter()
 
 const AUTO_SAVE_INTERVAL_MS = 30000
+const GRADING_POLL_INTERVAL_MS = 4000
 const ASSISTANT_TYPEWRITER_INTERVAL_MS = 20
 const ASSISTANT_TYPEWRITER_CHARS_PER_TICK = 2
 let autoSaveTimer = null
+let gradingPollTimer = null
 
 const loadingInitial = ref(false)
 const loadingSheet = ref(false)
@@ -730,7 +746,10 @@ const summaryResult = computed(() => {
       questionCount: submitResult.value.questionCount || 0,
       correctCount: submitResult.value.correctCount || 0,
       wrongCount: submitResult.value.wrongCount || 0,
-      correctRate: submitResult.value.correctRate || 0
+      correctRate: submitResult.value.correctRate || 0,
+      gradingStatus: submitResult.value.gradingStatus || '',
+      pendingSubjectiveCount: submitResult.value.pendingSubjectiveCount || 0,
+      failedSubjectiveCount: submitResult.value.failedSubjectiveCount || 0
     }
   }
 
@@ -739,116 +758,79 @@ const summaryResult = computed(() => {
       questionCount: session.value?.questionCount || questions.value.length || 0,
       correctCount: session.value?.correctCount || 0,
       wrongCount: session.value?.wrongCount || 0,
-      correctRate: session.value?.correctRate || 0
+      correctRate: session.value?.correctRate || 0,
+      gradingStatus: session.value?.gradingStatus || '',
+      pendingSubjectiveCount: session.value?.pendingSubjectiveCount || 0,
+      failedSubjectiveCount: session.value?.failedSubjectiveCount || 0
     }
   }
 
   return null
 })
 
-const parsedOptions = computed(() => {
-  if (!currentQuestion.value?.options) {
-    return []
-  }
-
-  try {
-    const parsed = JSON.parse(currentQuestion.value.options)
-    if (!Array.isArray(parsed)) {
-      return []
-    }
-
-    return parsed.map((item, index) => {
-      const label = resolveOptionLabel(item, index)
-      const value = resolveOptionValue(item, label)
-      const text = resolveOptionText(item, label, value)
-      return {
-        optionKey: `${label}-${value}-${text}-${index}`,
-        optionValue: value,
-        optionLabel: label,
-        optionText: text
-      }
-    })
-  } catch (error) {
-    return []
-  }
+const hasPendingSubjectiveGrading = computed(() => {
+  return Number(summaryResult.value?.pendingSubjectiveCount || 0) > 0
 })
 
-const normalizeOptionField = (value) => {
-  if (value == null) {
-    return ''
-  }
-  return String(value).trim()
+const hasFailedSubjectiveGrading = computed(() => {
+  return Number(summaryResult.value?.failedSubjectiveCount || 0) > 0
+})
+
+const isGradingPendingStatus = (status) => {
+  return status === 'PENDING' || status === 'PROCESSING'
 }
 
-const isSameOptionText = (left, right) => {
-  return normalizeOptionField(left).toUpperCase() === normalizeOptionField(right).toUpperCase()
+const isGradingFailedStatus = (status) => {
+  return status === 'FAILED' || status === 'PARTIAL_FAILED'
 }
 
-const resolveOptionLabel = (item, index) => {
-  const explicitLabel = normalizeOptionField(item?.label)
-  if (explicitLabel) {
-    return explicitLabel
-  }
-  return String.fromCharCode(65 + index)
+const isResultGradingPending = (result) => {
+  return isGradingPendingStatus(result?.aiGradingStatus)
 }
 
-const normalizeChoiceOptionValue = (rawValue, fallbackLabel) => {
-  const normalized = normalizeOptionField(rawValue)
-  if (!normalized) {
-    return ''
-  }
-  const normalizedFallbackLabel = normalizeOptionField(fallbackLabel).toUpperCase()
-  if (!normalizedFallbackLabel) {
-    return normalized
-  }
-  if (normalized.toUpperCase() === normalizedFallbackLabel) {
-    return normalizedFallbackLabel
-  }
-
-  // Support raw option strings like "A. xxx" / "B) xxx" / "C - xxx".
-  const prefixedLabelMatch = normalized.toUpperCase().match(/^([A-Z])(?:[.．、,:：)）-]\s*|\s+)/)
-  if (prefixedLabelMatch?.[1] === normalizedFallbackLabel) {
-    return normalizedFallbackLabel
-  }
-  return normalized
+const isResultGradingFailed = (result) => {
+  return isGradingFailedStatus(result?.aiGradingStatus)
 }
 
-const resolveOptionValue = (item, fallbackLabel) => {
-  const candidates = [
-    item?.value,
-    item?.key,
-    item?.optionValue,
-    typeof item === 'string' ? item : null
-  ]
-  for (const candidate of candidates) {
-    const normalized = normalizeChoiceOptionValue(candidate, fallbackLabel)
-    if (normalized) {
-      return normalized
-    }
+const resolveResultBadgeClass = (result) => {
+  if (isResultGradingPending(result)) {
+    return 'warning'
   }
-  return fallbackLabel
+  if (isResultGradingFailed(result)) {
+    return 'danger'
+  }
+  return Number(result?.isCorrect) === 1 ? 'success' : 'danger'
 }
 
-const resolveOptionText = (item, label, value) => {
-  const textCandidates = [
-    item?.text,
-    item?.content,
-    item?.title,
-    item?.desc,
-    item?.description
-  ]
-  for (const candidate of textCandidates) {
-    const normalized = normalizeOptionField(candidate)
-    if (normalized && !isSameOptionText(normalized, label)) {
-      return normalized
-    }
+const resolveResultLabel = (result) => {
+  if (isResultGradingPending(result)) {
+    return '评分中'
   }
-
-  if (!isSameOptionText(value, label)) {
-    return value
+  if (isResultGradingFailed(result)) {
+    return '评分失败'
   }
-  return label
+  return Number(result?.isCorrect) === 1 ? '回答正确' : '回答错误'
 }
+
+const resolveGradingStatusLabel = (status) => {
+  switch (status) {
+    case 'PENDING':
+    case 'PROCESSING':
+      return '评分中'
+    case 'SUCCESS':
+      return '评分完成'
+    case 'FAILED':
+      return '评分失败'
+    case 'PARTIAL_FAILED':
+      return '部分失败'
+    case 'NOT_REQUIRED':
+      return '无需 AI 评分'
+    default:
+      return status || '-'
+  }
+}
+
+const parsedOptions = computed(() => parseQuestionOptions(currentQuestion.value?.options))
 
 const markDraftChanged = (questionId) => {
   if (isSubmitted.value) {
@@ -1041,23 +1023,12 @@ const parseSavedAnswer = (question, rawAnswer) => {
     return question.type === 2 ? [] : ''
   }
 
+  if (question.type === 1) {
+    return normalizeChoiceAnswer(normalized, question.options)
+  }
+
   if (question.type === 2) {
-    if (normalized.startsWith('[') && normalized.endsWith(']')) {
-      try {
-        const parsed = JSON.parse(normalized)
-        if (Array.isArray(parsed)) {
-          return parsed.map((item) => String(item))
-        }
-      } catch (error) {
-        return []
-      }
-    }
-
-    if (normalized.includes(',')) {
-      return normalized.split(',').map((item) => item.trim()).filter(Boolean)
-    }
-
-    return [normalized]
+    return normalizeChoiceAnswer(normalized, question.options, { multiple: true })
   }
 
   return normalized
@@ -1178,8 +1149,57 @@ const loadSessionDetail = async () => {
   session.value = detailResponse.data || null
 
   const records = detailResponse.data?.records || []
-  judgedRecords.value = records.filter((item) => item?.isCorrect === 0 || item?.isCorrect === 1)
+  judgedRecords.value = records
   draftVersion.value = Math.max(Number(detailResponse.data?.draftVersion) || 0, 0)
+  updateSubmitResultFromSessionDetail(detailResponse.data)
+}
+
+const updateSubmitResultFromSessionDetail = (detail) => {
+  if (!submitResult.value || !detail) {
+    return
+  }
+  submitResult.value = {
+    ...submitResult.value,
+    answeredCount: detail.answeredCount,
+    correctCount: detail.correctCount,
+    wrongCount: detail.wrongCount,
+    correctRate: detail.correctRate,
+    gradingStatus: detail.gradingStatus,
+    pendingSubjectiveCount: detail.pendingSubjectiveCount || 0,
+    failedSubjectiveCount: detail.failedSubjectiveCount || 0,
+    results: detail.records || submitResult.value.results || []
+  }
+}
+
+const stopGradingPoll = () => {
+  if (gradingPollTimer) {
+    clearInterval(gradingPollTimer)
+    gradingPollTimer = null
+  }
+}
+
+const refreshGradingStatus = async () => {
+  if (!sessionId.value) {
+    stopGradingPoll()
+    return
+  }
+  try {
+    await loadSessionDetail()
+    if (!hasPendingSubjectiveGrading.value) {
+      stopGradingPoll()
+    }
+  } catch (error) {
+    stopGradingPoll()
+  }
+}
+
+const startGradingPollIfNeeded = () => {
+  if (!hasPendingSubjectiveGrading.value || gradingPollTimer) {
+    return
+  }
+  gradingPollTimer = setInterval(() => {
+    void refreshGradingStatus()
+  }, GRADING_POLL_INTERVAL_MS)
 }
 
 const loadQuestionSheet = async () => {
@@ -1229,6 +1249,7 @@ const loadPage = async () => {
     await loadDraftSnapshot()
     hasDraftChanges.value = false
     draftDirtyQuestionIds.clear()
+    startGradingPollIfNeeded()
   } catch (error) {
     loadError.value = error.message || '加载练习会话失败'
     showToast(loadError.value)
@@ -2157,12 +2178,16 @@ const submitAllAnswers = async () => {
       correctCount: response.data?.correctCount,
       wrongCount: response.data?.wrongCount,
       correctRate: response.data?.correctRate,
+      gradingStatus: response.data?.gradingStatus,
+      pendingSubjectiveCount: response.data?.pendingSubjectiveCount || 0,
+      failedSubjectiveCount: response.data?.failedSubjectiveCount || 0,
       status: response.data?.finished ? 2 : 1
     }
     currentQuestionEnteredAt.value = 0
     hasDraftChanges.value = false
     draftDirtyQuestionIds.clear()
     draftVersion.value = Math.max(Number(draftVersion.value) + 1, 0)
+    startGradingPollIfNeeded()
     showToast('提交成功')
   } catch (error) {
     if (isDraftConflictError(error)) {
@@ -2271,6 +2296,7 @@ onBeforeUnmount(() => {
   document.removeEventListener('visibilitychange', handleVisibilityChange)
   window.removeEventListener('pagehide', handlePageHide)
   stopAutoSaveTimer()
+  stopGradingPoll()
   syncCurrentQuestionTime()
   clearAssistantScrollFrame()
   assistantLoadVersion += 1
@@ -2460,6 +2486,16 @@ onBeforeUnmount(() => {
 .nav-chip.wrong {
   background: #fce9e7;
   border-color: #efb9b3;
+}
+
+.nav-chip.grading {
+  background: #fff4d8;
+  border-color: #efcf7a;
+}
+
+.nav-chip.grading-failed {
+  background: #fce7e7;
+  border-color: #e29b93;
 }
 
 .question-panel {
@@ -2796,6 +2832,11 @@ button.essay-mode-button.active {
 .result-badge.success {
   background: #ddf5e9;
   color: #0f7a43;
+}
+
+.result-badge.warning {
+  background: #fff4d8;
+  color: #8a5a00;
 }
 
 .result-badge.danger {

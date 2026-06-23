@@ -41,7 +41,9 @@
       <section v-if="submittedResult" class="result-card">
         <div class="result-head">
           <h2>已完成交卷</h2>
-          <span class="status-chip done">成绩已生成</span>
+          <span :class="['status-chip', hasPendingSubjectiveGrading ? 'pending' : hasFailedSubjectiveGrading ? 'wrong' : 'done']">
+            {{ hasPendingSubjectiveGrading ? '主观题评分中' : hasFailedSubjectiveGrading ? '部分评分失败' : '成绩已生成' }}
+          </span>
         </div>
         <div class="result-grid">
           <div>
@@ -53,8 +55,16 @@
             <strong>{{ submittedResult.correctQuestions || 0 }} 题</strong>
           </div>
           <div>
-            <span>考试得分</span>
+            <span>{{ hasPendingSubjectiveGrading ? '当前得分' : '考试得分' }}</span>
             <strong>{{ formatScore(submittedResult.score) }} 分</strong>
+          </div>
+          <div>
+            <span>客观题得分</span>
+            <strong>{{ formatScore(submittedResult.objectiveScore) }} 分</strong>
+          </div>
+          <div>
+            <span>主观题评分</span>
+            <strong>{{ submittedResult.pendingSubjectiveCount || 0 }} 待评 / {{ submittedResult.failedSubjectiveCount || 0 }} 失败</strong>
           </div>
           <div>
             <span>用时</span>
@@ -214,6 +224,7 @@ import {
 } from '../utils/examHelpers'
 
 const route = useRoute()
+const GRADING_POLL_INTERVAL_MS = 4000
 
 const loading = ref(true)
 const submitting = ref(false)
@@ -235,6 +246,7 @@ const enteredAt = ref(0)
 const remainingSeconds = ref(0)
 const submittedResult = ref(null)
 const countdownTimer = ref(null)
+const gradingPollTimer = ref(null)
 const autoSubmitted = ref(false)
 
 const recordId = computed(() => Number(route.params.recordId || 0))
@@ -505,6 +517,14 @@ const timeClass = computed(() => {
   return ''
 })
 
+const hasPendingSubjectiveGrading = computed(() => {
+  return Number(submittedResult.value?.pendingSubjectiveCount || 0) > 0
+})
+
+const hasFailedSubjectiveGrading = computed(() => {
+  return Number(submittedResult.value?.failedSubjectiveCount || 0) > 0
+})
+
 const textAnswerValue = computed(() => {
   if (!currentQuestion.value) {
     return ''
@@ -646,6 +666,44 @@ const clearTimer = () => {
     clearInterval(countdownTimer.value)
     countdownTimer.value = null
   }
+}
+
+const stopGradingPoll = () => {
+  if (gradingPollTimer.value) {
+    clearInterval(gradingPollTimer.value)
+    gradingPollTimer.value = null
+  }
+}
+
+const refreshSubmittedResult = async () => {
+  if (!recordId.value || !submittedResult.value) {
+    stopGradingPoll()
+    return
+  }
+  try {
+    const response = await examApi.getMyRecord(recordId.value)
+    if (response?.data) {
+      submittedResult.value = {
+        ...submittedResult.value,
+        ...response.data,
+        examRecordId: submittedResult.value.examRecordId || response.data.id
+      }
+    }
+    if (!hasPendingSubjectiveGrading.value) {
+      stopGradingPoll()
+    }
+  } catch (error) {
+    stopGradingPoll()
+  }
+}
+
+const startGradingPollIfNeeded = () => {
+  if (!hasPendingSubjectiveGrading.value || gradingPollTimer.value) {
+    return
+  }
+  gradingPollTimer.value = setInterval(() => {
+    void refreshSubmittedResult()
+  }, GRADING_POLL_INTERVAL_MS)
 }
 
 const syncCurrentQuestionTime = () => {
@@ -1031,6 +1089,7 @@ const submitExam = async () => {
     submittedResult.value = response.data
     clearTimer()
     clearClientState()
+    startGradingPollIfNeeded()
     showToast('交卷成功')
   } catch (error) {
     showToast(error.message || '交卷失败')
@@ -1149,6 +1208,7 @@ onBeforeUnmount(() => {
   syncCurrentQuestionTime()
   saveClientState()
   clearTimer()
+  stopGradingPoll()
 })
 </script>
 
@@ -1467,6 +1527,16 @@ button:disabled {
 .status-chip.done {
   color: #2d8a44;
   background: #e7f8ed;
+}
+
+.status-chip.pending {
+  color: #8a5a00;
+  background: #fff4d8;
+}
+
+.status-chip.wrong {
+  color: #b42318;
+  background: #fce7e7;
 }
 
 .result-grid {

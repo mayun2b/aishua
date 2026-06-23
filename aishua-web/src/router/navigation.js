@@ -30,6 +30,13 @@ const STUDENT_SECTIONS = [
         to: '/wrong-questions',
         icon: '!',
         match: ['/wrong-questions']
+      },
+      {
+        key: 'weak-points',
+        label: '薄弱知识点',
+        to: '/weak-points',
+        icon: '△',
+        match: ['/weak-points']
       }
     ]
   },
@@ -133,17 +140,14 @@ const cloneSections = (sections) => {
 }
 
 const getNavigationSections = (isAdmin = false) => {
-  const sections = cloneSections(STUDENT_SECTIONS)
-  if (isAdmin) {
-    sections.push(...cloneSections([ADMIN_SECTION]))
-  }
-  return sections
+  return cloneSections(isAdmin ? [ADMIN_SECTION] : STUDENT_SECTIONS)
 }
 
 const isNavigationItemActive = (currentPath, item) => {
   const normalizedPath = String(currentPath || '').split('?')[0]
   const itemPath = String(item?.to || '')
   const matches = item?.match?.length ? item.match : [itemPath]
+  const exactMatchPaths = new Set(['/admin', '/dashboard', '/practice', '/exercise/exam'])
 
   return matches.some((matchPath) => {
     if (!matchPath) {
@@ -152,11 +156,8 @@ const isNavigationItemActive = (currentPath, item) => {
     if (normalizedPath === matchPath) {
       return true
     }
-    if (matchPath === '/practice') {
-      return normalizedPath === '/practice'
-    }
-    if (matchPath === '/exercise/exam') {
-      return normalizedPath === '/exercise/exam'
+    if (exactMatchPaths.has(matchPath)) {
+      return false
     }
     return normalizedPath.startsWith(`${matchPath}/`)
   })

@@ -14,9 +14,12 @@ import org.springframework.data.redis.core.StringRedisTemplate;
 import org.springframework.stereotype.Service;
 import org.springframework.transaction.annotation.Transactional;
 import org.springframework.transaction.support.TransactionTemplate;
+import org.springframework.util.StringUtils;
 import zysy.iflytek.aishua.common.exception.BusinessException;
 import zysy.iflytek.aishua.common.result.PageResult;
 import zysy.iflytek.aishua.config.properties.PracticeDraftProperties;
+import zysy.iflytek.aishua.modules.ai.grading.service.AiGradingTaskService;
+import zysy.iflytek.aishua.modules.ai.grading.support.AiGradingConstants;
 import zysy.iflytek.aishua.modules.directory.entity.TextbookDirectory;
 import zysy.iflytek.aishua.modules.directory.mapper.TextbookDirectoryMapper;
 import zysy.iflytek.aishua.modules.practice.entity.DailyStats;
@@ -120,6 +123,7 @@ public class PracticeServiceImpl implements PracticeService {
     private final PracticeDraftProperties practiceDraftProperties;
     private final StringRedisTemplate stringRedisTemplate;
     private final TransactionTemplate transactionTemplate;
+    private final AiGradingTaskService aiGradingTaskService;
 
     public PracticeServiceImpl(
             PracticeSessionMapper practiceSessionMapper,
@@ -139,7 +143,8 @@ public class PracticeServiceImpl implements PracticeService {
             PracticeSubmissionStatsUpdater practiceSubmissionStatsUpdater,
             PracticeDraftProperties practiceDraftProperties,
             StringRedisTemplate stringRedisTemplate,
-            TransactionTemplate transactionTemplate
+            TransactionTemplate transactionTemplate,
+            AiGradingTaskService aiGradingTaskService
     ) {
         this.practiceSessionMapper = practiceSessionMapper;
         this.exerciseRecordMapper = exerciseRecordMapper;
@@ -159,6 +164,7 @@ public class PracticeServiceImpl implements PracticeService {
         this.practiceDraftProperties = practiceDraftProperties;
         this.stringRedisTemplate = stringRedisTemplate;
         this.transactionTemplate = transactionTemplate;
+        this.aiGradingTaskService = aiGradingTaskService;
     }
 
     private static DefaultRedisScript<Long> buildReleaseDraftSaveLockScript() {
@@ -421,9 +427,12 @@ public class PracticeServiceImpl implements PracticeService {
         detailVO.setCorrectCount(session.getCorrectCount());
         detailVO.setWrongCount(session.getWrongCount());
         detailVO.setTotalTimeCost(session.getTotalTimeCost());
+        detailVO.setGradingStatus(resolvePracticeGradingStatus(session));
+        detailVO.setPendingSubjectiveCount(defaultNumber(session.getPendingSubjectiveCount()));
+        detailVO.setFailedSubjectiveCount(defaultNumber(session.getFailedSubjectiveCount()));
         detailVO.setDraftVersion(session.getDraftVersion());
         detailVO.setStatus(session.getStatus());
-        detailVO.setCorrectRate(calculateRate(session.getCorrectCount(), session.getAnsweredCount()));
+        detailVO.setCorrectRate(calculateRate(session.getCorrectCount(), defaultNumber(session.getCorrectCount()) + defaultNumber(session.getWrongCount())));
         detailVO.setStartedAt(session.getStartedAt());
         detailVO.setEndedAt(session.getEndedAt());
         detailVO.setRecords(records);
@@ -443,7 +452,13 @@ public class PracticeServiceImpl implements PracticeService {
 
         LambdaQueryWrapper<ExerciseRecord> queryWrapper = new LambdaQueryWrapper<ExerciseRecord>()
                 .eq(ExerciseRecord::getUserId, userId)
-                .isNotNull(ExerciseRecord::getIsCorrect);
+                .and(wrapper -> wrapper
+                        .isNotNull(ExerciseRecord::getIsCorrect)
+                        .or()
+                        .in(ExerciseRecord::getAiGradingStatus,
+                                AiGradingConstants.STATUS_PENDING,
+                                AiGradingConstants.STATUS_PROCESSING,
+                                AiGradingConstants.STATUS_FAILED));
         if (subjectId != null) {
             queryWrapper.in(ExerciseRecord::getSessionRefId, sessionIds);
         }
@@ -498,6 +513,11 @@ public class PracticeServiceImpl implements PracticeService {
             recordVO.setUserAnswer(record.getUserAnswer());
             recordVO.setCorrectAnswer(question == null ? null : question.getAnswer());
             recordVO.setIsCorrect(record.getIsCorrect());
+            recordVO.setAiGradingStatus(resolveRecordGradingStatus(record, question));
+            recordVO.setAiGradingConfidence(record.getAiGradingConfidence());
+            recordVO.setAiGradingFeedback(record.getAiGradingFeedback());
+            recordVO.setAiGradingErrorMessage(record.getAiGradingErrorMessage());
+            recordVO.setAiGradedAt(record.getAiGradedAt());
             recordVO.setTimeCost(record.getTimeCost());
             recordVO.setExerciseTime(record.getExerciseTime());
             result.add(recordVO);
@@ -701,6 +721,26 @@ public class PracticeServiceImpl implements PracticeService {
     }
 
     @Override
+    public List<PracticeStatsVO.KnowledgeMasteryVO> listWeakKnowledgePoints(Long userId, Long subjectId, Integer limit) {
+        validateSubjectFilter(subjectId);
+        if (subjectId != null) {
+            requireJoinedSubject(userId, subjectId);
+        }
+
+        int safeLimit = normalizeWeakPointLimit(limit);
+        List<UserKnowledgeMastery> knowledgeMasteries = userKnowledgeMasteryMapper.selectList(new LambdaQueryWrapper<UserKnowledgeMastery>()
+                .eq(UserKnowledgeMastery::getUserId, userId)
+                .eq(subjectId != null, UserKnowledgeMastery::getSubjectId, subjectId)
+                .gt(UserKnowledgeMastery::getTotalCount, 0)
+                .orderByAsc(UserKnowledgeMastery::getMasteryLevel)
+                .orderByDesc(UserKnowledgeMastery::getWrongCount)
+                .orderByAsc(UserKnowledgeMastery::getCorrectRate)
+                .orderByDesc(UserKnowledgeMastery::getTotalCount)
+                .last("LIMIT " + safeLimit));
+        return buildKnowledgeMasteries(knowledgeMasteries, safeLimit);
+    }
+
+    @Override
     public List<ExamTagVO> listPracticeTags(Long userId, Long subjectId) {
         Subject subject = requireEnabledSubject(subjectId);
         requireJoinedSubject(userId, subject.getId());
@@ -752,6 +792,8 @@ public class PracticeServiceImpl implements PracticeService {
 
         int correctCount = 0;
         int wrongCount = 0;
+        int pendingSubjectiveCount = 0;
+        int failedSubjectiveCount = 0;
         int totalTimeCost = 0;
         List<PracticeAnswerResultVO> results = new ArrayList<>();
         LocalDateTime submitTime = LocalDateTime.now();
@@ -765,35 +807,67 @@ public class PracticeServiceImpl implements PracticeService {
             PracticeAnswerItemDTO answerItem = answerMap.get(question.getId());
             String submittedAnswer = normalizeSubmittedAnswer(answerItem == null ? null : answerItem.getUserAnswer());
             int timeCost = normalizeTimeCost(answerItem == null ? null : answerItem.getTimeCost());
-            boolean isCorrect = answerJudgeSupport.isCorrect(question.getType(), question.getAnswer(), submittedAnswer);
+            boolean subjectiveQuestion = AiGradingConstants.isShortAnswer(question.getType());
 
             record.setUserAnswer(submittedAnswer);
-            record.setIsCorrect(isCorrect ? 1 : 0);
             record.setTimeCost(timeCost);
             record.setExerciseTime(submitTime);
-            exerciseRecordMapper.updateById(record);
 
-            TagSnapshot tagSnapshot = loadTagSnapshot(question.getId());
-            // 提交后的多维统计统一收敛到独立组件，避免主服务继续膨胀。
-            practiceSubmissionStatsUpdater.applyAnswerStats(
-                    userId,
-                    practiceSession.getSubjectId(),
-                    question,
-                    tagSnapshot.tagIds(),
-                    isCorrect,
-                    timeCost
-            );
-            if (!isCorrect) {
-                upsertWrongQuestion(userId, question, tagSnapshot.tagNames(), submitTime);
+            if (subjectiveQuestion) {
+                record.setIsCorrect(null);
+                record.setAiGradingStatus(AiGradingConstants.STATUS_PENDING);
+                record.setAiGradingConfidence(null);
+                record.setAiGradingFeedback(null);
+                record.setAiGradingDetailJson(null);
+                record.setAiGradingErrorMessage(null);
+                record.setAiGradedAt(null);
+                exerciseRecordMapper.updateById(record);
+                aiGradingTaskService.createPracticeTask(record.getId(), question.getId(), userId);
+                pendingSubjectiveCount++;
+                results.add(buildAnswerResult(question, submittedAnswer, null, AiGradingConstants.STATUS_PENDING, null, timeCost));
+            } else {
+                boolean isCorrect = answerJudgeSupport.isCorrect(question.getType(), question.getAnswer(), submittedAnswer);
+                record.setIsCorrect(isCorrect ? 1 : 0);
+                record.setAiGradingStatus(AiGradingConstants.STATUS_NOT_REQUIRED);
+                record.setAiGradingConfidence(null);
+                record.setAiGradingFeedback(null);
+                record.setAiGradingDetailJson(null);
+                record.setAiGradingErrorMessage(null);
+                record.setAiGradedAt(null);
+                exerciseRecordMapper.updateById(record);
+
+                TagSnapshot tagSnapshot = loadTagSnapshot(question.getId());
+                // 提交后的多维统计统一收敛到独立组件，避免主服务继续膨胀。
+                practiceSubmissionStatsUpdater.applyAnswerStats(
+                        userId,
+                        practiceSession.getSubjectId(),
+                        question,
+                        tagSnapshot.tagIds(),
+                        isCorrect,
+                        timeCost
+                );
+                if (!isCorrect) {
+                    upsertWrongQuestion(userId, question, tagSnapshot.tagNames(), submitTime);
+                }
+                correctCount += isCorrect ? 1 : 0;
+                wrongCount += isCorrect ? 0 : 1;
+                results.add(buildAnswerResult(
+                        question,
+                        submittedAnswer,
+                        isCorrect ? 1 : 0,
+                        AiGradingConstants.STATUS_NOT_REQUIRED,
+                        null,
+                        timeCost
+                ));
             }
 
-            correctCount += isCorrect ? 1 : 0;
-            wrongCount += isCorrect ? 0 : 1;
             totalTimeCost += timeCost;
-            results.add(buildAnswerResult(question, submittedAnswer, isCorrect, timeCost));
         }
 
         int nextVersion = currentVersion + 1;
+        String gradingStatus = pendingSubjectiveCount > 0
+                ? AiGradingConstants.STATUS_PENDING
+                : AiGradingConstants.STATUS_NOT_REQUIRED;
         int finishRows = practiceSessionMapper.finishSessionByVersion(
                 practiceSession.getId(),
                 userId,
@@ -803,6 +877,9 @@ public class PracticeServiceImpl implements PracticeService {
                 correctCount,
                 wrongCount,
                 totalTimeCost,
+                gradingStatus,
+                pendingSubjectiveCount,
+                failedSubjectiveCount,
                 PracticeModeConstants.STATUS_FINISHED,
                 submitTime
         );
@@ -822,7 +899,10 @@ public class PracticeServiceImpl implements PracticeService {
         resultVO.setCorrectCount(correctCount);
         resultVO.setWrongCount(wrongCount);
         resultVO.setTotalTimeCost(totalTimeCost);
-        resultVO.setCorrectRate(calculateRate(correctCount, sessionRecords.size()));
+        resultVO.setGradingStatus(gradingStatus);
+        resultVO.setPendingSubjectiveCount(pendingSubjectiveCount);
+        resultVO.setFailedSubjectiveCount(failedSubjectiveCount);
+        resultVO.setCorrectRate(calculateRate(correctCount, correctCount + wrongCount));
         resultVO.setFinished(true);
         resultVO.setResults(results);
         return resultVO;
@@ -870,21 +950,33 @@ public class PracticeServiceImpl implements PracticeService {
         summaryVO.setCorrectCount(session.getCorrectCount());
         summaryVO.setWrongCount(session.getWrongCount());
         summaryVO.setTotalTimeCost(session.getTotalTimeCost());
+        summaryVO.setGradingStatus(resolvePracticeGradingStatus(session));
+        summaryVO.setPendingSubjectiveCount(defaultNumber(session.getPendingSubjectiveCount()));
+        summaryVO.setFailedSubjectiveCount(defaultNumber(session.getFailedSubjectiveCount()));
         summaryVO.setStatus(session.getStatus());
-        summaryVO.setCorrectRate(calculateRate(session.getCorrectCount(), session.getAnsweredCount()));
+        summaryVO.setCorrectRate(calculateRate(session.getCorrectCount(), defaultNumber(session.getCorrectCount()) + defaultNumber(session.getWrongCount())));
         summaryVO.setStartedAt(session.getStartedAt());
         summaryVO.setEndedAt(session.getEndedAt());
         return summaryVO;
     }
 
-    private PracticeAnswerResultVO buildAnswerResult(Question question, String submittedAnswer, boolean isCorrect, int timeCost) {
+    private PracticeAnswerResultVO buildAnswerResult(
+            Question question,
+            String submittedAnswer,
+            Integer isCorrect,
+            String aiGradingStatus,
+            String aiGradingFeedback,
+            int timeCost
+    ) {
         PracticeAnswerResultVO resultVO = new PracticeAnswerResultVO();
         resultVO.setQuestionId(question.getId());
         resultVO.setQuestionTitle(question.getTitle());
         resultVO.setUserAnswer(submittedAnswer);
         resultVO.setCorrectAnswer(question.getAnswer());
         resultVO.setAnalysis(question.getAnalysis());
-        resultVO.setIsCorrect(isCorrect ? 1 : 0);
+        resultVO.setIsCorrect(isCorrect);
+        resultVO.setAiGradingStatus(aiGradingStatus);
+        resultVO.setAiGradingFeedback(aiGradingFeedback);
         resultVO.setTimeCost(timeCost);
         return resultVO;
     }
@@ -1360,7 +1452,7 @@ public class PracticeServiceImpl implements PracticeService {
 
     private List<PracticeExerciseRecordVO> listSessionExerciseRecordDetails(Long sessionId, boolean revealCorrectAnswer) {
         List<ExerciseRecord> records = listSessionRecords(sessionId).stream()
-                .filter(record -> record.getUserAnswer() != null)
+                .filter(this::shouldExposeExerciseRecord)
                 .toList();
         if (records.isEmpty()) {
             return Collections.emptyList();
@@ -1388,11 +1480,23 @@ public class PracticeServiceImpl implements PracticeService {
             recordVO.setUserAnswer(record.getUserAnswer());
             recordVO.setCorrectAnswer(revealCorrectAnswer && question != null ? question.getAnswer() : null);
             recordVO.setIsCorrect(record.getIsCorrect());
+            recordVO.setAiGradingStatus(resolveRecordGradingStatus(record, question));
+            recordVO.setAiGradingConfidence(record.getAiGradingConfidence());
+            recordVO.setAiGradingFeedback(record.getAiGradingFeedback());
+            recordVO.setAiGradingErrorMessage(record.getAiGradingErrorMessage());
+            recordVO.setAiGradedAt(record.getAiGradedAt());
             recordVO.setTimeCost(record.getTimeCost());
             recordVO.setExerciseTime(record.getExerciseTime());
             result.add(recordVO);
         }
         return result;
+    }
+
+    private boolean shouldExposeExerciseRecord(ExerciseRecord record) {
+        return record != null
+                && (record.getUserAnswer() != null
+                || record.getExerciseTime() != null
+                || StringUtils.hasText(record.getAiGradingStatus()));
     }
 
     private List<DailyStats> listSubjectDailyStats(Long userId, Long subjectId) {
@@ -2267,6 +2371,16 @@ public class PracticeServiceImpl implements PracticeService {
         return days;
     }
 
+    private int normalizeWeakPointLimit(Integer limit) {
+        if (limit == null) {
+            return 100;
+        }
+        if (limit < 1 || limit > 200) {
+            throw new BusinessException("薄弱知识点数量范围应为 1 到 200", 400);
+        }
+        return limit;
+    }
+
     private int normalizeTimeCost(Integer timeCost) {
         if (timeCost == null) {
             return 0;
@@ -2319,6 +2433,35 @@ public class PracticeServiceImpl implements PracticeService {
         return BigDecimal.valueOf(defaultNumber(correctCount))
                 .multiply(ONE_HUNDRED)
                 .divide(BigDecimal.valueOf(total), 2, RoundingMode.HALF_UP);
+    }
+
+    private String resolvePracticeGradingStatus(PracticeSession session) {
+        if (session == null) {
+            return AiGradingConstants.STATUS_NOT_REQUIRED;
+        }
+        if (defaultNumber(session.getPendingSubjectiveCount()) > 0) {
+            return AiGradingConstants.STATUS_PROCESSING;
+        }
+        if (defaultNumber(session.getFailedSubjectiveCount()) > 0) {
+            return AiGradingConstants.STATUS_PARTIAL_FAILED;
+        }
+        if (StringUtils.hasText(session.getGradingStatus())) {
+            return session.getGradingStatus();
+        }
+        return AiGradingConstants.STATUS_NOT_REQUIRED;
+    }
+
+    private String resolveRecordGradingStatus(ExerciseRecord record, Question question) {
+        if (record == null) {
+            return AiGradingConstants.STATUS_NOT_REQUIRED;
+        }
+        if (StringUtils.hasText(record.getAiGradingStatus())) {
+            return record.getAiGradingStatus();
+        }
+        if (question != null && AiGradingConstants.isShortAnswer(question.getType()) && record.getIsCorrect() == null) {
+            return AiGradingConstants.STATUS_PENDING;
+        }
+        return AiGradingConstants.STATUS_NOT_REQUIRED;
     }
 
     private int defaultNumber(Integer value) {

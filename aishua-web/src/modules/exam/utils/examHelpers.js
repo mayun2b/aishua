@@ -1,7 +1,7 @@
 import { hasEssayCanvasMarker, stripEssayCanvasMarker } from '../../common/utils/essayCanvasAnswer'
 import { stripImageAnnotationMarkers } from '../../common/utils/imageAnnotationAnswer'
 
-const OPTION_LABEL_REGEX = /^\s*([A-Za-z])[.、)\]:：]\s*(.+)$/
+export { parseQuestionOptions } from '../../common/utils/questionOptions'
 const BOOLEAN_TEXT_REGEX =
   /^(true|false|yes|no|y|n|1|0|dui|cuo|\u5bf9|\u9519|\u6b63\u786e|\u9519\u8bef|\u662f|\u5426)$/i
 
@@ -17,121 +17,6 @@ const DIFFICULTY_MAP = {
   1: '\u7b80\u5355',
   2: '\u4e2d\u7b49',
   3: '\u56f0\u96be'
-}
-
-function safeJsonParse(value) {
-  if (typeof value !== 'string') {
-    return value
-  }
-
-  const text = value.trim()
-  if (!text) {
-    return null
-  }
-
-  try {
-    return JSON.parse(text)
-  } catch (error) {
-    return value
-  }
-}
-
-function normalizeOptionKey(value, index) {
-  const fallback = String.fromCharCode(65 + index)
-  if (value == null) {
-    return fallback
-  }
-
-  const text = String(value).trim()
-  if (!text) {
-    return fallback
-  }
-
-  return text.toUpperCase()
-}
-
-function parseStringOption(value, index) {
-  const text = String(value ?? '').trim()
-  if (!text) {
-    return {
-      optionKey: normalizeOptionKey('', index),
-      optionText: ''
-    }
-  }
-
-  const matched = text.match(OPTION_LABEL_REGEX)
-  if (matched) {
-    return {
-      optionKey: normalizeOptionKey(matched[1], index),
-      optionText: matched[2].trim()
-    }
-  }
-
-  return {
-    optionKey: normalizeOptionKey('', index),
-    optionText: text
-  }
-}
-
-function parseObjectOption(value, index) {
-  const optionKey = normalizeOptionKey(
-    value.optionKey ?? value.key ?? value.label ?? value.code,
-    index
-  )
-  const optionText = String(
-    value.optionText ?? value.text ?? value.value ?? value.name ?? ''
-  ).trim()
-
-  if (optionText) {
-    return { optionKey, optionText }
-  }
-
-  return {
-    optionKey,
-    optionText: String(value).trim()
-  }
-}
-
-export function parseQuestionOptions(rawOptions) {
-  const parsed = safeJsonParse(rawOptions)
-  if (!parsed) {
-    return []
-  }
-
-  if (Array.isArray(parsed)) {
-    return parsed
-      .map((item, index) => {
-        if (item != null && typeof item === 'object' && !Array.isArray(item)) {
-          return parseObjectOption(item, index)
-        }
-        return parseStringOption(item, index)
-      })
-      .filter((item) => item.optionText || item.optionKey)
-  }
-
-  if (typeof parsed === 'object') {
-    return Object.entries(parsed).map(([key, value], index) => {
-      if (value != null && typeof value === 'object' && !Array.isArray(value)) {
-        return parseObjectOption(
-          {
-            ...value,
-            optionKey: value.optionKey ?? value.key ?? key
-          },
-          index
-        )
-      }
-      return {
-        optionKey: normalizeOptionKey(key, index),
-        optionText: String(value ?? '').trim()
-      }
-    })
-  }
-
-  if (typeof parsed === 'string') {
-    return [parseStringOption(parsed, 0)]
-  }
-
-  return []
 }
 
 export function resolveTypeLabel(type) {

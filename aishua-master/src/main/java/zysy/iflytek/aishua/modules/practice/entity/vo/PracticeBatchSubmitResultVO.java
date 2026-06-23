@@ -23,6 +23,12 @@ public class PracticeBatchSubmitResultVO {
 
     private Integer totalTimeCost;
 
+    private String gradingStatus;
+
+    private Integer pendingSubjectiveCount;
+
+    private Integer failedSubjectiveCount;
+
     private BigDecimal correctRate;
 
     private Boolean finished;

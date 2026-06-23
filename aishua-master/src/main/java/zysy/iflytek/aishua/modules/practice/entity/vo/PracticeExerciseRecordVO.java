@@ -37,6 +37,16 @@ public class PracticeExerciseRecordVO {
 
     private Integer isCorrect;
 
+    private String aiGradingStatus;
+
+    private Double aiGradingConfidence;
+
+    private String aiGradingFeedback;
+
+    private String aiGradingErrorMessage;
+
+    private LocalDateTime aiGradedAt;
+
     private Integer timeCost;
 
     private LocalDateTime exerciseTime;

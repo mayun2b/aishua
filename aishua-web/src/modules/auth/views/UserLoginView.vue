@@ -1,4 +1,4 @@
-<template>
+﻿<template>
   <div class="auth-page">
     <div class="auth-card">
       <p class="eyebrow">Welcome Back</p>
@@ -11,7 +11,7 @@
           <input
             v-model.trim="form.phone"
             type="text"
-            placeholder="请输入 11 位手机号"
+            placeholder="请输入11位手机号"
           />
         </label>
 
@@ -80,7 +80,10 @@ const registerLink = computed(() => {
 })
 
 const handleSubmit = async () => {
-
+  if (!form.phone) {
+    showToast('请输入手机号')
+    return
+  }
 
   if (!form.password) {
     showToast('请输入密码')

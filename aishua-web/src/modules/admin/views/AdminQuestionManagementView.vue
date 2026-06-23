@@ -345,6 +345,7 @@ import useAutoReload from '@/composables/useAutoReload'
 import { showToast } from 'vant'
 import fileApi from '../../common/api/file'
 import { normalizePageResult } from '../../common/utils/pageResult'
+import { normalizeOptionField, parseQuestionOptions } from '../../common/utils/questionOptions'
 import directoryApi from '../api/directory'
 import questionApi from '../api/question'
 import subjectApi from '../api/subject'
@@ -421,13 +422,6 @@ const form = reactive(createEmptyForm())
 
 const isChoiceQuestionType = (type) => Number(type) === 1 || Number(type) === 2
 
-const normalizeOptionField = (value) => {
-  if (value == null) {
-    return ''
-  }
-  return String(value).trim()
-}
-
 const defaultChoiceOptionLabel = (index) => {
   return index < 26 ? String.fromCharCode(65 + index) : `选项${index + 1}`
 }
@@ -446,44 +440,10 @@ const createDefaultChoiceOptions = () => ([
 ])
 
 const parseChoiceOptions = (optionsText) => {
-  const normalizedText = normalizeOptionField(optionsText)
-  if (!normalizedText) {
-    return []
-  }
-
-  try {
-    const parsed = JSON.parse(normalizedText)
-    if (!Array.isArray(parsed)) {
-      return []
-    }
-
-    return parsed.map((item, index) => {
-      if (item && typeof item === 'object' && !Array.isArray(item)) {
-        return {
-          label: normalizeChoiceOptionLabel(
-            item.label ?? item.key ?? item.optionKey ?? item.code,
-            index
-          ),
-          value: normalizeOptionField(
-            item.value
-            ?? item.text
-            ?? item.optionText
-            ?? item.content
-            ?? item.title
-            ?? item.desc
-            ?? item.description
-            ?? item.name
-          )
-        }
-      }
-      return {
-        label: normalizeChoiceOptionLabel('', index),
-        value: normalizeOptionField(item)
-      }
-    })
-  } catch (error) {
-    return []
-  }
+  return parseQuestionOptions(optionsText).map((item, index) => ({
+    label: normalizeChoiceOptionLabel(item.optionKey, index),
+    value: normalizeOptionField(item.optionText)
+  }))
 }
 
 const syncChoiceOptionsFromText = (optionsText) => {

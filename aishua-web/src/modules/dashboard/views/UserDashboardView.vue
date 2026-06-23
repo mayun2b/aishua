@@ -91,7 +91,7 @@
           <section class="panel">
             <div class="panel-head">
               <h2>薄弱知识点</h2>
-              <router-link to="/wrong-questions">错题记录</router-link>
+              <router-link to="/weak-points">定点练习</router-link>
             </div>
 
             <div v-if="weakItems.length" class="weak-list">

@@ -19,5 +19,11 @@ public class PracticeAnswerResultVO {
 
     private Integer isCorrect;
 
+    private String aiGradingStatus;
+
+    private Double aiGradingConfidence;
+
+    private String aiGradingFeedback;
+
     private Integer timeCost;
 }

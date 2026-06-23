@@ -1,4 +1,4 @@
-import authApi from '../../modules/auth/api/auth'
+﻿import authApi from '../../modules/auth/api/auth'
 import {
   clearAuthStorage,
   loadAuthStorage,
@@ -8,11 +8,11 @@ import {
 function createInitialState() {
   const { token, user } = loadAuthStorage()
   return {
-    // 当前登录态 token（空串表示未登录）
+    // 当前登录态token，空串表示未登录
     token,
     // 当前登录用户信息
     user,
-    // 是否已完成应用启动阶段的鉴权初始化
+    // 是否已完成应用启动阶段的权限初始化
     bootstrapped: false
   }
 }
@@ -50,14 +50,16 @@ export default {
         return
       }
 
-      // 已有 token 但无用户详情时，尝试恢复用户信息。
-      if (!state.user) {
-        try {
-          const response = await authApi.fetchProfile()
-          commit('setUser', response.data)
-        } catch (error) {
-          commit('clearAuth')
+      // 不管是否有用户信息，都验证token是否有效
+      try {
+        const response = await authApi.fetchProfile()
+        // 校验用户信息是否有效，兼容id和userId字段
+        if (!response || !response.data || !(response.data.id || response.data.userId)) {
+          throw new Error('用户信息无效')
         }
+        commit('setUser', response.data)
+      } catch (error) {
+        commit('clearAuth')
       }
 
       commit('setBootstrapped', true)
@@ -80,7 +82,7 @@ export default {
   getters: {
     token: (state) => state.token,
     currentUser: (state) => state.user,
-    isAuthenticated: (state) => Boolean(state.token),
+    isAuthenticated: (state) => Boolean(state.token) && Boolean(state.user),
     isAdmin: (state) => state.user?.isAdmin === 1,
     bootstrapped: (state) => state.bootstrapped
   }
