@@ -1,4 +1,4 @@
-﻿<template>
+<template>
   <div class="auth-page">
     <div class="auth-card">
       <p class="eyebrow">Welcome Back</p>

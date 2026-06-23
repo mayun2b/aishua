@@ -1,4 +1,4 @@
-﻿<!-- eslint-disable vue/multi-word-component-names -->
+<!-- eslint-disable vue/multi-word-component-names -->
 <template>
   <div class="home-container">
     <div class="dynamic-background">

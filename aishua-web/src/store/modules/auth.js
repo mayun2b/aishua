@@ -1,4 +1,4 @@
-﻿import authApi from '../../modules/auth/api/auth'
+import authApi from '../../modules/auth/api/auth'
 import {
   clearAuthStorage,
   loadAuthStorage,
